@@ -54,14 +54,15 @@ jobs:
       - name: Capture source provenance
         id: source_provenance
         run: |
-          echo "source_commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          echo "source_commit=$(git -C "$GITHUB_WORKSPACE" rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "SOURCE_REPO=${{ env.PTOAS_REPO }}" >> "$GITHUB_ENV"
           echo "SOURCE_REF=${{ env.PTOAS_REF }}" >> "$GITHUB_ENV"
-          echo "SOURCE_COMMIT=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          echo "SOURCE_COMMIT=$(git -C "$GITHUB_WORKSPACE" rev-parse HEAD)" >> "$GITHUB_ENV"
           echo "Checked out source repository:"
-          git remote -v
+          git -C "$GITHUB_WORKSPACE" remote -v
           echo "Checked out source ref: ${{ env.PTOAS_REF }}"
-          echo "Checked out source commit: $(git rev-parse HEAD)"
+          echo "Checked out source commit: $(git -C "$GITHUB_WORKSPACE" rev-parse HEAD)"
 
       - name: Set Python version
         run: |
