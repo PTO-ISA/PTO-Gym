@@ -26,7 +26,8 @@ permissions:
 env:
   LLVM_TAG: llvmorg-19.1.7
   PTOAS_REPO: mouliangyu/PTOAS
-  PTOAS_REF: feature-vpto-backend
+  PTOAS_REF: feature-vpto-backend-release
+  PTOAS_CLI_TEST_FILE: test/vpto/cases/micro-op/unary-vector/vabs/kernel.pto
 
 jobs:
   build_wheel:
@@ -203,7 +204,9 @@ jobs:
       - name: Test ptoas CLI
         run: |
           export PATH="${PY_PATH}/bin:$PATH"
-          bash $PTO_SOURCE_DIR/docker/test_ptoas_cli.sh
+          test -f "$PTO_SOURCE_DIR/$PTOAS_CLI_TEST_FILE"
+          ptoas --version
+          ptoas "$PTO_SOURCE_DIR/$PTOAS_CLI_TEST_FILE" -o "$RUNNER_TEMP/ptoas_cli_smoke.cpp"
 
       - name: Copy wheel to workspace
         run: |
