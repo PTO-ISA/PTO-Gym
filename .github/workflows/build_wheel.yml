@@ -204,9 +204,13 @@ jobs:
       - name: Test ptoas CLI
         run: |
           export PATH="$PTO_SOURCE_DIR/build/tools/ptoas:${PY_PATH}/bin:$PATH"
+          export ASCEND_HOME_PATH=/usr/local/Ascend/cann
+          export WORK_SPACE="$RUNNER_TEMP/vpto-validation"
+          export PTOAS_BIN="$PTO_SOURCE_DIR/build/tools/ptoas/ptoas"
+          export CASE_NAME="unary-vector/vabs"
+          export COMPILE_ONLY=1
           test -f "$PTO_SOURCE_DIR/$PTOAS_CLI_TEST_FILE"
-          ptoas --version
-          ptoas "$PTO_SOURCE_DIR/$PTOAS_CLI_TEST_FILE" -o "$RUNNER_TEMP/ptoas_cli_smoke.cpp"
+          bash "$PTO_SOURCE_DIR/test/vpto/scripts/run_host_vpto_validation.sh"
 
       - name: Copy wheel to workspace
         run: |
