@@ -284,6 +284,7 @@ jobs:
 
       - name: Test ptoas CLI
         run: |
+          export PATH="$PTO_SOURCE_DIR/build/tools/ptoas:$PATH"
           export DYLD_LIBRARY_PATH=$LLVM_BUILD_DIR/lib:$PTO_INSTALL_DIR/lib:${DYLD_LIBRARY_PATH}
           test -f "$PTO_SOURCE_DIR/$PTOAS_CLI_TEST_FILE"
           ptoas --version
