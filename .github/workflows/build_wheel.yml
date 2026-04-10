@@ -9,9 +9,6 @@
 name: Build Wheel
 
 on:
-  push:
-    tags-ignore:
-      - '**'
   pull_request:
   # Nightly build & publish (UTC time).
   schedule:
