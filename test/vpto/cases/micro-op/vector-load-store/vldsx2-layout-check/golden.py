@@ -1,0 +1,54 @@
+#!/usr/bin/env python3
+# case: micro-op/vector-load-store/vldsx2-layout-check
+# family: vector-load-store
+# target_ops: pto.vldsx2
+# scenarios: core-f32, full-mask, dintlv, lane-order, split-observation
+# NOTE: bulk-generated coverage skeleton.
+# coding=utf-8
+
+import argparse
+from pathlib import Path
+
+import numpy as np
+
+
+ROWS = 32
+COLS = 32
+ACTIVE = 128
+SEED = 19
+
+
+def generate(output_dir: Path, seed: int) -> None:
+    rng = np.random.default_rng(seed)
+    v1 = rng.uniform(-8.0, 8.0, size=(ROWS, COLS)).astype(np.float32)
+    v2 = np.zeros((ROWS, COLS), dtype=np.float32)
+    golden_v2 = np.zeros((ROWS, COLS), dtype=np.float32).reshape(-1)
+    flat = v1.reshape(-1)
+
+    # DINTLV_B32 exposes the two deinterleaved 64-lane results independently.
+    # Observe them through two plain NORM stores:
+    #   low  -> output[offset : offset + 64]
+    #   high -> output[offset + 64 : offset + 128]
+    for base in range(0, ROWS * COLS, ACTIVE):
+        chunk = flat[base : base + ACTIVE]
+        golden_v2[base : base + 64] = chunk[0::2]
+        golden_v2[base + 64 : base + 128] = chunk[1::2]
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    v1.reshape(-1).tofile(output_dir / "v1.bin")
+    v2.reshape(-1).tofile(output_dir / "v2.bin")
+    golden_v2.tofile(output_dir / "golden_v2.bin")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Generate numpy-based inputs/golden for VPTO micro-op vldsx2 layout validation."
+    )
+    parser.add_argument("--output-dir", type=Path, default=Path("."))
+    parser.add_argument("--seed", type=int, default=SEED)
+    args = parser.parse_args()
+    generate(args.output_dir, args.seed)
+
+
+if __name__ == "__main__":
+    main()

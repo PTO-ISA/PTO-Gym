@@ -1,0 +1,57 @@
+// -----------------------------------------------------------------------------
+// case: micro-op/vector-load-store/vstas-vstus-offset-update
+// family: vector-load-store
+// target_ops: pto.vstas, pto.vstus
+// scenarios: core-f32, full-mask, immediate-offset, state-update
+// -----------------------------------------------------------------------------
+// Validate the state chain required by the plan:
+//   1. prime a store-state carrier
+//   2. issue one no-post `vstus` with a non-zero explicit offset
+//   3. flush the residual state with `vstas` using the same explicit flush point
+// The observable effect should match an unaligned store stream where `vstus`
+// advances the stream by 3 f32 elements and leaves the buffered tail in
+// `!pto.align`, then `vstas` commits that pending tail at the matching flush
+// point identified by the original base plus the same scalar offset.
+
+module attributes {pto.target_arch = "a5"} {
+  func.func @vstas_vstus_offset_update_kernel_2d(%arg0: !pto.ptr<f32, gm>, %arg1: !pto.ptr<f32, gm>) {
+    %c0 = arith.constant 0 : index
+    %c1 = arith.constant 1 : index
+    %c64 = arith.constant 64 : index
+    %c0_i64 = arith.constant 0 : i64
+    %c1_i64 = arith.constant 1 : i64
+    %c32_i64 = arith.constant 32 : i64
+    %c128_i64 = arith.constant 128 : i64
+    %c4096_i64 = arith.constant 4096 : i64
+    %c3_i32 = arith.constant 3 : i32
+    %c0_i32 = arith.constant 0 : i32
+
+    %ub_in = pto.castptr %c0_i64 : i64 -> !pto.ptr<f32, ub>
+    %ub_out = pto.castptr %c4096_i64 : i64 -> !pto.ptr<f32, ub>
+
+    %false = arith.constant false
+    pto.set_loop_size_outtoub %c1_i64, %c1_i64 : i64, i64
+    pto.copy_gm_to_ubuf %arg0, %ub_in, %c0_i64, %c32_i64, %c128_i64, %c0_i64, %c0_i64, %false, %c0_i64, %c128_i64, %c128_i64 : !pto.ptr<f32, gm>, !pto.ptr<f32, ub>, i64, i64, i64, i64, i64, i1, i64, i64, i64
+    pto.copy_gm_to_ubuf %arg1, %ub_out, %c0_i64, %c32_i64, %c128_i64, %c0_i64, %c0_i64, %false, %c0_i64, %c128_i64, %c128_i64 : !pto.ptr<f32, gm>, !pto.ptr<f32, ub>, i64, i64, i64, i64, i64, i1, i64, i64, i64
+
+    pto.set_flag["PIPE_MTE2", "PIPE_V", "EVENT_ID0"]
+    pto.wait_flag["PIPE_MTE2", "PIPE_V", "EVENT_ID0"]
+
+    pto.vecscope {
+      scf.for %offset = %c0 to %c64 step %c64 {
+        %align0 = pto.init_align : !pto.align
+        %vec = pto.vlds %ub_in[%c0] : !pto.ptr<f32, ub> -> !pto.vreg<64xf32>
+        %align1 = pto.vstus %align0, %c3_i32, %vec, %ub_out
+            : !pto.align, i32, !pto.vreg<64xf32>, !pto.ptr<f32, ub> -> !pto.align
+        pto.vstas %align1, %ub_out, %c3_i32 : !pto.align, !pto.ptr<f32, ub>, i32
+      }
+    }
+
+    pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+    pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+    pto.set_loop_size_ubtoout %c1_i64, %c1_i64 : i64, i64
+    pto.copy_ubuf_to_gm %ub_out, %arg1, %c0_i64, %c32_i64, %c128_i64, %c0_i64, %c128_i64, %c128_i64 : !pto.ptr<f32, ub>, !pto.ptr<f32, gm>, i64, i64, i64, i64, i64, i64
+    pto.barrier #pto.pipe<PIPE_ALL>
+    return
+  }
+}

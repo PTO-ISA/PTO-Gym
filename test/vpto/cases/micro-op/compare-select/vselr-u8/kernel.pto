@@ -1,0 +1,51 @@
+// -----------------------------------------------------------------------------
+// case: micro-op/compare-select/vselr-u8
+// family: compare-select
+// target_ops: pto.vselr
+// scenarios: core-u8, full-mask, explicit-lane-index
+// -----------------------------------------------------------------------------
+module attributes {pto.target_arch = "a5"} {
+  func.func @vselr_u8_kernel_2d(%arg0: !pto.ptr<ui8, gm>, %arg1: !pto.ptr<ui8, gm>, %arg2: !pto.ptr<ui8, gm>) {
+    %c0 = arith.constant 0 : index
+    %c1 = arith.constant 1 : index
+    %c256 = arith.constant 256 : index
+    %c1024 = arith.constant 1024 : index
+    %c0_i64 = arith.constant 0 : i64
+    %c1_i64 = arith.constant 1 : i64
+    %c4_i64 = arith.constant 4 : i64
+    %c256_i64 = arith.constant 256 : i64
+    %c1024_i64 = arith.constant 1024 : i64
+    %c2048_i64 = arith.constant 2048 : i64
+    %c1024_i32 = arith.constant 1024 : i32
+    %false = arith.constant false
+
+    %ub_src = pto.castptr %c0_i64 : i64 -> !pto.ptr<ui8, ub>
+    %ub_idx = pto.castptr %c1024_i64 : i64 -> !pto.ptr<ui8, ub>
+    %ub_out = pto.castptr %c2048_i64 : i64 -> !pto.ptr<ui8, ub>
+
+    pto.set_loop_size_outtoub %c1_i64, %c1_i64 : i64, i64
+    pto.copy_gm_to_ubuf %arg0, %ub_src, %c0_i64, %c4_i64, %c256_i64, %c0_i64, %c0_i64, %false, %c0_i64, %c256_i64, %c256_i64 : !pto.ptr<ui8, gm>, !pto.ptr<ui8, ub>, i64, i64, i64, i64, i64, i1, i64, i64, i64
+    pto.copy_gm_to_ubuf %arg1, %ub_idx, %c0_i64, %c4_i64, %c256_i64, %c0_i64, %c0_i64, %false, %c0_i64, %c256_i64, %c256_i64 : !pto.ptr<ui8, gm>, !pto.ptr<ui8, ub>, i64, i64, i64, i64, i64, i1, i64, i64, i64
+
+    pto.set_flag["PIPE_MTE2", "PIPE_V", "EVENT_ID0"]
+    pto.wait_flag["PIPE_MTE2", "PIPE_V", "EVENT_ID0"]
+
+    pto.vecscope {
+      %_:1 = scf.for %offset = %c0 to %c1024 step %c256 iter_args(%remaining = %c1024_i32) -> (i32) {
+        %mask, %next_remaining = pto.plt_b8 %remaining : i32 -> !pto.mask<b8>, i32
+        %src = pto.vlds %ub_src[%offset] : !pto.ptr<ui8, ub> -> !pto.vreg<256xui8>
+        %idx = pto.vlds %ub_idx[%offset] : !pto.ptr<ui8, ub> -> !pto.vreg<256xui8>
+        %out = pto.vselr %src, %idx : !pto.vreg<256xui8>, !pto.vreg<256xui8> -> !pto.vreg<256xui8>
+        pto.vsts %out, %ub_out[%offset], %mask : !pto.vreg<256xui8>, !pto.ptr<ui8, ub>, !pto.mask<b8>
+        scf.yield %next_remaining : i32
+      }
+    }
+
+    pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+    pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+    pto.set_loop_size_ubtoout %c1_i64, %c1_i64 : i64, i64
+    pto.copy_ubuf_to_gm %ub_out, %arg2, %c0_i64, %c4_i64, %c256_i64, %c0_i64, %c256_i64, %c256_i64 : !pto.ptr<ui8, ub>, !pto.ptr<ui8, gm>, i64, i64, i64, i64, i64, i64
+    pto.barrier #pto.pipe<PIPE_ALL>
+    return
+  }
+}

@@ -1,0 +1,47 @@
+#!/usr/bin/env python3
+# case: micro-op/predicate-load-store/psti-pk
+# family: predicate-load-store
+# target_ops: pto.psti
+# scenarios: packed-store, immediate-offset, representative-logical-elements
+
+import argparse
+from pathlib import Path
+
+import numpy as np
+
+
+SEED = 19
+OUTPUT_WORDS = 8
+ACTIVE_BITS = 145
+
+
+def prefix_bits(active_bits: int) -> np.ndarray:
+    bits = np.zeros((256,), dtype=np.uint8)
+    bits[:active_bits] = 1
+    return bits
+
+
+def generate(output_dir: Path, seed: int) -> None:
+    del seed
+    bits = prefix_bits(ACTIVE_BITS)
+    packed_pk = np.packbits(bits[::2], bitorder="little")
+    out = np.zeros((OUTPUT_WORDS * 4,), dtype=np.uint8)
+    out[: packed_pk.size] = packed_pk
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    np.zeros((OUTPUT_WORDS,), dtype=np.uint32).tofile(output_dir / "v1.bin")
+    out.view(np.uint32).tofile(output_dir / "golden_v1.bin")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Generate packed predicate golden for VPTO micro-op psti-pk validation."
+    )
+    parser.add_argument("--output-dir", type=Path, default=Path("."))
+    parser.add_argument("--seed", type=int, default=SEED)
+    args = parser.parse_args()
+    generate(args.output_dir, args.seed)
+
+
+if __name__ == "__main__":
+    main()

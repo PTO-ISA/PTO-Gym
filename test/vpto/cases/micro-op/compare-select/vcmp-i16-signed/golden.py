@@ -1,0 +1,48 @@
+#!/usr/bin/env python3
+
+import argparse
+from pathlib import Path
+
+import numpy as np
+
+
+LANES = 128
+SEED = 19
+OUTPUT_BYTES = 32
+
+
+def encode_b16_mask(mask: np.ndarray) -> np.ndarray:
+    out = np.zeros((OUTPUT_BYTES,), dtype=np.uint8)
+    for i, bit in enumerate(mask.astype(np.uint8, copy=False)):
+        if bit:
+            byte_index = i // 4
+            pair_shift = 2 * (i % 4)
+            out[byte_index] |= np.uint8(1 << pair_shift)
+    return out
+
+
+def generate(output_dir: Path, seed: int) -> None:
+    rng = np.random.default_rng(seed)
+    v1 = rng.integers(-1200, 1200, size=(LANES,), dtype=np.int16)
+    v2 = v1.copy()
+    mismatch = (np.arange(LANES, dtype=np.int32) % 3) == 1
+    v2[mismatch] = (v2[mismatch] + np.int16(7)).astype(np.int16)
+    mask = np.equal(v1, v2)
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    v1.tofile(output_dir / "v1.bin")
+    v2.tofile(output_dir / "v2.bin")
+    np.zeros((OUTPUT_BYTES,), dtype=np.uint8).tofile(output_dir / "v3.bin")
+    encode_b16_mask(mask).tofile(output_dir / "golden_v3.bin")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Generate inputs/golden for VPTO vcmp-i16-signed.")
+    parser.add_argument("--output-dir", type=Path, default=Path("."))
+    parser.add_argument("--seed", type=int, default=SEED)
+    args = parser.parse_args()
+    generate(args.output_dir, args.seed)
+
+
+if __name__ == "__main__":
+    main()

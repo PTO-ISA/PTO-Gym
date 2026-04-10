@@ -1,0 +1,56 @@
+#!/usr/bin/env python3
+# case: micro-op/materialization-predicate/pintlv_b32
+# family: materialization-predicate
+# target_ops: pto.pintlv_b32
+# scenarios: predicate-transform, lane-order
+# coding=utf-8
+
+import os
+import sys
+
+import numpy as np
+
+
+EXPECTED_WORDS = 32
+PREFIX_WORDS = 16
+
+
+def compare_words(golden_path, output_path):
+    if not os.path.exists(output_path) or not os.path.exists(golden_path):
+        print(f"[ERROR] Missing file: golden={golden_path} out={output_path}")
+        return False
+    golden = np.fromfile(golden_path, dtype=np.uint32)
+    output = np.fromfile(output_path, dtype=np.uint32)
+    if golden.size != EXPECTED_WORDS or output.size != EXPECTED_WORDS:
+        print(
+            f"[ERROR] Unexpected word count: golden={golden.size} "
+            f"out={output.size} expected={EXPECTED_WORDS}"
+        )
+        return False
+    golden = golden[:PREFIX_WORDS]
+    output = output[:PREFIX_WORDS]
+    if not np.array_equal(golden, output):
+        diff = np.nonzero(golden != output)[0]
+        idx = int(diff[0]) if diff.size else 0
+        print(
+            f"[ERROR] Mismatch (packed predicate words): idx={idx} "
+            f"golden={int(golden[idx])} out={int(output[idx])}"
+        )
+        return False
+    return True
+
+
+def main():
+    strict = os.getenv("COMPARE_STRICT", "1") != "0"
+    ok = compare_words("golden_v1.bin", "v1.bin")
+    if not ok:
+        if strict:
+            print("[ERROR] compare failed")
+            sys.exit(2)
+        print("[WARN] compare failed (non-gating)")
+        return
+    print("[INFO] compare passed")
+
+
+if __name__ == "__main__":
+    main()

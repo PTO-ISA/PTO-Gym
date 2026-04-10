@@ -1,0 +1,61 @@
+#!/usr/bin/env python3
+# case: micro-op/binary-vector/vaddc-carry-boundary
+# family: binary-vector
+# target_ops: pto.vaddc
+# scenarios: core-u32-unsigned, full-mask, carry-chain
+
+import argparse
+from pathlib import Path
+
+import numpy as np
+
+
+LANES = 64
+SEED = 19
+
+
+def pack_mask_nibbles(bits):
+    out = np.zeros(256, dtype=np.uint8)
+    for idx, bit in enumerate(bits):
+        if not bit:
+            continue
+        byte = idx // 2
+        if idx % 2 == 0:
+            out[byte] |= np.uint8(0x1)
+        else:
+            out[byte] |= np.uint8(0x10)
+    return out
+
+
+def generate(output_dir: Path, seed: int) -> None:
+    del seed
+    v1 = np.zeros(LANES, dtype=np.uint32)
+    v2 = np.zeros(LANES, dtype=np.uint32)
+    pattern_lhs = np.array([0xFFFFFFFF, 0xFFFFFFFE, 0x80000000, 0x7FFFFFFF], dtype=np.uint32)
+    pattern_rhs = np.array([0x00000001, 0x00000002, 0x80000000, 0x00000001], dtype=np.uint32)
+    reps = LANES // pattern_lhs.size
+    v1[:] = np.tile(pattern_lhs, reps)
+    v2[:] = np.tile(pattern_rhs, reps)
+    total = v1.astype(np.uint64) + v2.astype(np.uint64)
+    result = (total & np.uint64(0xFFFFFFFF)).astype(np.uint32)
+    carry = (total >> np.uint64(32)) != 0
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    v1.tofile(output_dir / "v1.bin")
+    v2.tofile(output_dir / "v2.bin")
+    np.zeros(LANES, dtype=np.uint32).tofile(output_dir / "v3.bin")
+    np.zeros(256, dtype=np.uint8).tofile(output_dir / "v4.bin")
+    result.tofile(output_dir / "golden_v3.bin")
+    pack_mask_nibbles(carry).tofile(output_dir / "golden_v4.bin")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--output-dir", type=Path, default=Path("."))
+    parser.add_argument("--seed", type=int, default=SEED)
+    args = parser.parse_args()
+    generate(args.output_dir, args.seed)
+
+
+if __name__ == "__main__":
+    main()

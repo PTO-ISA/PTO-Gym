@@ -1,0 +1,39 @@
+// -----------------------------------------------------------------------------
+// case: micro-op/materialization-predicate/plt-tail-mask-boundary
+// family: materialization-predicate
+// target_ops: pto.plt_b16, pto.plt_b32, pto.plt_b8
+// scenarios: tail-mask, scalar-carry-out, boundary
+// -----------------------------------------------------------------------------
+module attributes {pto.target_arch = "a5"} {
+  func.func @plt_tail_mask_boundary_kernel_2d(%arg0: !pto.ptr<ui32, gm>) {
+    %c0 = arith.constant 0 : index
+    %c1 = arith.constant 1 : index
+    %c32 = arith.constant 32 : index
+    %c64 = arith.constant 64 : index
+    %c0_i64 = arith.constant 0 : i64
+    %c1_i64 = arith.constant 1 : i64
+    %c96_i64 = arith.constant 96 : i64
+    %c1_i32 = arith.constant 1 : i32
+
+    %ub_out = pto.castptr %c0_i64 : i64 -> !pto.ptr<ui8, ub>
+    %gm_out = pto.castptr %arg0 : !pto.ptr<ui32, gm> -> !pto.ptr<ui8, gm>
+
+    pto.vecscope {
+      scf.for %iter = %c0 to %c1 step %c1 {
+        %m0, %s0 = pto.plt_b8 %c1_i32 : i32 -> !pto.mask<b8>, i32
+        %m1, %s1 = pto.plt_b16 %c1_i32 : i32 -> !pto.mask<b16>, i32
+        %m2, %s2 = pto.plt_b32 %c1_i32 : i32 -> !pto.mask<b32>, i32
+        pto.psts %m0, %ub_out[%c0], "NORM" : !pto.mask<b8>, !pto.ptr<ui8, ub>, index
+        pto.psts %m1, %ub_out[%c32], "NORM" : !pto.mask<b16>, !pto.ptr<ui8, ub>, index
+        pto.psts %m2, %ub_out[%c64], "NORM" : !pto.mask<b32>, !pto.ptr<ui8, ub>, index
+      }
+    }
+
+    pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+    pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+    pto.set_loop_size_ubtoout %c1_i64, %c1_i64 : i64, i64
+    pto.copy_ubuf_to_gm %ub_out, %gm_out, %c0_i64, %c1_i64, %c96_i64, %c0_i64, %c96_i64, %c96_i64 : !pto.ptr<ui8, ub>, !pto.ptr<ui8, gm>, i64, i64, i64, i64, i64, i64
+    pto.barrier #pto.pipe<PIPE_ALL>
+    return
+  }
+}

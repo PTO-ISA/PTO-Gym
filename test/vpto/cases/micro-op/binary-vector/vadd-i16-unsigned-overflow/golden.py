@@ -1,0 +1,54 @@
+#!/usr/bin/env python3
+# case: micro-op/binary-vector/vadd-i16-unsigned-overflow
+# family: binary-vector
+# target_ops: pto.vadd
+# scenarios: core-i16-unsigned, full-mask, integer-overflow
+
+import argparse
+from pathlib import Path
+
+import numpy as np
+
+
+ELEMS = 1024
+SEED = 19
+
+
+def wrap_add_u16(lhs: np.ndarray, rhs: np.ndarray) -> np.ndarray:
+    wide = lhs.astype(np.uint32) + rhs.astype(np.uint32)
+    return (wide & 0xFFFF).astype(np.uint16)
+
+
+def generate(output_dir: Path, seed: int) -> None:
+    del seed
+    lhs_pattern = np.array(
+        [65535, 65530, 65500, 60000, 100, 0, 32768, 12345],
+        dtype=np.uint16,
+    )
+    rhs_pattern = np.array(
+        [1, 10, 1000, 10000, 65535, 5, 40000, 60000],
+        dtype=np.uint16,
+    )
+    repeats = ELEMS // lhs_pattern.size
+    v1 = np.tile(lhs_pattern, repeats)
+    v2 = np.tile(rhs_pattern, repeats)
+    v3 = np.zeros(ELEMS, dtype=np.uint16)
+    golden_v3 = wrap_add_u16(v1, v2)
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    v1.tofile(output_dir / "v1.bin")
+    v2.tofile(output_dir / "v2.bin")
+    v3.tofile(output_dir / "v3.bin")
+    golden_v3.tofile(output_dir / "golden_v3.bin")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--output-dir", type=Path, default=Path("."))
+    parser.add_argument("--seed", type=int, default=SEED)
+    args = parser.parse_args()
+    generate(args.output_dir, args.seed)
+
+
+if __name__ == "__main__":
+    main()

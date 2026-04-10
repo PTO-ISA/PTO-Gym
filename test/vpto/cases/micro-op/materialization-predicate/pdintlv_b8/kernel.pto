@@ -1,0 +1,37 @@
+// -----------------------------------------------------------------------------
+// case: micro-op/materialization-predicate/pdintlv_b8
+// family: materialization-predicate
+// target_ops: pto.pdintlv_b8
+// scenarios: predicate-transform, lane-order
+// -----------------------------------------------------------------------------
+module attributes {pto.target_arch = "a5"} {
+  func.func @pdintlv_b8_kernel_2d(%arg0: !pto.ptr<ui32, gm>) {
+    %c0 = arith.constant 0 : index
+    %c1 = arith.constant 1 : index
+    %c32 = arith.constant 32 : index
+    %c16 = arith.constant 16 : index
+    %c0_i64 = arith.constant 0 : i64
+    %c1_i64 = arith.constant 1 : i64
+    %c64_i64 = arith.constant 64 : i64
+
+    %ub_out = pto.castptr %c0_i64 : i64 -> !pto.ptr<ui8, ub>
+    %gm_out = pto.castptr %arg0 : !pto.ptr<ui32, gm> -> !pto.ptr<ui8, gm>
+
+    pto.vecscope {
+      scf.for %iter = %c0 to %c1 step %c1 {
+        %lhs = pto.pset_b8 "PAT_ALL" : !pto.mask<b8>
+        %rhs = pto.pset_b8 "PAT_ALLF" : !pto.mask<b8>
+        %low, %high = pto.pdintlv_b8 %lhs, %rhs : !pto.mask<b8>, !pto.mask<b8> -> !pto.mask<b8>, !pto.mask<b8>
+        pto.psts %low, %ub_out[%c0], "NORM" : !pto.mask<b8>, !pto.ptr<ui8, ub>, index
+        pto.psts %high, %ub_out[%c32], "NORM" : !pto.mask<b8>, !pto.ptr<ui8, ub>, index
+      }
+    }
+
+    pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+    pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+    pto.set_loop_size_ubtoout %c1_i64, %c1_i64 : i64, i64
+    pto.copy_ubuf_to_gm %ub_out, %gm_out, %c0_i64, %c1_i64, %c64_i64, %c0_i64, %c64_i64, %c64_i64 : !pto.ptr<ui8, ub>, !pto.ptr<ui8, gm>, i64, i64, i64, i64, i64, i64
+    pto.barrier #pto.pipe<PIPE_ALL>
+    return
+  }
+}

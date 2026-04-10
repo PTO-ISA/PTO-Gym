@@ -1,0 +1,51 @@
+// -----------------------------------------------------------------------------
+// case: micro-op/predicate-load-store/pstu-init-align-outside-loop
+// family: predicate-load-store
+// target_ops: pto.pstu
+// scenarios: unaligned-predicate-store, state-update, representative-logical-elements, init-align-outside-loop
+// NOTE: bulk-generated coverage skeleton. Parser/verifier/lowering failure is
+// still a valid test conclusion in the current coverage-first phase.
+// -----------------------------------------------------------------------------
+#ifndef __VEC_SCOPE__
+#define __VEC_SCOPE__
+#endif
+
+#if defined(__CCE_AICORE__) && defined(__NPU_ARCH__) && (__NPU_ARCH__ == 2201)
+typedef struct { unsigned char v; } hifloat8_t;
+typedef struct { unsigned char v; } float8_e4m3_t;
+typedef struct { unsigned char v; } float8_e5m2_t;
+typedef struct { unsigned char v; } float8_e8m0_t;
+typedef struct { unsigned char v; } float4_e1m2x2_t;
+typedef struct { unsigned char v; } float4_e2m1x2_t;
+#endif
+#include <stdint.h>
+
+#if defined(__CCE_AICORE__) && defined(PTOAS_ENABLE_CCE_PRINT)
+#include <ccelib/print/print.h>
+#endif
+#include <pto/pto-inst.hpp>
+#include <pto/common/constants.hpp>
+
+#if !defined(__CCE_AICORE__) && !defined(TMRGSORT_HPP)
+namespace pto {
+struct MrgSortExecutedNumList {
+  uint16_t mrgSortList0;
+  uint16_t mrgSortList1;
+  uint16_t mrgSortList2;
+  uint16_t mrgSortList3;
+};
+} // namespace pto
+#endif
+#ifndef __CPU_SIM
+#include "acl/acl.h"
+#endif
+
+extern "C" __global__ AICORE void
+pstu_init_align_outside_loop_kernel_2d(__gm__ float *v1, __gm__ float *v2,
+                                       __gm__ uint32_t *v3);
+
+void LaunchPstu_init_align_outside_loop_kernel_2d(float *v1, float *v2,
+                                                  uint32_t *v3, void *stream) {
+  pstu_init_align_outside_loop_kernel_2d<<<1, nullptr, stream>>>(
+      (__gm__ float *)v1, (__gm__ float *)v2, (__gm__ uint32_t *)v3);
+}

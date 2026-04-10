@@ -1,0 +1,35 @@
+// -----------------------------------------------------------------------------
+// case: micro-op/materialization-predicate/vdup-scalar-i8
+// family: materialization-predicate
+// target_ops: pto.vdup
+// scenarios: core-i8, scalar-broadcast
+// -----------------------------------------------------------------------------
+module attributes {pto.target_arch = "a5"} {
+  func.func @vdup_scalar_i8_kernel_2d(%arg0: !pto.ptr<i8, gm>) {
+    %c0 = arith.constant 0 : index
+    %c128 = arith.constant 128 : index
+    %c1024 = arith.constant 1024 : index
+    %c0_i64 = arith.constant 0 : i64
+    %c1_i64 = arith.constant 1 : i64
+    %c32_i64 = arith.constant 32 : i64
+    %c128_i64 = arith.constant 128 : i64
+    %cst = arith.constant -83 : i8
+
+    %ub_out = pto.castptr %c0_i64 : i64 -> !pto.ptr<i8, ub>
+
+    pto.vecscope {
+      %active = pto.pset_b8 "PAT_ALL" : !pto.mask<b8>
+      scf.for %offset = %c0 to %c1024 step %c128 {
+        %vec = pto.vdup %cst, %active : i8, !pto.mask<b8> -> !pto.vreg<256xi8>
+        pto.vsts %vec, %ub_out[%offset], %active : !pto.vreg<256xi8>, !pto.ptr<i8, ub>, !pto.mask<b8>
+      }
+    }
+
+    pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+    pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+    pto.set_loop_size_ubtoout %c1_i64, %c1_i64 : i64, i64
+    pto.copy_ubuf_to_gm %ub_out, %arg0, %c0_i64, %c32_i64, %c128_i64, %c0_i64, %c128_i64, %c128_i64 : !pto.ptr<i8, ub>, !pto.ptr<i8, gm>, i64, i64, i64, i64, i64, i64
+    pto.barrier #pto.pipe<PIPE_ALL>
+    return
+  }
+}
