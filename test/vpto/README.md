@@ -5,6 +5,7 @@
 ## Required Environment
 
 The runner depends on `ASCEND_HOME_PATH` and `PTOAS_BIN`.
+The required CANN package version is `9.0.0-beta.1`.
 
 When `DEVICE=SIM` and `SIM_LIB_DIR` is unset, the runner auto-discovers
 `*/simulator/dav_3510/lib` under `ASCEND_HOME_PATH`.
