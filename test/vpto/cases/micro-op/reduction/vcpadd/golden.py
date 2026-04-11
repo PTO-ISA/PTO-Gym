@@ -1,0 +1,47 @@
+#!/usr/bin/env python3
+# coding=utf-8
+
+import argparse
+from pathlib import Path
+
+import numpy as np
+
+
+ROWS = 32
+COLS = 32
+SEED = 19
+LANES = 64
+def generate(output_dir: Path, seed: int) -> None:
+    rng = np.random.default_rng(seed)
+    v1 = rng.uniform(-8.0, 8.0, size=(ROWS, COLS)).astype(np.float32)
+
+    v2 = np.zeros((ROWS, COLS), dtype=np.float32)
+    golden_v2 = np.zeros((ROWS, COLS), dtype=np.float32)
+    flat_in = v1.reshape(-1)
+    flat_out = golden_v2.reshape(-1)
+    for offset in range(0, flat_in.size, LANES):
+        chunk = flat_in[offset:offset + LANES]
+        pair_count = (chunk.size + 1) // 2
+        for i in range(pair_count):
+            a = chunk[2 * i]
+            b = chunk[2 * i + 1] if (2 * i + 1) < chunk.size else np.float32(0.0)
+            # VCPADD writes pair-reduction results to low half lanes.
+            flat_out[offset + i] = np.float32(a + b)
+
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    v1.reshape(-1).tofile(output_dir / "v1.bin")
+    v2.reshape(-1).tofile(output_dir / "v2.bin")
+    golden_v2.reshape(-1).tofile(output_dir / "golden_v2.bin")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--output-dir", type=Path, default=Path("."))
+    parser.add_argument("--seed", type=int, default=SEED)
+    args = parser.parse_args()
+    generate(args.output_dir, args.seed)
+
+
+if __name__ == "__main__":
+    main()

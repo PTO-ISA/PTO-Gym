@@ -1,0 +1,48 @@
+#!/usr/bin/env python3
+# case: micro-op/vector-load-store/vstsx2-layout-check
+# family: vector-load-store
+# target_ops: pto.vstsx2
+# scenarios: core-f32, full-mask, paired-roundtrip, dintlv, lane-order
+# NOTE: bulk-generated coverage skeleton.
+# coding=utf-8
+
+import argparse
+from pathlib import Path
+
+import numpy as np
+
+
+ROWS = 32
+COLS = 32
+ACTIVE = 128
+SEED = 19
+
+
+def generate(output_dir: Path, seed: int) -> None:
+    rng = np.random.default_rng(seed)
+    v1 = rng.uniform(-8.0, 8.0, size=(ROWS, COLS)).astype(np.float32)
+    v2 = np.zeros((ROWS, COLS), dtype=np.float32)
+    golden_v2 = np.zeros((ROWS, COLS), dtype=np.float32)
+    flat_in = v1.reshape(-1)
+    flat_golden = golden_v2.reshape(-1)
+    flat_golden[:ACTIVE:2] = flat_in[:64]
+    flat_golden[1:ACTIVE:2] = flat_in[64:128]
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    v1.reshape(-1).tofile(output_dir / "v1.bin")
+    v2.reshape(-1).tofile(output_dir / "v2.bin")
+    golden_v2.reshape(-1).tofile(output_dir / "golden_v2.bin")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Generate numpy-based inputs/golden for VPTO micro-op vstsx2 layout validation."
+    )
+    parser.add_argument("--output-dir", type=Path, default=Path("."))
+    parser.add_argument("--seed", type=int, default=SEED)
+    args = parser.parse_args()
+    generate(args.output_dir, args.seed)
+
+
+if __name__ == "__main__":
+    main()

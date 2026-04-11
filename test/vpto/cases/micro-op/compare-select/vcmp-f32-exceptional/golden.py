@@ -1,0 +1,54 @@
+#!/usr/bin/env python3
+
+import argparse
+from pathlib import Path
+
+import numpy as np
+
+
+LANES = 64
+SEED = 19
+OUTPUT_BYTES = 32
+
+
+def encode_b32_mask(mask: np.ndarray) -> np.ndarray:
+    out = np.zeros((OUTPUT_BYTES,), dtype=np.uint8)
+    for i, bit in enumerate(mask.astype(np.uint8, copy=False)):
+        if bit:
+            byte_index = i // 2
+            nibble_shift = 4 * (i % 2)
+            out[byte_index] |= np.uint8(1 << nibble_shift)
+    return out
+
+
+def generate(output_dir: Path, seed: int) -> None:
+    del seed
+    lhs = np.array(
+        [-np.inf, -3.0, -0.0, 0.0, 0.5, np.inf, np.nan, 1.0],
+        dtype=np.float32,
+    )
+    rhs = np.array(
+        [np.inf, -2.0, 0.0, -0.0, 0.5, np.nan, 1.0, -np.inf],
+        dtype=np.float32,
+    )
+    v1 = np.resize(lhs, LANES).astype(np.float32)
+    v2 = np.resize(rhs, LANES).astype(np.float32)
+    mask = np.less(v1, v2)
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    v1.tofile(output_dir / "v1.bin")
+    v2.tofile(output_dir / "v2.bin")
+    np.zeros((OUTPUT_BYTES,), dtype=np.uint8).tofile(output_dir / "v3.bin")
+    encode_b32_mask(mask).tofile(output_dir / "golden_v3.bin")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Generate inputs/golden for VPTO vcmp-f32-exceptional.")
+    parser.add_argument("--output-dir", type=Path, default=Path("."))
+    parser.add_argument("--seed", type=int, default=SEED)
+    args = parser.parse_args()
+    generate(args.output_dir, args.seed)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,46 @@
+#!/usr/bin/env python3
+# case: micro-op/conversion/vcvt-f16-to-f32-part-even
+# family: conversion
+# target_ops: pto.vcvt
+# scenarios: f16-to-f32, full-mask, part-even
+
+import argparse
+from pathlib import Path
+
+import numpy as np
+
+
+ELEMS = 1024
+SEED = 19
+
+
+def generate(output_dir: Path, seed: int) -> None:
+    rng = np.random.default_rng(seed)
+    v1 = rng.uniform(-8.0, 8.0, size=ELEMS).astype(np.float16)
+    # Kernel writes 8 chunks (offset 0..448, step 64), each chunk converts the
+    # lower 16-bit half (PART_EVEN) from packed f16 pairs in a 128-lane load.
+    out_elems = 512
+    v2 = np.zeros(out_elems, dtype=np.float32)
+    golden_v2 = np.empty(out_elems, dtype=np.float32)
+    for block in range(0, out_elems, 64):
+        src = v1[block : block + 128 : 2].astype(np.float32, copy=False)
+        golden_v2[block : block + 64] = src
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    v1.tofile(output_dir / "v1.bin")
+    v2.tofile(output_dir / "v2.bin")
+    golden_v2.tofile(output_dir / "golden_v2.bin")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Generate numpy-based inputs/golden for VPTO micro-op vcvt-f16-to-f32 part-even validation."
+    )
+    parser.add_argument("--output-dir", type=Path, default=Path("."))
+    parser.add_argument("--seed", type=int, default=SEED)
+    args = parser.parse_args()
+    generate(args.output_dir, args.seed)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,40 @@
+// -----------------------------------------------------------------------------
+// case: micro-op/dsa-sfu/vbitsort
+// family: dsa-sfu
+// target_ops: pto.vbitsort
+// scenarios: index-generation, layout-transform
+// -----------------------------------------------------------------------------
+module attributes {pto.target_arch = "a5"} {
+  func.func @vbitsort_kernel_f32(%arg0: !pto.ptr<f32, gm>,
+                                 %arg1: !pto.ptr<ui32, gm>,
+                                 %arg2: !pto.ptr<ui32, gm>) {
+    %c0_i64 = arith.constant 0 : i64
+    %c1_i64 = arith.constant 1 : i64
+    %c128_i64 = arith.constant 128 : i64
+    %c256_i64 = arith.constant 256 : i64
+    %c1 = arith.constant 1 : index
+    %false = arith.constant false
+
+    %ub_scores = pto.castptr %c0_i64 : i64 -> !pto.ptr<f32, ub>
+    %ub_indices = pto.castptr %c128_i64 : i64 -> !pto.ptr<ui32, ub>
+    %ub_out = pto.castptr %c256_i64 : i64 -> !pto.ptr<ui32, ub>
+
+    pto.set_loop_size_outtoub %c1_i64, %c1_i64 : i64, i64
+    pto.copy_gm_to_ubuf %arg0, %ub_scores, %c0_i64, %c1_i64, %c128_i64, %c0_i64, %c0_i64, %false, %c0_i64, %c128_i64, %c128_i64 : !pto.ptr<f32, gm>, !pto.ptr<f32, ub>, i64, i64, i64, i64, i64, i1, i64, i64, i64
+    pto.set_loop_size_outtoub %c1_i64, %c1_i64 : i64, i64
+    pto.copy_gm_to_ubuf %arg1, %ub_indices, %c0_i64, %c1_i64, %c128_i64, %c0_i64, %c0_i64, %false, %c0_i64, %c128_i64, %c128_i64 : !pto.ptr<ui32, gm>, !pto.ptr<ui32, ub>, i64, i64, i64, i64, i64, i1, i64, i64, i64
+
+    pto.set_flag["PIPE_MTE2", "PIPE_V", "EVENT_ID0"]
+    pto.wait_flag["PIPE_MTE2", "PIPE_V", "EVENT_ID0"]
+
+    pto.vbitsort %ub_out, %ub_scores, %ub_indices, %c1 : !pto.ptr<ui32, ub>, !pto.ptr<f32, ub>, !pto.ptr<ui32, ub>, index
+
+    pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+    pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+
+    pto.set_loop_size_ubtoout %c1_i64, %c1_i64 : i64, i64
+    pto.copy_ubuf_to_gm %ub_out, %arg2, %c0_i64, %c1_i64, %c256_i64, %c0_i64, %c256_i64, %c256_i64 : !pto.ptr<ui32, ub>, !pto.ptr<ui32, gm>, i64, i64, i64, i64, i64, i64
+    pto.barrier #pto.pipe<PIPE_ALL>
+    return
+  }
+}

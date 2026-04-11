@@ -1,0 +1,50 @@
+#!/usr/bin/env python3
+# case: micro-op/conversion/vcvt-f32-to-f16
+# family: conversion
+# target_ops: pto.vcvt
+# scenarios: f32-to-f16, full-mask
+
+import argparse
+from pathlib import Path
+
+import numpy as np
+
+
+ELEMS = 1024
+SEED = 19
+
+
+def generate(output_dir: Path, seed: int) -> None:
+    rng = np.random.default_rng(seed)
+    v1 = rng.uniform(-8.0, 8.0, size=ELEMS).astype(np.float32)
+    v2 = np.zeros(ELEMS, dtype=np.float16)
+    golden_v2 = np.zeros(ELEMS, dtype=np.float16)
+
+    # Width-changing f32->f16 lowering uses two 64-lane f32 vectors, converts
+    # them into EVEN/ODD halves, then merges them into one 128-lane f16 vector.
+    for offset in range(0, ELEMS, 128):
+        lower = v1[offset : offset + 64].astype(np.float16)
+        upper = v1[offset + 64 : offset + 128].astype(np.float16)
+        merged = np.empty(128, dtype=np.float16)
+        merged[0::2] = lower
+        merged[1::2] = upper
+        golden_v2[offset : offset + 128] = merged
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    v1.tofile(output_dir / "v1.bin")
+    v2.tofile(output_dir / "v2.bin")
+    golden_v2.tofile(output_dir / "golden_v2.bin")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Generate numpy-based inputs/golden for VPTO micro-op vcvt-f32-to-f16 validation."
+    )
+    parser.add_argument("--output-dir", type=Path, default=Path("."))
+    parser.add_argument("--seed", type=int, default=SEED)
+    args = parser.parse_args()
+    generate(args.output_dir, args.seed)
+
+
+if __name__ == "__main__":
+    main()

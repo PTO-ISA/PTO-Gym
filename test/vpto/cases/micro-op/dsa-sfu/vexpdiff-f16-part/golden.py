@@ -1,0 +1,53 @@
+#!/usr/bin/env python3
+# case: micro-op/dsa-sfu/vexpdiff-f16-part
+# family: dsa-sfu
+# target_ops: pto.vexpdiff
+# scenarios: core-f16, fused-expdiff, part-even-odd
+
+import argparse
+from pathlib import Path
+
+import numpy as np
+
+
+ROWS = 32
+COLS = 32
+SEED = 31
+
+
+def generate(output_dir: Path, seed: int) -> None:
+    rng = np.random.default_rng(seed)
+    v1 = rng.uniform(-4.0, 4.0, size=(ROWS, COLS)).astype(np.float16)
+    v2 = rng.uniform(-2.0, 2.0, size=(ROWS, COLS)).astype(np.float16)
+    v3 = np.zeros((ROWS, COLS), dtype=np.float32)
+
+    flat1 = v1.reshape(-1)
+    flat2 = v2.reshape(-1)
+    golden = np.empty((ROWS * COLS,), dtype=np.float32)
+    for base in range(0, ROWS * COLS, 128):
+        chunk1 = flat1[base : base + 128].astype(np.float32)
+        chunk2 = flat2[base : base + 128].astype(np.float32)
+        golden[base : base + 64] = np.exp(chunk1[0::2] - chunk2[0::2]).astype(
+            np.float32
+        )
+        golden[base + 64 : base + 128] = np.exp(
+            chunk1[1::2] - chunk2[1::2]
+        ).astype(np.float32)
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    flat1.tofile(output_dir / "v1.bin")
+    flat2.tofile(output_dir / "v2.bin")
+    v3.reshape(-1).tofile(output_dir / "v3.bin")
+    golden.tofile(output_dir / "golden_v3.bin")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--output-dir", type=Path, default=Path("."))
+    parser.add_argument("--seed", type=int, default=SEED)
+    args = parser.parse_args()
+    generate(args.output_dir, args.seed)
+
+
+if __name__ == "__main__":
+    main()

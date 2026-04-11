@@ -1,0 +1,40 @@
+#!/usr/bin/env python3
+
+import argparse
+from pathlib import Path
+
+import numpy as np
+
+
+LANES = 64
+SEED = 19
+LOGICAL_ELEMS = 40
+OUT_SENTINEL = np.float32(-123.25)
+
+
+def generate(output_dir: Path, seed: int) -> None:
+    rng = np.random.default_rng(seed)
+    v1 = rng.uniform(-3.0, 3.0, size=(LANES,)).astype(np.float32)
+    v2 = rng.uniform(-3.0, 3.0, size=(LANES,)).astype(np.float32)
+    golden_v3 = np.full((LANES,), OUT_SENTINEL, dtype=np.float32)
+    flat = np.where(v1 > v2, v1, v2).astype(np.float32, copy=False)
+    golden_v3[:LOGICAL_ELEMS] = flat[:LOGICAL_ELEMS]
+    v3 = np.full((LANES,), OUT_SENTINEL, dtype=np.float32)
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    v1.tofile(output_dir / "v1.bin")
+    v2.tofile(output_dir / "v2.bin")
+    v3.tofile(output_dir / "v3.bin")
+    golden_v3.tofile(output_dir / "golden_v3.bin")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Generate inputs/golden for VPTO vsel-tail.")
+    parser.add_argument("--output-dir", type=Path, default=Path("."))
+    parser.add_argument("--seed", type=int, default=SEED)
+    args = parser.parse_args()
+    generate(args.output_dir, args.seed)
+
+
+if __name__ == "__main__":
+    main()

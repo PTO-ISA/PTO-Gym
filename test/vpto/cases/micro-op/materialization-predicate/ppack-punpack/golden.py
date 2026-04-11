@@ -1,0 +1,41 @@
+#!/usr/bin/env python3
+# case: micro-op/materialization-predicate/ppack-punpack
+# family: materialization-predicate
+# target_ops: pto.ppack, pto.punpack
+# scenarios: pack-unpack-roundtrip
+# coding=utf-8
+
+import argparse
+from pathlib import Path
+
+import numpy as np
+
+
+SEED = 19
+OUTPUT_WORDS = 32
+GOLDEN_PREFIX_WORDS = np.array([1431655765, 1431655765, 1431655765, 1431655765, 0, 0, 0, 0, 286331153, 286331153, 286331153, 286331153, 286331153, 286331153, 286331153, 286331153], dtype=np.uint32)
+
+
+def generate(output_dir: Path, seed: int) -> None:
+    del seed
+    output_init = np.zeros((OUTPUT_WORDS,), dtype=np.uint32)
+    golden = np.zeros((OUTPUT_WORDS,), dtype=np.uint32)
+    golden[: GOLDEN_PREFIX_WORDS.size] = GOLDEN_PREFIX_WORDS
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_init.tofile(output_dir / "v1.bin")
+    golden.tofile(output_dir / "golden_v1.bin")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Generate packed predicate golden for VPTO micro-op validation."
+    )
+    parser.add_argument("--output-dir", type=Path, default=Path("."))
+    parser.add_argument("--seed", type=int, default=SEED)
+    args = parser.parse_args()
+    generate(args.output_dir, args.seed)
+
+
+if __name__ == "__main__":
+    main()

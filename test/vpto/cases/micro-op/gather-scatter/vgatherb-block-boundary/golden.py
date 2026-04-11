@@ -1,0 +1,58 @@
+#!/usr/bin/env python3
+# case: micro-op/gather-scatter/vgatherb-block-boundary
+# family: gather-scatter
+# target_ops: pto.vgatherb
+# scenarios: core-f32, block-gather, aligned-base, load-effect-validation, no-alias
+# NOTE: bulk-generated coverage skeleton.
+# coding=utf-8
+
+import argparse
+from pathlib import Path
+
+import numpy as np
+
+
+ROWS = 32
+COLS = 32
+BLOCK_FLOATS = 8
+BLOCKS_PER_ITER = 8
+ITER_ELEMS = 64
+SEED = 19
+
+
+def generate(output_dir: Path, seed: int) -> None:
+    rng = np.random.default_rng(seed)
+    flat = rng.uniform(-8.0, 8.0, size=(ROWS * COLS,)).astype(np.float32)
+    blocks = flat.reshape(-1, BLOCK_FLOATS)
+    offsets = np.zeros((ROWS * COLS,), dtype=np.int32)
+    gathered = np.zeros((ROWS * COLS,), dtype=np.float32)
+    boundary_patterns = np.array([0, 1, 15, 16, 31, 32, 63, 127], dtype=np.int32)
+
+    for chunk in range((ROWS * COLS) // ITER_ELEMS):
+        block_ids = (boundary_patterns + chunk * 3) % blocks.shape[0]
+        offsets[chunk * ITER_ELEMS:chunk * ITER_ELEMS + BLOCKS_PER_ITER] = block_ids * 32
+        gathered[chunk * ITER_ELEMS:(chunk + 1) * ITER_ELEMS] = blocks[block_ids].reshape(-1)
+
+    v1 = flat.reshape(ROWS, COLS)
+    v2 = offsets.reshape(ROWS, COLS)
+    v3 = np.zeros((ROWS, COLS), dtype=np.float32)
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    v1.reshape(-1).tofile(output_dir / "v1.bin")
+    v2.reshape(-1).tofile(output_dir / "v2.bin")
+    v3.reshape(-1).tofile(output_dir / "v3.bin")
+    gathered.reshape(-1).tofile(output_dir / "golden_v3.bin")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Generate numpy-based inputs/golden for VPTO micro-op vgatherb block-boundary validation."
+    )
+    parser.add_argument("--output-dir", type=Path, default=Path("."))
+    parser.add_argument("--seed", type=int, default=SEED)
+    args = parser.parse_args()
+    generate(args.output_dir, args.seed)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,48 @@
+// =============================================================================
+// abs_kernel_2d: Element-wise absolute value on a 32x32 f32 tile
+// =============================================================================
+// This kernel computes abs(input) for a 32x32 float32 matrix (1024 elements).
+//
+// Memory Layout:
+//   - Input:  arg0 -> GM (Global Memory)
+//   - Output: arg1 -> GM (Global Memory)
+//   - UB (Unified Buffer) at offset 0:    input tile  (4096 bytes = 32*32*4)
+//   - UB at offset 4096:                  output tile (4096 bytes = 32*32*4)
+//
+// Pipeline:
+//   1. DMA: GM -> UB (MTE2 pipe) - copy input tile to UB
+//   2. Sync: wait for MTE2 -> V pipe handoff
+//   3. Compute: vabs on 64-element vectors (V pipe) - 16 iterations for 1024 elements
+//   4. Sync: wait for V -> MTE3 pipe handoff
+//   5. DMA: UB -> GM (MTE3 pipe) - copy result tile back to GM
+// =============================================================================
+
+module attributes {pto.target_arch = "a5"} {
+  func.func @vbr_i32_kernel_2d(%arg0: !pto.ptr<i32, gm>) {
+    %c0 = arith.constant 0 : index
+    %c64 = arith.constant 64 : index
+    %c1024 = arith.constant 1024 : index
+    %c0_i64 = arith.constant 0 : i64
+    %c1_i64 = arith.constant 1 : i64
+    %c32_i64 = arith.constant 32 : i64
+    %c128_i64 = arith.constant 128 : i64
+    %cst = arith.constant 7 : i32
+
+    %ub_out = pto.castptr %c0_i64 : i64 -> !pto.ptr<i32, ub>
+
+    pto.vecscope {
+      %active = pto.pset_b32 "PAT_ALL" : !pto.mask<b32>
+      scf.for %offset = %c0 to %c1024 step %c64 {
+        %vec = pto.vbr %cst : i32 -> !pto.vreg<64xi32>
+        pto.vsts %vec, %ub_out[%offset], %active : !pto.vreg<64xi32>, !pto.ptr<i32, ub>, !pto.mask<b32>
+      }
+    }
+
+    pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+    pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+    pto.set_loop_size_ubtoout %c1_i64, %c1_i64 : i64, i64
+    pto.copy_ubuf_to_gm %ub_out, %arg0, %c0_i64, %c32_i64, %c128_i64, %c0_i64, %c128_i64, %c128_i64 : !pto.ptr<i32, ub>, !pto.ptr<i32, gm>, i64, i64, i64, i64, i64, i64
+    pto.barrier #pto.pipe<PIPE_ALL>
+    return
+  }
+}

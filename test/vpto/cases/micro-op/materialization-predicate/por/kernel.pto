@@ -1,0 +1,55 @@
+// -----------------------------------------------------------------------------
+// case: micro-op/materialization-predicate/por
+// family: materialization-predicate
+// target_ops: pto.por
+// scenarios: predicate-transform
+// NOTE: bulk-generated coverage skeleton. Parser/verifier/lowering failure is
+// still a valid test conclusion in the current coverage-first phase.
+// -----------------------------------------------------------------------------
+// =============================================================================
+// abs_kernel_2d: Element-wise absolute value on a 32x32 f32 tile
+// =============================================================================
+// This kernel computes abs(input) for a 32x32 float32 matrix (1024 elements).
+//
+// Memory Layout:
+//   - Input:  arg0 -> GM (Global Memory)
+//   - Output: arg1 -> GM (Global Memory)
+//   - UB (Unified Buffer) at offset 0:    input tile  (4096 bytes = 32*32*4)
+//   - UB at offset 4096:                  output tile (4096 bytes = 32*32*4)
+//
+// Pipeline:
+//   1. DMA: GM -> UB (MTE2 pipe) - copy input tile to UB
+//   2. Sync: wait for MTE2 -> V pipe handoff
+//   3. Compute: vabs on 64-element vectors (V pipe) - 16 iterations for 1024 elements
+//   4. Sync: wait for V -> MTE3 pipe handoff
+//   5. DMA: UB -> GM (MTE3 pipe) - copy result tile back to GM
+// =============================================================================
+
+module attributes {pto.target_arch = "a5"} {
+  func.func @por_kernel_2d(%arg0: !pto.ptr<ui32, gm>) {
+    %c0 = arith.constant 0 : index
+    %c0_i64 = arith.constant 0 : i64
+    %c1_i64 = arith.constant 1 : i64
+    %c32_i64 = arith.constant 32 : i64
+    %c7 = arith.constant 7 : i32
+    %c13 = arith.constant 13 : i32
+
+    %ub_out = pto.castptr %c0_i64 : i64 -> !pto.ptr<ui8, ub>
+    %gm_out = pto.castptr %arg0 : !pto.ptr<ui32, gm> -> !pto.ptr<ui8, gm>
+
+    pto.vecscope {
+      %all = pto.pset_b32 "PAT_ALL" : !pto.mask<b32>
+      %lhs, %lhs_next = pto.plt_b32 %c13 : i32 -> !pto.mask<b32>, i32
+      %rhs, %rhs_next = pto.plt_b32 %c7 : i32 -> !pto.mask<b32>, i32
+      %out = pto.por %lhs, %rhs, %all : !pto.mask<b32>, !pto.mask<b32>, !pto.mask<b32> -> !pto.mask<b32>
+      pto.psts %out, %ub_out[%c0], "NORM" : !pto.mask<b32>, !pto.ptr<ui8, ub>, index
+    }
+
+    pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+    pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+    pto.set_loop_size_ubtoout %c1_i64, %c1_i64 : i64, i64
+    pto.copy_ubuf_to_gm %ub_out, %gm_out, %c0_i64, %c1_i64, %c32_i64, %c0_i64, %c32_i64, %c32_i64 : !pto.ptr<ui8, ub>, !pto.ptr<ui8, gm>, i64, i64, i64, i64, i64, i64
+    pto.barrier #pto.pipe<PIPE_ALL>
+    return
+  }
+}
