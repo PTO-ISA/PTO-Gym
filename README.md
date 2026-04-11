@@ -8,7 +8,7 @@ PTO-Gym is a developer-facing repository for PTO tile programming resources. It 
 
 - `ptoas` binary / wheel release entry for users who want ready-to-use assembler artifacts
 - PTO instruction SPEC documentation for understanding the instruction model and semantics
-- VPTO test cases under `test/` that help developers learn PTO tile instructions and micro-ops through runnable examples
+- PTO test cases under `examples/` that help developers learn PTO tile instructions and micro-ops through runnable examples
 
 ## Prerequisites
 
@@ -36,7 +36,7 @@ This repository provides PTO instruction SPEC documentation here:
 
 ## Tests as Learning Material
 
-The PTO micro Instruction test cases under [test/vpto/cases/](test/vpto/cases/) are both validation assets and learning material for PTO developers.
+The PTO micro Instruction test cases under [examples/pto/](examples/pto/) are both validation assets and learning material for PTO developers.
 
 Each runnable case follows a stable structure:
 
@@ -49,7 +49,7 @@ Each runnable case follows a stable structure:
 
 These cases currently focus on PTO micro-op scenarios and are useful for understanding instruction behavior through concrete examples. Tile-level cases may be added in future updates.
 
-For more detailed validation guidance, see [test/vpto/README.md](test/vpto/README.md).
+For more detailed validation guidance, see [examples/pto/README.md](examples/pto/README.md).
 
 ## Quick Start for Validation
 
@@ -64,7 +64,7 @@ ASCEND_HOME_PATH=$ASCEND_HOME_PATH \
 PTOAS_BIN=$PTOAS_BIN \
 CASE_NAME=micro-op/binary-vector/vadd \
 DEVICE=SIM \
-bash test/vpto/scripts/run_host_vpto_validation.sh
+bash examples/pto/scripts/run_host_vpto_validation.sh
 ```
 
 ### Run micro-op validation in parallel
@@ -79,11 +79,11 @@ PTOAS_BIN=$PTOAS_BIN \
 CASE_PREFIX=micro-op \
 DEVICE=SIM \
 JOBS=64 \
-bash test/vpto/scripts/run_host_vpto_validation_parallel.sh
+bash examples/pto/scripts/run_host_vpto_validation_parallel.sh
 ```
 
 ## Repository Layout
 
 - [docs/](docs/) — PTO instruction SPEC documentation
-- [test/vpto/README.md](test/vpto/README.md) — VPTO validation usage guide
-- [test/vpto/cases/](test/vpto/cases/) — VPTO learning and validation cases
+- [examples/pto/README.md](examples/pto/README.md) — VPTO validation usage guide
+- [examples/pto/](examples/pto/) — VPTO learning and validation cases

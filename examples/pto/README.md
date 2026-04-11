@@ -1,6 +1,6 @@
 # VPTO Validation
 
-`test/vpto` is the entry point for VPTO simulator validation.
+`examples/pto` is the entry point for PTO simulator validation.
 
 ## Required Environment
 
@@ -20,7 +20,7 @@ ASCEND_HOME_PATH=$ASCEND_HOME_PATH \
 PTOAS_BIN=$PTOAS_BIN \
 CASE_NAME=micro-op/binary-vector/vadd \
 DEVICE=SIM \
-bash test/vpto/scripts/run_host_vpto_validation.sh
+bash examples/pto/scripts/run_host_vpto_validation.sh
 ```
 
 ## Run Micro-Op Validation
@@ -35,7 +35,7 @@ PTOAS_BIN=$PTOAS_BIN \
 CASE_PREFIX=micro-op \
 DEVICE=SIM \
 JOBS=64 \
-bash test/vpto/scripts/run_host_vpto_validation_parallel.sh
+bash examples/pto/scripts/run_host_vpto_validation_parallel.sh
 ```
 
 ## Results

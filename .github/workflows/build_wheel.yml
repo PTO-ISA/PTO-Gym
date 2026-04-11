@@ -24,8 +24,8 @@ env:
   LLVM_TAG: llvmorg-19.1.7
   PTOAS_REPO: mouliangyu/PTOAS
   PTOAS_REF: feature-vpto-backend-release
-  PTOAS_CLI_TEST_FILE: test/vpto/cases/micro-op/binary-vector/vadd/kernel.pto
-  CURRENT_REPO_CLI_TEST_FILE: test/vpto/cases/micro-op/binary-vector/vadd/kernel.pto
+  PTOAS_CLI_TEST_FILE: examples/pto/micro-op/binary-vector/vadd/kernel.pto
+  CURRENT_REPO_CLI_TEST_FILE: examples/pto/micro-op/binary-vector/vadd/kernel.pto
 
 jobs:
   build_wheel:

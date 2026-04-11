@@ -3,8 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
-VPTO_ROOT="${ROOT_DIR}/test/vpto"
-CASES_ROOT="${VPTO_ROOT}/cases"
+VPTO_ROOT="${ROOT_DIR}/examples/pto"
+CASES_ROOT="${VPTO_ROOT}"
 
 WORK_SPACE="${WORK_SPACE:-}"
 ASCEND_HOME_PATH="${ASCEND_HOME_PATH:-}"
@@ -355,7 +355,7 @@ build_host_executable() {
     -xc++ -include stdint.h -include stddef.h -std=c++17 \
     "${case_dir}/main.cpp" \
     -I "${case_dir}" \
-    -I "${ROOT_DIR}/test/npu_validation/common" \
+    -I "${ROOT_DIR}/examples/npu_validation/common" \
     -I "${ASCEND_HOME_PATH}/include" \
     -L "${out_dir}" \
     -L "${ASCEND_HOME_PATH}/lib64" \
