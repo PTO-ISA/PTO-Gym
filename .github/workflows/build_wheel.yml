@@ -24,7 +24,8 @@ env:
   LLVM_TAG: llvmorg-19.1.7
   PTOAS_REPO: mouliangyu/PTOAS
   PTOAS_REF: feature-vpto-backend-release
-  PTOAS_CLI_TEST_FILE: test/vpto/cases/micro-op/unary-vector/vabs/kernel.pto
+  PTOAS_CLI_TEST_FILE: test/vpto/cases/micro-op/binary-vector/vadd/kernel.pto
+  CURRENT_REPO_CLI_TEST_FILE: test/vpto/cases/micro-op/binary-vector/vadd/kernel.pto
 
 jobs:
   build_wheel:
@@ -47,6 +48,12 @@ jobs:
         with:
           repository: ${{ env.PTOAS_REPO }}
           ref: ${{ env.PTOAS_REF }}
+          fetch-depth: 1
+
+      - name: Checkout current repo test cases
+        uses: actions/checkout@v4
+        with:
+          path: current-repo
           fetch-depth: 1
 
       - name: Capture source provenance
@@ -108,6 +115,7 @@ jobs:
           echo "LLVM_BUILD_DIR=/llvm-workspace/llvm-project/build-shared" >> $GITHUB_ENV
           echo "PTO_SOURCE_DIR=$GITHUB_WORKSPACE" >> $GITHUB_ENV
           echo "PTO_INSTALL_DIR=$GITHUB_WORKSPACE/install" >> $GITHUB_ENV
+          echo "CURRENT_REPO_DIR=$GITHUB_WORKSPACE/current-repo" >> $GITHUB_ENV
 
       - name: Restore LLVM build cache (exact key)
         id: cache-llvm
@@ -208,6 +216,19 @@ jobs:
           test -f "$PTO_SOURCE_DIR/$PTOAS_CLI_TEST_FILE"
           "$PTOAS_BIN" $PTOAS_FLAGS $VPTO_FLAGS \
             "$PTO_SOURCE_DIR/$PTOAS_CLI_TEST_FILE" \
+            -o "$LLVM_IR_OUT"
+          test -s "$LLVM_IR_OUT"
+
+      - name: Test current repo ptoas CLI lowering
+        run: |
+          export PATH="$PTO_SOURCE_DIR/build/tools/ptoas:${PY_PATH}/bin:$PATH"
+          export PTOAS_BIN="$PTO_SOURCE_DIR/build/tools/ptoas/ptoas"
+          export PTOAS_FLAGS="--pto-arch a5"
+          export VPTO_FLAGS="--pto-backend=vpto --vpto-emit-hivm-llvm"
+          export LLVM_IR_OUT="$RUNNER_TEMP/current-repo-ptoas-cli-test.ll"
+          test -f "$CURRENT_REPO_DIR/$CURRENT_REPO_CLI_TEST_FILE"
+          "$PTOAS_BIN" $PTOAS_FLAGS $VPTO_FLAGS \
+            "$CURRENT_REPO_DIR/$CURRENT_REPO_CLI_TEST_FILE" \
             -o "$LLVM_IR_OUT"
           test -s "$LLVM_IR_OUT"
 
