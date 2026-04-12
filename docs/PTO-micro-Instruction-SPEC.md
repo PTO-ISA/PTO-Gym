@@ -1,6 +1,6 @@
 # PTO micro Instruction Spec — Draft (A5)
 
-- v0.3: Add runtime block query and vector-interval legality notes; Normalize load/store distribution families; Update ISA latency/reference tables
+- v0.3: Add runtime block query and vector-interval legality notes; Normalize load/store distribution families; Update get_buf/rls_buf details
 - v0.2: Update micro Instruction latency and throughput
 - v0.1: Doc Init
 
@@ -998,6 +998,29 @@ rls_buf(pipe, buf_id, mode);
 
 ---
 
+##### Mode Parameter for `get_buf` / `rls_buf`
+
+The `mode` parameter controls how `get_buf` and `rls_buf` interact with pipeline execution and dependency tracking:
+
+| Mode | `get_buf` Behavior | `rls_buf` Behavior | Use Case |
+|------|-------------------|-------------------|----------|
+| **0** (default) | **Blocking acquire**: waits for all previous `rls_buf` with same `buf_id` from all pipelines (in program order) before the specified pipe can proceed | **Immediate release**: signals completion for only the instructions related to the specified pipe | **Automatic ping/pong dependency** — recommended for double/multi-buffering |
+| **1** | **Non-blocking acquire**: does not wait; pipe execution proceeds immediately | **Deferred release**: waits for all instructions across all pipelines with same `buf_id` to retire before signaling | **Backward compatibility** with `set_flag`/`wait_flag` semantics |
+
+**Mode 0 (Default — Recommended):**
+- `get_buf`: The specified pipeline blocks until all previous `rls_buf` operations for the same buffer ID (from any pipeline) have completed, respecting program order.
+- `rls_buf`: Immediately signals that the specified pipeline has finished using the buffer — only waits for that pipe's related instructions.
+- This mode provides **automatic RAW/WAR/WAW dependency resolution** based on buffer ID and program order, making it ideal for ping/pong and N-buffer patterns.
+
+**Mode 1 (Legacy Compatibility):**
+- `get_buf`: Does not block — the pipeline proceeds immediately without waiting.
+- `rls_buf`: Waits for **all** previous instructions across **all** pipelines with the same buffer ID to retire before signaling release.
+- This mode emulates `set_flag`/`wait_flag` behavior and is provided for backward compatibility with existing code patterns.
+
+> **Note:** A5 supports both `set_flag`/`wait_flag` and `get_buf`/`rls_buf` mechanisms. Mode 1 is rarely needed since mode 0 provides a more programmer-friendly approach for buffer-based synchronization.
+
+---
+
 ##### `pto.mem_bar`
 
 - **syntax:** `pto.mem_bar "BARRIER_TYPE"`
@@ -1020,6 +1043,111 @@ mem_bar(barrier_type);
 pto.vsts %v0, %ub[%c0] : !pto.vreg<64xf32>, !pto.ptr<f32, ub>
 pto.mem_bar "VST_VLD"
 %v1 = pto.vlds %ub[%c0] : !pto.ptr<f32, ub> -> !pto.vreg<64xf32>
+```
+
+---
+
+#### Why `get_buf` / `rls_buf` is More Programmer-Friendly
+
+The buffer-based synchronization (`get_buf`/`rls_buf`) provides the **same functional capability** as `set_flag`/`wait_flag` for maintaining correct ordering of RAW/WAR/WAW dependencies across pipelines, but with significant usability advantages:
+
+##### 1. No Manual Priming or Draining
+
+With `set_flag`/`wait_flag`, ping/pong loops require:
+- **Pre-loop priming**: 4× `set_flag` to initialize reverse-dependency signals (otherwise first iteration deadlocks)
+- **Post-loop draining**: 4× `wait_flag` to consume leftover signals from final iterations
+
+With `get_buf`/`rls_buf`:
+- **First iteration**: Buffer is initially free, so `get_buf` proceeds immediately — no priming needed
+- **Final iteration**: Last `rls_buf` simply completes — no draining required
+
+##### 2. No Loop Peeling for Complex Dependencies
+
+For non-1:1 producer-consumer ratios (e.g., 1 MTE2 load : N Vector compute slices), `set_flag`/`wait_flag` requires **peeling the set_flag outside the loop**:
+
+```mlir
+// set_flag/wait_flag: 1 MTE2 load, 8 Vector computes on slices
+// MTE2 loads large tile once
+pto.copy_gm_to_ubuf %gm_ptr, %ub_tile, ...
+pto.set_flag["PIPE_MTE2", "PIPE_V", "EVT_TILE_READY"]  // ◀ MUST be outside loop
+
+// Vector consumes in 8 slices — but wait_flag can only fire ONCE
+pto.wait_flag["PIPE_MTE2", "PIPE_V", "EVT_TILE_READY"] // ◀ MUST peel before loop
+scf.for %slice = %c0 to %c8 step %c1 {
+  // compute on %ub_tile[%slice]
+  // Cannot put wait_flag here — would deadlock on iteration 1+
+}
+```
+
+With `get_buf`/`rls_buf`, acquire/release can be **inside the loop** — no peeling needed:
+
+```mlir
+// get_buf/rls_buf: same 1:8 pattern, acquire/release inside loop works fine
+// MTE2 loads large tile
+pto.get_buf "PIPE_MTE2", %bufid_tile, %c0 : i64, i64
+pto.copy_gm_to_ubuf %gm_ptr, %ub_tile, ...
+pto.rls_buf "PIPE_MTE2", %bufid_tile, %c0 : i64, i64
+
+// Vector acquires/releases per slice — all 8 iterations work correctly
+scf.for %slice = %c0 to %c8 step %c1 {
+  pto.get_buf "PIPE_V", %bufid_tile, %c0 : i64, i64  // iteration 0: blocks until MTE2 done
+                                                      // iteration 1-7: proceeds immediately (already acquired)
+  // compute on %ub_tile[%slice]
+  pto.rls_buf "PIPE_V", %bufid_tile, %c0 : i64, i64
+}
+// No peeling required — get_buf handles the MTE2→V dependency automatically
+```
+
+##### 3. Simpler Mental Model
+
+| Aspect | `set_flag`/`wait_flag` | `get_buf`/`rls_buf` |
+|--------|------------------------|---------------------|
+| **Dependency tracking** | Manual: track event IDs, signal directions, pair every set with wait | Automatic: buffer ID + program order |
+| **Event ID management** | **8 IDs per pipe-pair direction** (HW limit); each buffer occupies 1 ID per direction | **1 buffer ID per shared resource** (HW limit: 32 global); same ID used across all pipelines |
+| **Error-prone areas** | Forgetting prime/drain, mismatched IDs, wrong direction | Forgetting release (but compile-time checkable) |
+
+##### Quick Example Comparison
+
+**Problem:** MTE2 loads into `buf[i%2]`, Vector processes, MTE3 stores — standard ping/pong.
+
+**set_flag/wait_flag approach:**
+```mlir
+// BEFORE loop: prime 4 reverse-dep signals
+pto.set_flag["PIPE_V", "PIPE_MTE2", "EVT_IN_REV_0"]
+pto.set_flag["PIPE_V", "PIPE_MTE2", "EVT_IN_REV_1"]
+pto.set_flag["PIPE_MTE3", "PIPE_V", "EVT_OUT_REV_0"]
+pto.set_flag["PIPE_MTE3", "PIPE_V", "EVT_OUT_REV_1"]
+
+scf.for %i = ... {
+  // 4 set_flag + 4 wait_flag inside loop
+  // Must track 4 IDs: 2 pipe-pair directions × 2 ping/pong buffers
+}
+
+// AFTER loop: drain 4 signals
+pto.wait_flag["PIPE_V", "PIPE_MTE2", "EVT_IN_REV_0"]
+pto.wait_flag["PIPE_V", "PIPE_MTE2", "EVT_IN_REV_1"]
+pto.wait_flag["PIPE_MTE3", "PIPE_V", "EVT_OUT_REV_0"]
+pto.wait_flag["PIPE_MTE3", "PIPE_V", "EVT_OUT_REV_1"]
+```
+
+**get_buf/rls_buf approach:**
+```mlir
+scf.for %i = ... {
+  pto.get_buf %bufid_in[%pp], "PIPE_MTE2"
+  // ... MTE2 work ...
+  pto.rls_buf %bufid_in[%pp], "PIPE_MTE2"
+
+  pto.get_buf %bufid_in[%pp], "PIPE_V"
+  pto.get_buf %bufid_out[%pp], "PIPE_V"
+  // ... Vector work ...
+  pto.rls_buf %bufid_in[%pp], "PIPE_V"
+  pto.rls_buf %bufid_out[%pp], "PIPE_V"
+
+  pto.get_buf %bufid_out[%pp], "PIPE_MTE3"
+  // ... MTE3 work ...
+  pto.rls_buf %bufid_out[%pp], "PIPE_MTE3"
+}
+// Done. No prime. No drain. Dependencies resolved by buffer ID + program order.
 ```
 
 ---
@@ -1069,16 +1197,16 @@ Instead of naming events, each pipeline declares when it **acquires** (`get_buf`
 ```mlir
 // ─── Stage 1: MTE2 loads data into UB ───
 // MTE2 acquires ub_ptr — blocks if Vector hasn't released it from a prior iteration
-pto.get_buf "PIPE_MTE2", %bufid_ub_ptr, %mode : i64, i64
+pto.get_buf "PIPE_MTE2", %bufid_ub_ptr, %c0 : i64, i64   // mode=0 (default)
 pto.copy_gm_to_ubuf %gm_ptr, %ub_ptr, ...
 // MTE2 done writing ub_ptr — release it so Vector can consume
-pto.rls_buf "PIPE_MTE2", %bufid_ub_ptr, %mode : i64, i64
+pto.rls_buf "PIPE_MTE2", %bufid_ub_ptr, %c0 : i64, i64
 
 // ─── Stage 2: Vector computation ───
 // Vector acquires ub_ptr (input) — blocks until MTE2 releases it (RAW: MTE2 write → V read)
-pto.get_buf "PIPE_V", %bufid_ub_ptr, %mode : i64, i64
+pto.get_buf "PIPE_V", %bufid_ub_ptr, %c0 : i64, i64
 // Vector acquires ub_out (output) — blocks until MTE3 releases it from a prior iteration (WAR: MTE3 read → V write)
-pto.get_buf "PIPE_V", %bufid_ub_out, %mode : i64, i64
+pto.get_buf "PIPE_V", %bufid_ub_out, %c0 : i64, i64
 
 pto.vecscope {
   %mask = pto.pset_b32 "PAT_ALL" : !pto.mask<b32>
@@ -1088,16 +1216,16 @@ pto.vecscope {
 }
 
 // Vector done reading ub_ptr — release so MTE2 can reuse it in next iteration
-pto.rls_buf "PIPE_V", %bufid_ub_ptr, %mode : i64, i64
+pto.rls_buf "PIPE_V", %bufid_ub_ptr, %c0 : i64, i64
 // Vector done writing ub_out — release so MTE3 can consume
-pto.rls_buf "PIPE_V", %bufid_ub_out, %mode : i64, i64
+pto.rls_buf "PIPE_V", %bufid_ub_out, %c0 : i64, i64
 
 // ─── Stage 3: MTE3 stores result to GM ───
 // MTE3 acquires ub_out — blocks until Vector releases it (RAW: V write → MTE3 read)
-pto.get_buf "PIPE_MTE3", %bufid_ub_out, %mode : i64, i64
+pto.get_buf "PIPE_MTE3", %bufid_ub_out, %c0 : i64, i64
 pto.copy_ubuf_to_gm %ub_out, %gm_out, ...
 // MTE3 done reading ub_out — release so Vector can reuse it in next iteration
-pto.rls_buf "PIPE_MTE3", %bufid_ub_out, %mode : i64, i64
+pto.rls_buf "PIPE_MTE3", %bufid_ub_out, %c0 : i64, i64
 ```
 
 **Key property:** No event IDs needed. Dependencies are implicit from program order of `get_buf`/`rls_buf` on the same buffer ID. This becomes much more convenient in multi-iteration loops (see Example 3).
@@ -1201,14 +1329,14 @@ scf.for %i = %c0 to %N step %c1 {
   // ── MTE2: load tile[i] into buf[i%2] ──
   // Acquires buf[i%2] — on first iteration, buffer is free so proceeds immediately.
   // On later iterations, blocks until Vector releases buf[i%2] (WAR: automatic).
-  pto.get_buf %bufid_buf[%pp], "PIPE_MTE2"
+  pto.get_buf "PIPE_MTE2", %bufid_buf[%pp], %c0 : i64, i64   // mode=0
   pto.copy_gm_to_ubuf %gm_ptr[%i], %ub_buf[%pp], ...
-  pto.rls_buf %bufid_buf[%pp], "PIPE_MTE2"
+  pto.rls_buf "PIPE_MTE2", %bufid_buf[%pp], %c0 : i64, i64
 
   // ── Vector: compute on buf[i%2] ──
   // Acquires buf[i%2] — blocks until MTE2 releases it (RAW: automatic)
-  pto.get_buf %bufid_buf[%pp], "PIPE_V"
-  pto.get_buf %bufid_out[%pp], "PIPE_V"
+  pto.get_buf "PIPE_V", %bufid_buf[%pp], %c0 : i64, i64
+  pto.get_buf "PIPE_V", %bufid_out[%pp], %c0 : i64, i64
   scf.for %dummy = %c0 to %c1 step %c1 {
     %v   = pto.vlds %ub_buf[%pp][%lane] : !pto.ptr<f32, ub> -> !pto.vreg<64xf32>
     %mask = pto.pset_b32 "PAT_ALL" : !pto.mask<b32>
@@ -1216,14 +1344,14 @@ scf.for %i = %c0 to %N step %c1 {
     pto.vsts %abs, %ub_out[%pp][%lane], %mask : !pto.vreg<64xf32>, !pto.ptr<f32, ub>, !pto.mask<b32>
   } {llvm.loop.aivector_scope}
   // Release buf[i%2] — MTE2 can reuse in iteration i+2 (WAR resolved)
-  pto.rls_buf %bufid_buf[%pp], "PIPE_V"
-  pto.rls_buf %bufid_out[%pp], "PIPE_V"
+  pto.rls_buf "PIPE_V", %bufid_buf[%pp], %c0 : i64, i64
+  pto.rls_buf "PIPE_V", %bufid_out[%pp], %c0 : i64, i64
 
   // ── MTE3: store result ──
   // Acquires out[i%2] — blocks until Vector releases it (RAW: automatic)
-  pto.get_buf %bufid_out[%pp], "PIPE_MTE3"
+  pto.get_buf "PIPE_MTE3", %bufid_out[%pp], %c0 : i64, i64
   pto.copy_ubuf_to_gm %ub_out[%pp], %gm_out[%i], ...
-  pto.rls_buf %bufid_out[%pp], "PIPE_MTE3"
+  pto.rls_buf "PIPE_MTE3", %bufid_out[%pp], %c0 : i64, i64
 }
 // No post-loop drain needed — last rls_buf completes the pipeline.
 ```
@@ -1240,13 +1368,14 @@ scf.for %i = %c0 to %N step %c1 {
 | Aspect | `set_flag` / `wait_flag` | `get_buf` / `rls_buf` |
 |--------|--------------------------|------------------------|
 | Dependency model | Explicit event signals | Implicit via buffer acquire/release |
-| IDs per pipe-pair | **8** = 2 buffers × 2 dirs × 2 (fwd+rev) | 1 fwd + 1 rev per buffer (shared global pool) |
-| Total HW IDs | 8 per pipe-pair, grows with buffers | **32 global** across all pipes |
+| IDs per pipe-pair | 2 IDs per buffer: 1 for forward (e.g., MTE2→V) + 1 for reverse (V→MTE2) | **1 ID per buffer** (handles both directions automatically) |
+| Total HW IDs | **8 per pipe-pair** (hardware limit) | **32 global** across all pipes |
 | Reverse (WAR) deps | Extra `set_flag`/`wait_flag` pair per buffer | Handled automatically |
-| Pre-loop setup | `set_flag` to prime each reverse dep | None |
-| Post-loop teardown | `wait_flag` to drain all primed signals | None |
+| Pre-loop setup | `set_flag` to prime each reverse dep | **None** |
+| Post-loop teardown | `wait_flag` to drain all primed signals | **None** |
+| Loop peeling for complex deps | Required for non-1:1 or nested loops | **Not required** |
 | Straight-line code | Simple, clear | Slightly more verbose (bracket each stage) |
-| Ping/pong loops | 8 event IDs + 4 prime + 4 drain | Same pattern, no overhead |
+| Ping/pong loops | 8 event IDs + 4 prime + 4 drain | Same pattern, **no overhead** |
 | Best used for | Simple pipelines, fine-grained control | Double/multi-buffering, complex loops |
 
 ---
@@ -3952,7 +4081,7 @@ For conversions that change width (e.g., f32→f16), use even/odd parts and comb
 
 #### `pto.vtrc`
 
-- **syntax:** `%result = pto.vtrc %input, "RND" : !pto.vreg<NxT> -> !pto.vreg<NxT>`
+- **syntax:** `%result = pto.vtrc %input, %mask, "RND" : !pto.vreg<NxT>, !pto.mask<BW> -> !pto.vreg<NxT>`
 - **semantics:** Truncate/round float to integer-valued float (stays in float type).
 
 ```c
@@ -3961,19 +4090,20 @@ for (int i = 0; i < N; i++)
 ```
 
 - **inputs:**
-  `%input` is the floating-point source vector and `RND` selects the
-  truncation/rounding rule.
+  `%input` is the floating-point source vector, `%mask` selects active lanes,
+  and `RND` selects the truncation/rounding rule.
 - **outputs:**
   `%result` is still a floating-point vector, but each active lane now carries
   an integer-valued floating-point result.
 - **constraints and limitations:**
-  This op does not change the element type. `O` is supported for avoiding
-  double-rounding errors during staged conversions.
+  This op does not change the element type. `T` must be `f16`, `f32`, or
+  `bf16`. `RND` must be one of `R`, `A`, `F`, `C`, or `Z`. `BW` must match the
+  element width: `b16` for `f16`/`bf16`, `b32` for `f32`.
 
 **Example:**
 ```mlir
 // Round to nearest integer, keep as float
-%rounded = pto.vtrc %input, "R" : !pto.vreg<64xf32> -> !pto.vreg<64xf32>
+%rounded = pto.vtrc %input, %mask, "R" : !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
 // input:  [1.4, 2.6, -1.5, 3.0]
 // output: [1.0, 3.0, -2.0, 3.0]
 ```
@@ -3994,7 +4124,7 @@ for (int i = 0; i < N; i++)
     : !pto.vreg<128xbf16>, !pto.mask<b16> -> !pto.vreg<64xf32>
 
 // Floor for integer division
-%floored = pto.vtrc %ratio, "F" : !pto.vreg<64xf32> -> !pto.vreg<64xf32>
+%floored = pto.vtrc %ratio, %mask, "F" : !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
 %int_div = pto.vcvt %floored, %mask {rnd = "Z"}
     : !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xi32>
 ```
