@@ -10,9 +10,6 @@ name: Build Wheel
 
 on:
   pull_request:
-  # Nightly build & publish (UTC time).
-  schedule:
-    - cron: "10 17 * * *"
   workflow_dispatch:
   release:
     types: [prereleased, released]
