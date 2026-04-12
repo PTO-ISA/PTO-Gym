@@ -2,9 +2,7 @@
 // case: micro-op/materialization-predicate/vdup-lane
 // family: materialization-predicate
 // target_ops: pto.vdup
-// scenarios: core-f32, lane-select
-// NOTE: bulk-generated coverage skeleton. Parser/verifier/lowering failure is
-// still a valid test conclusion in the current coverage-first phase.
+// scenarios: core-f32, vector-input, lowest-highest
 // -----------------------------------------------------------------------------
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
@@ -18,22 +16,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include "test_common.h"
 #include "acl/acl.h"
-#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 
 using namespace PtoTestCommon;
-
-#ifndef TMRGSORT_HPP
-namespace pto {
-struct MrgSortExecutedNumList {
-    uint16_t mrgSortList0;
-    uint16_t mrgSortList1;
-    uint16_t mrgSortList2;
-    uint16_t mrgSortList3;
-};
-} // namespace pto
-#endif
 
 #define ACL_CHECK(expr)                                                                          \
     do {                                                                                         \
@@ -49,13 +35,17 @@ struct MrgSortExecutedNumList {
         }                                                                                        \
     } while (0)
 
-void LaunchVdup_scalar_kernel_2d(float *v1, void *stream);
+void LaunchVdup_lane_kernel_2d(float *src, float *outLow, float *outHigh, void *stream);
 
 int main() {
-        size_t elemCount_v1 = 1024;
-    size_t fileSize_v1 = elemCount_v1 * sizeof(float);
-    float *v1Host = nullptr;
-    float *v1Device = nullptr;
+    size_t elemCount = 1024;
+    size_t fileSize = elemCount * sizeof(float);
+    float *srcHost = nullptr;
+    float *outLowHost = nullptr;
+    float *outHighHost = nullptr;
+    float *srcDevice = nullptr;
+    float *outLowDevice = nullptr;
+    float *outHighDevice = nullptr;
 
     int rc = 0;
     bool aclInited = false;
@@ -65,48 +55,56 @@ int main() {
 
     ACL_CHECK(aclInit(nullptr));
     aclInited = true;
-    if (const char *envDevice = std::getenv("ACL_DEVICE_ID")) {
+    if (const char *envDevice = std::getenv("ACL_DEVICE_ID"))
         deviceId = std::atoi(envDevice);
-    }
     ACL_CHECK(aclrtSetDevice(deviceId));
     deviceSet = true;
     ACL_CHECK(aclrtCreateStream(&stream));
 
-        ACL_CHECK(aclrtMallocHost((void **)(&v1Host), fileSize_v1));
-        ACL_CHECK(aclrtMalloc((void **)&v1Device, fileSize_v1, ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMallocHost((void **)(&srcHost), fileSize));
+    ACL_CHECK(aclrtMallocHost((void **)(&outLowHost), fileSize));
+    ACL_CHECK(aclrtMallocHost((void **)(&outHighHost), fileSize));
+    ACL_CHECK(aclrtMalloc((void **)&srcDevice, fileSize, ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMalloc((void **)&outLowDevice, fileSize, ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMalloc((void **)&outHighDevice, fileSize, ACL_MEM_MALLOC_HUGE_FIRST));
 
-        ReadFile("./v1.bin", fileSize_v1, v1Host, fileSize_v1);
-        ACL_CHECK(aclrtMemcpy(v1Device, fileSize_v1, v1Host, fileSize_v1, ACL_MEMCPY_HOST_TO_DEVICE));
-        LaunchVdup_scalar_kernel_2d(v1Device, stream);
+    ReadFile("./src.bin", fileSize, srcHost, fileSize);
+    ACL_CHECK(aclrtMemcpy(srcDevice, fileSize, srcHost, fileSize, ACL_MEMCPY_HOST_TO_DEVICE));
+    ACL_CHECK(aclrtMemset(outLowDevice, fileSize, 0, fileSize));
+    ACL_CHECK(aclrtMemset(outHighDevice, fileSize, 0, fileSize));
+
+    LaunchVdup_lane_kernel_2d(srcDevice, outLowDevice, outHighDevice, stream);
 
     ACL_CHECK(aclrtSynchronizeStream(stream));
-        ACL_CHECK(aclrtMemcpy(v1Host, fileSize_v1, v1Device, fileSize_v1, ACL_MEMCPY_DEVICE_TO_HOST));
-        WriteFile("./v1.bin", v1Host, fileSize_v1);
+    ACL_CHECK(aclrtMemcpy(outLowHost, fileSize, outLowDevice, fileSize, ACL_MEMCPY_DEVICE_TO_HOST));
+    ACL_CHECK(aclrtMemcpy(outHighHost, fileSize, outHighDevice, fileSize, ACL_MEMCPY_DEVICE_TO_HOST));
+    WriteFile("./out_low.bin", outLowHost, fileSize);
+    WriteFile("./out_high.bin", outHighHost, fileSize);
 
 cleanup:
-        aclrtFree(v1Device);
-        aclrtFreeHost(v1Host);
+    aclrtFree(srcDevice);
+    aclrtFree(outLowDevice);
+    aclrtFree(outHighDevice);
+    aclrtFreeHost(srcHost);
+    aclrtFreeHost(outLowHost);
+    aclrtFreeHost(outHighHost);
     if (stream != nullptr) {
-        const aclError _ret = aclrtDestroyStream(stream);
-        if (_ret != ACL_SUCCESS) {
-            std::fprintf(stderr, "[ERROR] %s failed: %d (%s:%d)\n",
-                         "aclrtDestroyStream(stream)", (int)_ret, __FILE__, __LINE__);
-        }
-        stream = nullptr;
+        const aclError ret = aclrtDestroyStream(stream);
+        if (ret != ACL_SUCCESS)
+            std::fprintf(stderr, "[ERROR] aclrtDestroyStream(stream) failed: %d (%s:%d)\n",
+                         (int)ret, __FILE__, __LINE__);
     }
     if (deviceSet) {
-        const aclError _ret = aclrtResetDevice(deviceId);
-        if (_ret != ACL_SUCCESS) {
-            std::fprintf(stderr, "[ERROR] %s failed: %d (%s:%d)\n",
-                         "aclrtResetDevice(deviceId)", (int)_ret, __FILE__, __LINE__);
-        }
+        const aclError ret = aclrtResetDevice(deviceId);
+        if (ret != ACL_SUCCESS)
+            std::fprintf(stderr, "[ERROR] aclrtResetDevice(deviceId) failed: %d (%s:%d)\n",
+                         (int)ret, __FILE__, __LINE__);
     }
     if (aclInited) {
-        const aclError _ret = aclFinalize();
-        if (_ret != ACL_SUCCESS) {
-            std::fprintf(stderr, "[ERROR] %s failed: %d (%s:%d)\n",
-                         "aclFinalize()", (int)_ret, __FILE__, __LINE__);
-        }
+        const aclError ret = aclFinalize();
+        if (ret != ACL_SUCCESS)
+            std::fprintf(stderr, "[ERROR] aclFinalize() failed: %d (%s:%d)\n",
+                         (int)ret, __FILE__, __LINE__);
     }
 
     return rc;

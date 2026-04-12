@@ -2,9 +2,7 @@
 // case: micro-op/materialization-predicate/vdup-lane
 // family: materialization-predicate
 // target_ops: pto.vdup
-// scenarios: core-f32, lane-select
-// NOTE: bulk-generated coverage skeleton. Parser/verifier/lowering failure is
-// still a valid test conclusion in the current coverage-first phase.
+// scenarios: core-f32, vector-input, lowest-highest
 // -----------------------------------------------------------------------------
 #include <pto/common/type.hpp>
 
@@ -16,9 +14,10 @@
 #define __gm__
 #endif
 
-// The runtime launcher resolves the real device implementation from the
-// embedded aibinary. The host-side fatobj still needs a concrete kernel symbol
-// with the final ABI name, but it does not need the original EmitC body.
-extern "C" __global__ AICORE void vdup_scalar_kernel_2d(__gm__ float *v1) {
-  (void)v1;
+extern "C" __global__ AICORE void vdup_lane_kernel_2d(__gm__ float *src,
+                                                      __gm__ float *outLow,
+                                                      __gm__ float *outHigh) {
+  (void)src;
+  (void)outLow;
+  (void)outHigh;
 }

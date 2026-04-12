@@ -1,0 +1,42 @@
+#!/usr/bin/env python3
+# coding=utf-8
+
+import argparse
+from pathlib import Path
+
+import numpy as np
+
+
+ROWS = 32
+COLS = 32
+SEED = 23
+
+
+def generate(output_dir: Path, seed: int) -> None:
+    del seed
+    values = np.array(
+        [-7.5, -3.25, -0.5, -0.0, 0.0, 0.5, 1.5, 6.75],
+        dtype=np.float16,
+    )
+    v1 = np.resize(values, ROWS * COLS).reshape(ROWS, COLS).astype(np.float16)
+    v2 = np.zeros((ROWS, COLS), dtype=np.float16)
+    golden_v2 = np.trunc(v1.astype(np.float32)).astype(np.float16)
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    v1.reshape(-1).tofile(output_dir / "v1.bin")
+    v2.reshape(-1).tofile(output_dir / "v2.bin")
+    golden_v2.reshape(-1).tofile(output_dir / "golden_v2.bin")
+
+
+def main() -> None:
+  parser = argparse.ArgumentParser(
+      description="Generate numpy-based inputs/golden for VPTO micro-op vtrc-f16-rounding validation."
+  )
+  parser.add_argument("--output-dir", type=Path, default=Path("."))
+  parser.add_argument("--seed", type=int, default=SEED)
+  args = parser.parse_args()
+  generate(args.output_dir, args.seed)
+
+
+if __name__ == "__main__":
+  main()

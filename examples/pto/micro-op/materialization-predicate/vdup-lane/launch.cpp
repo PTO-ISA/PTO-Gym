@@ -2,21 +2,8 @@
 // case: micro-op/materialization-predicate/vdup-lane
 // family: materialization-predicate
 // target_ops: pto.vdup
-// scenarios: core-f32, lane-select
-// NOTE: bulk-generated coverage skeleton. Parser/verifier/lowering failure is
-// still a valid test conclusion in the current coverage-first phase.
+// scenarios: core-f32, vector-input, lowest-highest
 // -----------------------------------------------------------------------------
-// ---------------------------------------------------------------------------
-// PTOAS compatibility layer
-//
-// The upstream pto-isa headers reference some FP8/FP4 types and the
-// __VEC_SCOPE__ marker that are not available on every AICore arch/toolchain
-// combination (e.g. __NPU_ARCH__==2201).
-//
-// For our PTOAS-generated kernels we don't rely on these types today, but the
-// headers still mention them in templates/static_asserts. Provide minimal
-// fallbacks to keep compilation working on dav-c220.
-// ---------------------------------------------------------------------------
 #ifndef __VEC_SCOPE__
 #define __VEC_SCOPE__
 #endif
@@ -31,35 +18,23 @@ typedef struct { unsigned char v; } float4_e2m1x2_t;
 #endif
 #include <stdint.h>
 
-// AICore printf support is gated behind `--cce-enable-print` on some
-// toolchains. When enabled, include the CCE print header so `cce::printf`
-// resolves in device compilation.
 #if defined(__CCE_AICORE__) && defined(PTOAS_ENABLE_CCE_PRINT)
 #include <ccelib/print/print.h>
 #endif
 #include <pto/pto-inst.hpp>
 #include <pto/common/constants.hpp>
 
-// Some PTO-ISA types are only available in the __CCE_AICORE__ compilation
-// path, but `bisheng -xcce` still performs a host-side parse pass.
-// Provide minimal fallbacks only when the corresponding header wasn't
-// pulled in by the selected arch implementation.
-#if !defined(__CCE_AICORE__) && !defined(TMRGSORT_HPP)
-namespace pto {
-struct MrgSortExecutedNumList {
-    uint16_t mrgSortList0;
-    uint16_t mrgSortList1;
-    uint16_t mrgSortList2;
-    uint16_t mrgSortList3;
-};
-} // namespace pto
-#endif
 #ifndef __CPU_SIM
 #include "acl/acl.h"
 #endif
 
-extern "C" __global__ AICORE void vdup_scalar_kernel_2d(__gm__ float *v1);
+extern "C" __global__ AICORE void vdup_lane_kernel_2d(__gm__ float *src,
+                                                      __gm__ float *outLow,
+                                                      __gm__ float *outHigh);
 
-void LaunchVdup_scalar_kernel_2d(float *v1, void *stream) {
-  vdup_scalar_kernel_2d<<<1, nullptr, stream>>>((__gm__ float *)v1);
+void LaunchVdup_lane_kernel_2d(float *src, float *outLow, float *outHigh,
+                               void *stream) {
+  vdup_lane_kernel_2d<<<1, nullptr, stream>>>((__gm__ float *)src,
+                                              (__gm__ float *)outLow,
+                                              (__gm__ float *)outHigh);
 }
