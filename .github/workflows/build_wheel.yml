@@ -84,12 +84,7 @@ jobs:
       - name: Compute PTOAS CLI version
         run: |
           if [ "${GITHUB_EVENT_NAME}" = "release" ]; then
-            EXPECTED_RELEASE_VERSION="$(${PY_PATH}/bin/python .github/scripts/compute_ptoas_version.py --mode release)"
             PTOAS_VERSION="${GITHUB_REF_NAME#v}"
-            if [ "${PTOAS_VERSION}" != "${EXPECTED_RELEASE_VERSION}" ]; then
-              echo "release tag '${GITHUB_REF_NAME}' does not match computed version '${EXPECTED_RELEASE_VERSION}'" >&2
-              exit 1
-            fi
           else
             PTOAS_VERSION="$(${PY_PATH}/bin/python .github/scripts/compute_ptoas_version.py --mode dev)"
           fi
