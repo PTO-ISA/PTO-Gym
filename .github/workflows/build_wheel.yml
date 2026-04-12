@@ -206,7 +206,7 @@ jobs:
           export PATH="$PTO_SOURCE_DIR/build/tools/ptoas:${PY_PATH}/bin:$PATH"
           export PTOAS_BIN="$PTO_SOURCE_DIR/build/tools/ptoas/ptoas"
           export PTOAS_FLAGS="--pto-arch a5"
-          export VPTO_FLAGS="--pto-backend=vpto --vpto-emit-hivm-llvm"
+          export VPTO_FLAGS=""
           export LLVM_IR_OUT="$RUNNER_TEMP/ptoas-cli-test.ll"
           test -f "$PTO_SOURCE_DIR/$PTOAS_CLI_TEST_FILE"
           "$PTOAS_BIN" $PTOAS_FLAGS $VPTO_FLAGS \
@@ -219,7 +219,7 @@ jobs:
           export PATH="$PTO_SOURCE_DIR/build/tools/ptoas:${PY_PATH}/bin:$PATH"
           export PTOAS_BIN="$PTO_SOURCE_DIR/build/tools/ptoas/ptoas"
           export PTOAS_FLAGS="--pto-arch a5"
-          export VPTO_FLAGS="--pto-backend=vpto --vpto-emit-hivm-llvm"
+          export VPTO_FLAGS=""
           export LLVM_IR_OUT="$RUNNER_TEMP/current-repo-ptoas-cli-test.ll"
           test -f "$CURRENT_REPO_DIR/$CURRENT_REPO_CLI_TEST_FILE"
           "$PTOAS_BIN" $PTOAS_FLAGS $VPTO_FLAGS \
