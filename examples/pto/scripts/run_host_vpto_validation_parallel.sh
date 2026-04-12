@@ -21,6 +21,28 @@ die() {
   exit 1
 }
 
+clean_tmp_inode_hotspots() {
+  local -a targets=(
+    /tmp/pto-microop-full
+    /tmp/pto-microop-full-redownload
+  )
+
+  log "tmp inode usage before cleanup"
+  df -ih /tmp
+
+  for dir in "${targets[@]}"; do
+    if [[ -e "${dir}" ]]; then
+      log "remove ${dir}"
+      rm -rf "${dir}"
+    fi
+  done
+
+  log "tmp inode usage after cleanup"
+  df -ih /tmp
+}
+
+clean_tmp_inode_hotspots
+
 [[ -x "${SERIAL_SCRIPT}" ]] || die "missing serial validation script: ${SERIAL_SCRIPT}"
 [[ -d "${CASES_ROOT}" ]] || die "missing cases root: ${CASES_ROOT}"
 [[ -n "${WORK_SPACE}" ]] || die "WORK_SPACE is required"
