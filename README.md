@@ -40,12 +40,12 @@ The PTO micro Instruction test cases under [examples/pto/](examples/pto/) are bo
 
 Each runnable case follows a stable structure:
 
-- `kernel.pto`
-- `stub.cpp`
-- `launch.cpp`
-- `main.cpp`
-- `golden.py`
-- `compare.py`
+- `kernel.pto`: PTO kernel source, defining the device-side computation logic.
+- `stub.cpp`: host-side stub used to embed and expose the generated device object/symbols.
+- `launch.cpp`: launch wrapper that prepares launch parameters and invokes the kernel entry.
+- `main.cpp`: executable entry on host side, orchestrating data preparation, launch, and end-to-end flow.
+- `golden.py`: generates test inputs and expected (golden) outputs for validation.
+- `compare.py`: compares runtime outputs against golden results and reports pass/fail.
 
 These cases currently focus on PTO micro-op scenarios and are useful for understanding instruction behavior through concrete examples. Tile-level cases may be added in future updates.
 
