@@ -12,7 +12,8 @@ PTOAS_BIN="${PTOAS_BIN:-${ROOT_DIR}/build/tools/ptoas/ptoas}"
 PTOAS_FLAGS="${PTOAS_FLAGS:---pto-arch a5}"
 VPTO_FLAGS="${VPTO_FLAGS:-}"
 AICORE_ARCH="${AICORE_ARCH:-dav-c310-vec}"
-HOST_RUNNER="${HOST_RUNNER:-ssh root@localhost}"
+# set he HOST_RUNNER to "ssh root@localhost" if must change user to root to access the device 
+HOST_RUNNER="${HOST_RUNNER:-}"
 CASE_NAME="${CASE_NAME:-}"
 MODULE_ID="${MODULE_ID:-a5d60abf67864aa0}"
 DEVICE="${DEVICE:-SIM}"
@@ -30,12 +31,10 @@ die() {
 
 run_remote() {
   local cmd="$1"
-  if [[ "${DEVICE}" == "SIM" ]]; then
-    bash -lc "${cmd}"
-  elif [[ "${HOST_RUNNER}" == "ssh root@localhost" ]]; then
+  if [[ "${HOST_RUNNER}" == "ssh root@localhost" ]]; then
     ssh -o StrictHostKeyChecking=no root@localhost "${cmd}"
   else
-    eval "${HOST_RUNNER} ${cmd@Q}"
+    bash -lc "${cmd}"
   fi
 }
 
