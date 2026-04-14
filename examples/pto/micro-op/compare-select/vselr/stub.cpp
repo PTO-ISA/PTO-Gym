@@ -4,7 +4,6 @@
 // target_ops: pto.vselr
 // scenarios: core-f32, full-mask, explicit-lane-index
 // -----------------------------------------------------------------------------
-#include <pto/common/type.hpp>
 
 #ifndef __global__
 #define __global__
@@ -14,7 +13,7 @@
 #define __gm__
 #endif
 
-extern "C" __global__ AICORE void vselr_kernel_2d(__gm__ float *v1,
+extern "C" __global__ [aicore] void vselr_kernel_2d(__gm__ float *v1,
                                                   __gm__ int *v2,
                                                   __gm__ float *v3) {
   (void)v1;

@@ -1,5 +1,4 @@
 #include <cstdint>
-#include <pto/common/type.hpp>
 
 #ifndef __global__
 #define __global__
@@ -9,7 +8,7 @@
 #define __gm__
 #endif
 
-extern "C" __global__ AICORE void vadd_i16_unsigned_overflow_kernel(__gm__ uint16_t *v1,
+extern "C" __global__ [aicore] void vadd_i16_unsigned_overflow_kernel(__gm__ uint16_t *v1,
                                                                     __gm__ uint16_t *v2,
                                                                     __gm__ uint16_t *v3) {
   (void)v1;

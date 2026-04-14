@@ -37,28 +37,24 @@ typedef struct { unsigned char v; } float4_e2m1x2_t;
 #if defined(__CCE_AICORE__) && defined(PTOAS_ENABLE_CCE_PRINT)
 #include <ccelib/print/print.h>
 #endif
-#include <pto/pto-inst.hpp>
-#include <pto/common/constants.hpp>
 
 // Some PTO-ISA types are only available in the __CCE_AICORE__ compilation
 // path, but `bisheng -xcce` still performs a host-side parse pass.
 // Provide minimal fallbacks only when the corresponding header wasn't
 // pulled in by the selected arch implementation.
 #if !defined(__CCE_AICORE__) && !defined(TMRGSORT_HPP)
-namespace pto {
 struct MrgSortExecutedNumList {
     uint16_t mrgSortList0;
     uint16_t mrgSortList1;
     uint16_t mrgSortList2;
     uint16_t mrgSortList3;
 };
-} // namespace pto
 #endif
 #ifndef __CPU_SIM
 #include "acl/acl.h"
 #endif
 
-extern "C" __global__ AICORE void vsunpack_kernel_2d(__gm__ float *v1,
+extern "C" __global__ [aicore] void vsunpack_kernel_2d(__gm__ float *v1,
                                                      __gm__ float *v2);
 
 void LaunchVsunpack_kernel_2d(float *v1, float *v2, void *stream) {

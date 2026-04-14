@@ -7,7 +7,6 @@
 // still a valid test conclusion in the current coverage-first phase.
 // -----------------------------------------------------------------------------
 #include <cstdint>
-#include <pto/common/type.hpp>
 
 #ifndef __global__
 #define __global__
@@ -17,7 +16,7 @@
 #define __gm__
 #endif
 
-extern "C" __global__ AICORE void vor_f16_kernel(__gm__ half *v1,
+extern "C" __global__ [aicore] void vor_f16_kernel(__gm__ half *v1,
                                                  __gm__ half *v2,
                                                  __gm__ half *v3) {
   (void)v1;

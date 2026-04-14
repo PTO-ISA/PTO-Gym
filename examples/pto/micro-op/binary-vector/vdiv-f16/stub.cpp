@@ -4,7 +4,6 @@
 // target_ops: pto.vdiv
 // scenarios: core-f16, full-mask
 // -----------------------------------------------------------------------------
-#include <pto/common/type.hpp>
 
 #ifndef __global__
 #define __global__
@@ -14,7 +13,7 @@
 #define __gm__
 #endif
 
-extern "C" __global__ AICORE void vdiv_f16_kernel(__gm__ half *v1,
+extern "C" __global__ [aicore] void vdiv_f16_kernel(__gm__ half *v1,
                                                   __gm__ half *v2,
                                                   __gm__ half *v3) {
   (void)v1;

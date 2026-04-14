@@ -17,14 +17,12 @@ Copyright (c) 2025 Huawei Technologies Co., Ltd.
 using namespace PtoTestCommon;
 
 #ifndef TMRGSORT_HPP
-namespace pto {
 struct MrgSortExecutedNumList {
   uint16_t mrgSortList0;
   uint16_t mrgSortList1;
   uint16_t mrgSortList2;
   uint16_t mrgSortList3;
 };
-} // namespace pto
 #endif
 
 #define ACL_CHECK(expr)                                                          \

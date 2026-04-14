@@ -4,7 +4,6 @@
 // target_ops: pto.vdup
 // scenarios: core-f32, vector-input, lowest-highest
 // -----------------------------------------------------------------------------
-#include <pto/common/type.hpp>
 
 #ifndef __global__
 #define __global__
@@ -14,7 +13,7 @@
 #define __gm__
 #endif
 
-extern "C" __global__ AICORE void vdup_lane_kernel_2d(__gm__ float *src,
+extern "C" __global__ [aicore] void vdup_lane_kernel_2d(__gm__ float *src,
                                                       __gm__ float *outLow,
                                                       __gm__ float *outHigh) {
   (void)src;

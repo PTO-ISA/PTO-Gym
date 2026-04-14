@@ -1,4 +1,3 @@
-#include <pto/common/type.hpp>
 
 #ifndef __global__
 #define __global__
@@ -8,7 +7,7 @@
 #define __gm__
 #endif
 
-extern "C" __global__ AICORE void vexp_f32_over_underflow_kernel_2d(__gm__ float *v1,
+extern "C" __global__ [aicore] void vexp_f32_over_underflow_kernel_2d(__gm__ float *v1,
                                                                  __gm__ float *v2) {
   (void)v1;
   (void)v2;
