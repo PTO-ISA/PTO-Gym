@@ -22,24 +22,20 @@ typedef struct { unsigned char v; } float4_e2m1x2_t;
 #if defined(__CCE_AICORE__) && defined(PTOAS_ENABLE_CCE_PRINT)
 #include <ccelib/print/print.h>
 #endif
-#include <pto/pto-inst.hpp>
-#include <pto/common/constants.hpp>
 
 #if !defined(__CCE_AICORE__) && !defined(TMRGSORT_HPP)
-namespace pto {
 struct MrgSortExecutedNumList {
   uint16_t mrgSortList0;
   uint16_t mrgSortList1;
   uint16_t mrgSortList2;
   uint16_t mrgSortList3;
 };
-} // namespace pto
 #endif
 #ifndef __CPU_SIM
 #include "acl/acl.h"
 #endif
 
-extern "C" __global__ AICORE void vshl_i16_unsigned_kernel(__gm__ uint16_t *v1,
+extern "C" __global__ [aicore] void vshl_i16_unsigned_kernel(__gm__ uint16_t *v1,
                                                            __gm__ uint16_t *v2,
                                                            __gm__ uint16_t *v3);
 

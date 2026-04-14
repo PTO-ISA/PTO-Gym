@@ -4,7 +4,6 @@
 // target_ops: pto.vadds
 // scenarios: core-i16-unsigned, full-mask, scalar-operand, integer-overflow
 // -----------------------------------------------------------------------------
-#include <pto/common/type.hpp>
 #include <stdint.h>
 
 #ifndef __global__
@@ -15,7 +14,7 @@
 #define __gm__
 #endif
 
-extern "C" __global__ AICORE void
+extern "C" __global__ [aicore] void
 vadds_i16_unsigned_overflow_kernel(__gm__ uint16_t *v1, __gm__ uint16_t *v2) {
   (void)v1;
   (void)v2;

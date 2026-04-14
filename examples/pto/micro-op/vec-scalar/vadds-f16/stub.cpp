@@ -1,4 +1,3 @@
-#include <pto/common/type.hpp>
 #include <stdint.h>
 
 #ifndef __global__
@@ -9,7 +8,7 @@
 #define __gm__
 #endif
 
-extern "C" __global__ AICORE void vadds_f16_kernel(__gm__ half *v1,
+extern "C" __global__ [aicore] void vadds_f16_kernel(__gm__ half *v1,
                                                    __gm__ half *v2) {
   (void)v1;
   (void)v2;

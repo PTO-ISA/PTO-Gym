@@ -4,7 +4,6 @@
 // target_ops: pto.vusqz
 // scenarios: predicate-driven-rearrangement, prefix-count
 // -----------------------------------------------------------------------------
-#include <pto/common/type.hpp>
 
 #ifndef __global__
 #define __global__
@@ -14,7 +13,7 @@
 #define __gm__
 #endif
 
-extern "C" __global__ AICORE void vusqz_kernel_2d(__gm__ int32_t *v1,
+extern "C" __global__ [aicore] void vusqz_kernel_2d(__gm__ int32_t *v1,
                                                   __gm__ float *v2,
                                                   __gm__ int32_t *v3) {
   (void)v1;

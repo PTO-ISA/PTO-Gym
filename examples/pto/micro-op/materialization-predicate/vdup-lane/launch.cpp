@@ -21,14 +21,12 @@ typedef struct { unsigned char v; } float4_e2m1x2_t;
 #if defined(__CCE_AICORE__) && defined(PTOAS_ENABLE_CCE_PRINT)
 #include <ccelib/print/print.h>
 #endif
-#include <pto/pto-inst.hpp>
-#include <pto/common/constants.hpp>
 
 #ifndef __CPU_SIM
 #include "acl/acl.h"
 #endif
 
-extern "C" __global__ AICORE void vdup_lane_kernel_2d(__gm__ float *src,
+extern "C" __global__ [aicore] void vdup_lane_kernel_2d(__gm__ float *src,
                                                       __gm__ float *outLow,
                                                       __gm__ float *outHigh);
 

@@ -6,7 +6,6 @@
 // NOTE: bulk-generated coverage skeleton. Parser/verifier/lowering failure is
 // still a valid test conclusion in the current coverage-first phase.
 // -----------------------------------------------------------------------------
-#include <pto/common/type.hpp>
 
 #ifndef __global__
 #define __global__
@@ -16,7 +15,7 @@
 #define __gm__
 #endif
 
-extern "C" __global__ AICORE void vshl_i32_unsigned_kernel(__gm__ uint32_t *v1,
+extern "C" __global__ [aicore] void vshl_i32_unsigned_kernel(__gm__ uint32_t *v1,
                                                            __gm__ uint32_t *v2,
                                                            __gm__ uint32_t *v3) {
   (void)v1;

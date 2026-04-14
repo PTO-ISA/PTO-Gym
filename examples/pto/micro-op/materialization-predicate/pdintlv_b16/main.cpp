@@ -22,14 +22,12 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace PtoTestCommon;
 
 #ifndef TMRGSORT_HPP
-namespace pto {
 struct MrgSortExecutedNumList {
     uint16_t mrgSortList0;
     uint16_t mrgSortList1;
     uint16_t mrgSortList2;
     uint16_t mrgSortList3;
 };
-} // namespace pto
 #endif
 
 #define ACL_CHECK(expr)                                                                              do {                                                                                                 const aclError _ret = (expr);                                                                    if (_ret != ACL_SUCCESS) {                                                                           std::fprintf(stderr, "[ERROR] %s failed: %d (%s:%d)\n", #expr, (int)_ret, __FILE__, __LINE__);             const char *_recent = aclGetRecentErrMsg();                                                      if (_recent != nullptr && _recent[0] != '\0') {                                                      std::fprintf(stderr, "[ERROR] RecentErrMsg: %s\n", _recent);                                 }                                                                                                rc = 1;                                                                                          goto cleanup;                                                                                }                                                                                            } while (0)

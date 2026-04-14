@@ -4,7 +4,6 @@
 // target_ops: pto.vexpdiff
 // scenarios: core-f16, fused-expdiff, part-even-odd
 // -----------------------------------------------------------------------------
-#include <pto/common/type.hpp>
 
 #ifndef __global__
 #define __global__
@@ -14,7 +13,7 @@
 #define __gm__
 #endif
 
-extern "C" __global__ AICORE void vexpdiff_f16_part_kernel_2d(__gm__ half *v1,
+extern "C" __global__ [aicore] void vexpdiff_f16_part_kernel_2d(__gm__ half *v1,
                                                               __gm__ half *v2,
                                                               __gm__ float *v3) {
   (void)v1;

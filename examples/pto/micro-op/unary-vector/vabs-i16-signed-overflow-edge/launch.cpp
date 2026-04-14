@@ -18,24 +18,20 @@ typedef struct { unsigned char v; } float4_e2m1x2_t;
 #if defined(__CCE_AICORE__) && defined(PTOAS_ENABLE_CCE_PRINT)
 #include <ccelib/print/print.h>
 #endif
-#include <pto/pto-inst.hpp>
-#include <pto/common/constants.hpp>
 
 #if !defined(__CCE_AICORE__) && !defined(TMRGSORT_HPP)
-namespace pto {
 struct MrgSortExecutedNumList {
     uint16_t mrgSortList0;
     uint16_t mrgSortList1;
     uint16_t mrgSortList2;
     uint16_t mrgSortList3;
 };
-} // namespace pto
 #endif
 #ifndef __CPU_SIM
 #include "acl/acl.h"
 #endif
 
-extern "C" __global__ AICORE void vabs_i16_signed_overflow_edge_kernel(
+extern "C" __global__ [aicore] void vabs_i16_signed_overflow_edge_kernel(
     __gm__ int16_t *v1, __gm__ int16_t *v2);
 
 void LaunchVabs_i16_signed_overflow_edge_kernel(int16_t *v1, int16_t *v2,
