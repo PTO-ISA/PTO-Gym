@@ -1,0 +1,45 @@
+#!/usr/bin/env python3
+# case: micro-op/vector-load-store/vsts-1pt-b16
+# family: vector-load-store
+# target_ops: pto.vsts
+# scenarios: core-i16, full-mask, aligned, dist-1pt-b16
+# coding=utf-8
+
+import argparse
+from pathlib import Path
+
+import numpy as np
+
+
+ELEMENTS = 2048
+ACTIVE_ELEMS = 1024
+LANES = 128
+SEED = 19
+
+
+def generate(output_dir: Path, seed: int) -> None:
+    rng = np.random.default_rng(seed)
+    v1 = rng.integers(-(2**15), 2**15, size=(ELEMENTS,), dtype=np.int16)
+    v2 = np.zeros((ELEMENTS,), dtype=np.int16)
+    golden_v2 = np.zeros((ELEMENTS,), dtype=np.int16)
+    for offset in range(0, ACTIVE_ELEMS, LANES):
+        golden_v2[offset] = v1[offset]
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    v1.tofile(output_dir / "v1.bin")
+    v2.tofile(output_dir / "v2.bin")
+    golden_v2.tofile(output_dir / "golden_v2.bin")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Generate numpy-based inputs/golden for VPTO micro-op vsts 1PT validation."
+    )
+    parser.add_argument("--output-dir", type=Path, default=Path("."))
+    parser.add_argument("--seed", type=int, default=SEED)
+    args = parser.parse_args()
+    generate(args.output_dir, args.seed)
+
+
+if __name__ == "__main__":
+    main()
