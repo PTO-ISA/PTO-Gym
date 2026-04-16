@@ -33,6 +33,7 @@ module attributes {pto.target_arch = "a5"} {
         %byte_offset = arith.addi %iv, %c16 : index
         %src, %next = pto.plt_b8 %remaining : i32 -> !pto.mask<b8>, i32
         pto.psts %src, %ub_mid[%byte_offset], "PK" : !pto.mask<b8>, !pto.ptr<ui8, ub>, index
+        pto.mem_bar "VST_VLD"
         %loaded = pto.plds %ub_mid[%byte_offset], "US" : !pto.ptr<ui8, ub>, index -> !pto.mask<b8>
         pto.psts %loaded, %ub_out[%c0], "NORM" : !pto.mask<b8>, !pto.ptr<ui8, ub>, index
         scf.yield %next : i32

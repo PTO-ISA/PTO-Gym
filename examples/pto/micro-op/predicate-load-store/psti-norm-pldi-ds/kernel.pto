@@ -31,6 +31,7 @@ module attributes {pto.target_arch = "a5"} {
       %_:1 = scf.for %iv = %c0 to %c1 step %c1 iter_args(%remaining = %c143) -> (i32) {
         %src, %next = pto.plt_b8 %remaining : i32 -> !pto.mask<b8>, i32
         pto.psti %src, %ub_mid[%c32], "NORM" : !pto.mask<b8>, !pto.ptr<ui8, ub>, index
+        pto.mem_bar "VST_VLD"
         %loaded = pto.pldi %ub_mid[%c32], "DS" : !pto.ptr<ui8, ub>, index -> !pto.mask<b8>
         pto.psts %loaded, %ub_out[%c0], "NORM" : !pto.mask<b8>, !pto.ptr<ui8, ub>, index
         scf.yield %next : i32

@@ -1,10 +1,8 @@
 // -----------------------------------------------------------------------------
-// case: micro-op/vector-load-store/vsts
-// family: vector-load-store
-// target_ops: pto.vsts
-// scenarios: core-f32, contiguous, full-mask, aligned, dist-norm
-// NOTE: bulk-generated coverage skeleton. Parser/verifier/lowering failure is
-// still a valid test conclusion in the current coverage-first phase.
+// case: micro-op/rearrangement/vpack-lower
+// family: rearrangement
+// target_ops: pto.vpack
+// scenarios: narrowing, lower-half-placement, zero-fill-upper-half
 // -----------------------------------------------------------------------------
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
@@ -47,17 +45,17 @@ struct MrgSortExecutedNumList {
         }                                                                                        \
     } while (0)
 
-void LaunchVabs_kernel_2d(float *v1, float *v2, void *stream);
+void LaunchVpack_lower_kernel_2d(int32_t *v1, uint16_t *v2, void *stream);
 
 int main() {
-        size_t elemCount_v1 = 1024;
-    size_t fileSize_v1 = elemCount_v1 * sizeof(float);
-    size_t elemCount_v2 = 1024;
-    size_t fileSize_v2 = elemCount_v2 * sizeof(float);
-    float *v1Host = nullptr;
-    float *v1Device = nullptr;
-    float *v2Host = nullptr;
-    float *v2Device = nullptr;
+    size_t elemCount_v1 = 1024;
+    size_t fileSize_v1 = elemCount_v1 * sizeof(int32_t);
+    size_t elemCount_v2 = 2048;
+    size_t fileSize_v2 = elemCount_v2 * sizeof(uint16_t);
+    int32_t *v1Host = nullptr;
+    int32_t *v1Device = nullptr;
+    uint16_t *v2Host = nullptr;
+    uint16_t *v2Device = nullptr;
 
     int rc = 0;
     bool aclInited = false;
@@ -74,26 +72,26 @@ int main() {
     deviceSet = true;
     ACL_CHECK(aclrtCreateStream(&stream));
 
-        ACL_CHECK(aclrtMallocHost((void **)(&v1Host), fileSize_v1));
+    ACL_CHECK(aclrtMallocHost((void **)(&v1Host), fileSize_v1));
     ACL_CHECK(aclrtMallocHost((void **)(&v2Host), fileSize_v2));
-        ACL_CHECK(aclrtMalloc((void **)&v1Device, fileSize_v1, ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMalloc((void **)&v1Device, fileSize_v1, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMalloc((void **)&v2Device, fileSize_v2, ACL_MEM_MALLOC_HUGE_FIRST));
 
-        ReadFile("./v1.bin", fileSize_v1, v1Host, fileSize_v1);
+    ReadFile("./v1.bin", fileSize_v1, v1Host, fileSize_v1);
     ReadFile("./v2.bin", fileSize_v2, v2Host, fileSize_v2);
-        ACL_CHECK(aclrtMemcpy(v1Device, fileSize_v1, v1Host, fileSize_v1, ACL_MEMCPY_HOST_TO_DEVICE));
+    ACL_CHECK(aclrtMemcpy(v1Device, fileSize_v1, v1Host, fileSize_v1, ACL_MEMCPY_HOST_TO_DEVICE));
     ACL_CHECK(aclrtMemcpy(v2Device, fileSize_v2, v2Host, fileSize_v2, ACL_MEMCPY_HOST_TO_DEVICE));
-        LaunchVabs_kernel_2d(v1Device, v2Device, stream);
+    LaunchVpack_lower_kernel_2d(v1Device, v2Device, stream);
 
     ACL_CHECK(aclrtSynchronizeStream(stream));
-        ACL_CHECK(aclrtMemcpy(v2Host, fileSize_v2, v2Device, fileSize_v2, ACL_MEMCPY_DEVICE_TO_HOST));
+    ACL_CHECK(aclrtMemcpy(v2Host, fileSize_v2, v2Device, fileSize_v2, ACL_MEMCPY_DEVICE_TO_HOST));
 
-        WriteFile("./v2.bin", v2Host, fileSize_v2);
+    WriteFile("./v2.bin", v2Host, fileSize_v2);
 
 cleanup:
-        aclrtFree(v1Device);
+    aclrtFree(v1Device);
     aclrtFree(v2Device);
-        aclrtFreeHost(v1Host);
+    aclrtFreeHost(v1Host);
     aclrtFreeHost(v2Host);
     if (stream != nullptr) {
         const aclError _ret = aclrtDestroyStream(stream);

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-# case: micro-op/rearrangement/vpack
+# case: micro-op/rearrangement/vpack-lower
 # family: rearrangement
 # target_ops: pto.vpack
-# scenarios: pack-unpack, narrowing, half-placement, zero-fill-other-half
+# scenarios: narrowing, lower-half-placement, zero-fill-upper-half
 # coding=utf-8
 import os
 import sys

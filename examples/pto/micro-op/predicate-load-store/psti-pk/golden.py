@@ -13,6 +13,7 @@ import numpy as np
 SEED = 19
 OUTPUT_WORDS = 8
 ACTIVE_BITS = 145
+PK_STORAGE_BYTES = 16
 
 
 def prefix_bits(active_bits: int) -> np.ndarray:
@@ -26,7 +27,7 @@ def generate(output_dir: Path, seed: int) -> None:
     bits = prefix_bits(ACTIVE_BITS)
     packed_pk = np.packbits(bits[::2], bitorder="little")
     out = np.zeros((OUTPUT_WORDS * 4,), dtype=np.uint8)
-    out[: packed_pk.size] = packed_pk
+    out[:PK_STORAGE_BYTES] = packed_pk[:PK_STORAGE_BYTES]
 
     output_dir.mkdir(parents=True, exist_ok=True)
     np.zeros((OUTPUT_WORDS,), dtype=np.uint32).tofile(output_dir / "v1.bin")

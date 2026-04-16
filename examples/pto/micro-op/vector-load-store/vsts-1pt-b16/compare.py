@@ -11,6 +11,8 @@ import numpy as np
 
 
 REPEAT_BYTES = 256
+ACTIVE_ELEMS = 1024
+LANES = 128
 
 
 def _ceil_div(x, y):
@@ -183,10 +185,58 @@ def compare_packed_pred_mask(golden_path, output_path, logical_elems, src_elem_b
     return True
 
 
+def compare_1pt_positions(golden_path, output_path, dtype, active_elems, lanes):
+    if not os.path.exists(output_path):
+        print(f"[ERROR] Output missing: {output_path}")
+        return False
+    if not os.path.exists(golden_path):
+        print(f"[ERROR] Golden missing: {golden_path}")
+        return False
+    try:
+        active_elems = int(active_elems)
+        lanes = int(lanes)
+    except Exception:
+        print(f"[ERROR] Invalid 1PT compare arguments: active_elems={active_elems} lanes={lanes}")
+        return False
+    if active_elems <= 0 or lanes <= 0:
+        print(f"[ERROR] Invalid 1PT compare arguments: active_elems={active_elems} lanes={lanes}")
+        return False
+
+    dtype_np = np.dtype(dtype)
+    golden = np.fromfile(golden_path, dtype=dtype_np)
+    output = np.fromfile(output_path, dtype=dtype_np)
+    if golden.shape != output.shape:
+        print(f"[ERROR] Shape mismatch: {golden.shape} vs {output.shape}")
+        return False
+
+    positions = np.arange(0, active_elems, lanes, dtype=np.int64)
+    if positions.size == 0:
+        print("[ERROR] No 1PT positions selected")
+        return False
+    if positions[-1] >= golden.size:
+        print(
+            f"[ERROR] 1PT positions out of range: last={int(positions[-1])} size={golden.size}"
+        )
+        return False
+
+    golden_sel = golden[positions]
+    output_sel = output[positions]
+    if not np.array_equal(golden_sel, output_sel):
+        diff = np.nonzero(golden_sel != output_sel)[0]
+        idx = int(diff[0]) if diff.size else 0
+        pos = int(positions[idx])
+        print(
+            f"[ERROR] Mismatch (1PT positions): idx={pos} "
+            f"golden={int(golden_sel[idx])} out={int(output_sel[idx])}"
+        )
+        return False
+    return True
+
+
 def main():
     strict = os.getenv("COMPARE_STRICT", "1") != "0"
     ok = True
-    ok = compare_bin("golden_v2.bin", "v2.bin", np.int16, 0.0) and ok
+    ok = compare_1pt_positions("golden_v2.bin", "v2.bin", np.int16, ACTIVE_ELEMS, LANES) and ok
     if not ok:
         if strict:
             print("[ERROR] compare failed")

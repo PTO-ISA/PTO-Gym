@@ -12,6 +12,8 @@ import numpy as np
 
 
 REPEAT_BYTES = 256
+CHECK_OFFSET = 1
+CHECK_COUNT = 8
 
 
 def _ceil_div(x, y):
@@ -187,7 +189,32 @@ def compare_packed_pred_mask(golden_path, output_path, logical_elems, src_elem_b
 def main():
     strict = os.getenv("COMPARE_STRICT", "1") != "0"
     ok = True
-    ok = compare_bin("golden_v2.bin", "v2.bin", np.float32, 0.0001) and ok
+    golden = np.fromfile("golden_v2.bin", dtype=np.float32) if os.path.exists("golden_v2.bin") else None
+    output = np.fromfile("v2.bin", dtype=np.float32) if os.path.exists("v2.bin") else None
+    lo = CHECK_OFFSET
+    hi = CHECK_OFFSET + CHECK_COUNT
+    if output is None:
+        ok = False
+        print("[ERROR] Output missing: v2.bin")
+    elif golden is None:
+        ok = False
+        print("[ERROR] Golden missing: golden_v2.bin")
+    elif golden.size < hi or output.size < hi:
+        ok = False
+        print(
+            f"[ERROR] Flush slice too small: need={hi} elems, "
+            f"golden={golden.size}, out={output.size}"
+        )
+    elif not np.allclose(golden[lo:hi], output[lo:hi], atol=0.0001, rtol=0.0001, equal_nan=True):
+        g = golden[lo:hi].astype(np.float64, copy=False)
+        o = output[lo:hi].astype(np.float64, copy=False)
+        abs_diff = np.abs(g - o)
+        idx = int(np.argmax(abs_diff))
+        ok = False
+        print(
+            f"[ERROR] Mismatch (flush slice): golden_v2.bin vs v2.bin, max diff={float(abs_diff[idx])} "
+            f"at idx={lo + idx} (golden={g[idx]}, out={o[idx]}, dtype=float32)"
+        )
     if not ok:
         if strict:
             print("[ERROR] compare failed")

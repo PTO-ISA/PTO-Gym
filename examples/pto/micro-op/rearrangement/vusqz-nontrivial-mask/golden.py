@@ -43,6 +43,7 @@ def generate(output_dir: Path) -> None:
     src.reshape(-1).tofile(output_dir / "v1.bin")
     mask_seed.reshape(-1).tofile(output_dir / "v2.bin")
     out.reshape(-1).tofile(output_dir / "golden_v3.bin")
+    np.zeros_like(out.reshape(-1)).tofile(output_dir / "v3.bin")
 
 
 def main() -> None:

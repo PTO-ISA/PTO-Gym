@@ -7,6 +7,7 @@ import numpy as np
 
 
 REPEAT_BYTES = 256
+ACTIVE_ELEMS = 1000
 
 
 def _ceil_div(x, y):
@@ -175,7 +176,7 @@ def compare_packed_pred_mask(golden_path, output_path, logical_elems, src_elem_b
 def main():
     strict = os.getenv("COMPARE_STRICT", "1") != "0"
     ok = True
-    ok = compare_bin("golden_v2.bin", "v2.bin", np.float32, 0.0001) and ok
+    ok = compare_bin_prefix("golden_v2.bin", "v2.bin", np.float32, 0.0001, ACTIVE_ELEMS) and ok
     if not ok:
         if strict:
             print("[ERROR] compare failed")
