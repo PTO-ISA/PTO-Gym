@@ -87,3 +87,7 @@ bash examples/pto/scripts/run_host_vpto_validation_parallel.sh
 - [docs/](docs/) — PTO instruction SPEC documentation
 - [examples/pto/README.md](examples/pto/README.md) — VPTO validation usage guide
 - [examples/pto/](examples/pto/) — VPTO learning and validation cases
+
+## License
+
+See [LICENSE](LICENSE) for license terms.
