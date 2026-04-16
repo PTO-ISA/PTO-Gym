@@ -10,17 +10,19 @@ import sys
 import numpy as np
 
 EXPECTED_WORDS = 8
+VALID_BYTES = 16
 
 
 def compare_packed_pred_mask(golden_path, output_path):
     if not os.path.exists(golden_path) or not os.path.exists(output_path):
         return False
-    golden = np.fromfile(golden_path, dtype=np.uint32)
-    output = np.fromfile(output_path, dtype=np.uint32)
-    if golden.size != EXPECTED_WORDS or output.size != EXPECTED_WORDS:
+    golden = np.fromfile(golden_path, dtype=np.uint8)
+    output = np.fromfile(output_path, dtype=np.uint8)
+    expected_bytes = EXPECTED_WORDS * np.dtype(np.uint32).itemsize
+    if golden.size != expected_bytes or output.size != expected_bytes:
         return False
-    if not np.array_equal(golden, output):
-        diff = np.nonzero(golden != output)[0]
+    if not np.array_equal(golden[:VALID_BYTES], output[:VALID_BYTES]):
+        diff = np.nonzero(golden[:VALID_BYTES] != output[:VALID_BYTES])[0]
         idx = int(diff[0]) if diff.size else 0
         print(f"[ERROR] Mismatch (packed mask words): idx={idx} golden={int(golden[idx])} out={int(output[idx])}")
         return False

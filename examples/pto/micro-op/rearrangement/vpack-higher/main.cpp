@@ -1,8 +1,8 @@
 // -----------------------------------------------------------------------------
-// case: micro-op/rearrangement/vpack
+// case: micro-op/rearrangement/vpack-higher
 // family: rearrangement
 // target_ops: pto.vpack
-// scenarios: pack-unpack, narrowing, half-placement, zero-fill-other-half
+// scenarios: narrowing, higher-half-placement, zero-fill-lower-half
 // -----------------------------------------------------------------------------
 /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
@@ -45,12 +45,12 @@ struct MrgSortExecutedNumList {
         }                                                                                        \
     } while (0)
 
-void LaunchVpack_kernel_2d(int32_t *v1, uint16_t *v2, void *stream);
+void LaunchVpack_higher_kernel_2d(int32_t *v1, uint16_t *v2, void *stream);
 
 int main() {
     size_t elemCount_v1 = 1024;
     size_t fileSize_v1 = elemCount_v1 * sizeof(int32_t);
-    size_t elemCount_v2 = 4096;
+    size_t elemCount_v2 = 2048;
     size_t fileSize_v2 = elemCount_v2 * sizeof(uint16_t);
     int32_t *v1Host = nullptr;
     int32_t *v1Device = nullptr;
@@ -81,7 +81,7 @@ int main() {
     ReadFile("./v2.bin", fileSize_v2, v2Host, fileSize_v2);
     ACL_CHECK(aclrtMemcpy(v1Device, fileSize_v1, v1Host, fileSize_v1, ACL_MEMCPY_HOST_TO_DEVICE));
     ACL_CHECK(aclrtMemcpy(v2Device, fileSize_v2, v2Host, fileSize_v2, ACL_MEMCPY_HOST_TO_DEVICE));
-    LaunchVpack_kernel_2d(v1Device, v2Device, stream);
+    LaunchVpack_higher_kernel_2d(v1Device, v2Device, stream);
 
     ACL_CHECK(aclrtSynchronizeStream(stream));
     ACL_CHECK(aclrtMemcpy(v2Host, fileSize_v2, v2Device, fileSize_v2, ACL_MEMCPY_DEVICE_TO_HOST));

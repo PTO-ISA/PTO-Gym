@@ -36,6 +36,8 @@ def generate(output_dir: Path, seed: int) -> None:
     src.reshape(-1).tofile(output_dir / "src.bin")
     low.reshape(-1).tofile(output_dir / "golden_low.bin")
     high.reshape(-1).tofile(output_dir / "golden_high.bin")
+    np.zeros_like(src.reshape(-1)).tofile(output_dir / "out_low.bin")
+    np.zeros_like(src.reshape(-1)).tofile(output_dir / "out_high.bin")
 
 
 def main() -> None:

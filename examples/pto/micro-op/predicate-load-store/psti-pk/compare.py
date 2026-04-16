@@ -8,19 +8,21 @@ import numpy as np
 
 
 EXPECTED_WORDS = 8
+PK_STORAGE_BYTES = 16
 
 
 def main() -> None:
-    golden = np.fromfile("golden_v1.bin", dtype=np.uint32)
-    output = np.fromfile("v1.bin", dtype=np.uint32)
-    if golden.size != EXPECTED_WORDS or output.size != EXPECTED_WORDS:
+    golden = np.fromfile("golden_v1.bin", dtype=np.uint8)
+    output = np.fromfile("v1.bin", dtype=np.uint8)
+    expected_bytes = EXPECTED_WORDS * 4
+    if golden.size != expected_bytes or output.size != expected_bytes:
       print(
-          f"[ERROR] Unexpected word count: golden={golden.size} "
-          f"out={output.size} expected={EXPECTED_WORDS}"
+          f"[ERROR] Unexpected byte count: golden={golden.size} "
+          f"out={output.size} expected={expected_bytes}"
       )
       raise SystemExit(2)
-    if not np.array_equal(golden, output):
-        diff = np.nonzero(golden != output)[0]
+    if not np.array_equal(golden[:PK_STORAGE_BYTES], output[:PK_STORAGE_BYTES]):
+        diff = np.nonzero(golden[:PK_STORAGE_BYTES] != output[:PK_STORAGE_BYTES])[0]
         idx = int(diff[0]) if diff.size else 0
         print(
             f"[ERROR] Mismatch (psti PK raw packed store): idx={idx} "

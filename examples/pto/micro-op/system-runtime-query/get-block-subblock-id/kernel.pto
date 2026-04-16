@@ -12,6 +12,9 @@ module attributes {pto.target_arch = "a5"} {
     %c3 = arith.constant 3 : index
     %c32 = arith.constant 32 : index
 
+    pto.vecscope {
+    }
+
     %block = pto.get_block_idx
     %subblock = pto.get_subblock_idx
     %block_num = pto.get_block_num
