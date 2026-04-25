@@ -381,6 +381,36 @@
       "reference": "output = (residual.flatten(-2) @ mhc_fn.T) * rsqrt(mean(residual.flatten(-2)^2) + eps)",
       "algorithm_note": "Baseline forward omits optional norm-weight merge; PTO-DSL uses 1024-wide hidden tiles, f32 dot/sqsum reductions, and tile rsqrt."
     },
+    "mhc.fn_normw_merge_fwd": {
+      "runtime_shapes": {
+        "mhc_mult": [4],
+        "hidden": [1280, 2560, 7168],
+        "dtype": ["f32"]
+      },
+      "runtime_argument_mapping": {
+        "fn": "[mhc_mult * (2 + mhc_mult), mhc_mult * hidden]",
+        "normw": "[mhc_mult * hidden]",
+        "out_fn": "[mhc_mult * (2 + mhc_mult), mhc_mult * hidden]"
+      },
+      "reference": "out_fn = fn * normw[None, :]",
+      "algorithm_note": "Optional pre_norm_fn norm-weight merge port using 1024-wide f32 tiles."
+    },
+    "mhc.fn_normw_merge_bwd": {
+      "runtime_shapes": {
+        "mhc_mult": [4],
+        "hidden": [1280, 2560, 7168],
+        "dtype": ["f32"]
+      },
+      "runtime_argument_mapping": {
+        "fn": "[mhc_mult * (2 + mhc_mult), mhc_mult * hidden]",
+        "normw": "[mhc_mult * hidden]",
+        "out_fn_grad": "[mhc_mult * (2 + mhc_mult), mhc_mult * hidden]",
+        "fn_grad": "[mhc_mult * (2 + mhc_mult), mhc_mult * hidden]",
+        "normw_grad": "[mhc_mult * hidden]"
+      },
+      "reference": "fn_grad += out_fn_grad * normw[None, :]; normw_grad += sum(out_fn_grad * fn, axis=0)",
+      "algorithm_note": "Correctness-first optional norm-weight merge backward accumulates normw_grad over the 24 MHC projection rows."
+    },
     "mhc.sinkhorn_normalize_fwd": {
       "runtime_shapes": {
         "n0": [1, 2],

@@ -12,8 +12,8 @@
   "last_local_evidence": {
     "date": "2026-04-25",
     "ptoas_flags": "--enable-insert-sync --pto-arch a5",
-    "command": "python3.12 examples/ptodsl/tilekernels/compile_kernels.py --case mhc.pre_norm_fn_fwd --materialize-validation",
-    "result": "3 MHC pre-norm forward PTO-DSL configs emitted nonempty C++ with local PTOAS; 6 MHC pre-norm validation cases materialized."
+    "command": "python3.12 examples/ptodsl/tilekernels/compile_kernels.py --case mhc.fn_normw_merge_fwd --case mhc.fn_normw_merge_bwd --materialize-validation",
+    "result": "6 MHC FN/norm-weight merge PTO-DSL configs emitted nonempty C++ with local PTOAS; 6 validation cases materialized."
   },
   "kernels": [
     {
@@ -447,6 +447,40 @@
       "npu_correct": false,
       "docs": true,
       "notes": "Baseline forward without optional norm-weight merge; computes RMS-normalized residual/FN projection with f32 output."
+    },
+    {
+      "name": "fn_normw_merge_fwd",
+      "family": "mhc",
+      "configs": [
+        {"hidden_size": 1280, "mhc_mult": 4},
+        {"hidden_size": 2560, "mhc_mult": 4},
+        {"hidden_size": 7168, "mhc_mult": 4}
+      ],
+      "pto_dsl_source": true,
+      "ptoas": true,
+      "validation_assets": true,
+      "validation_compile": false,
+      "sim_correct": false,
+      "npu_correct": false,
+      "docs": true,
+      "notes": "Optional norm-weight merge for pre_norm_fn; computes out_fn = fn * normw."
+    },
+    {
+      "name": "fn_normw_merge_bwd",
+      "family": "mhc",
+      "configs": [
+        {"hidden_size": 1280, "mhc_mult": 4},
+        {"hidden_size": 2560, "mhc_mult": 4},
+        {"hidden_size": 7168, "mhc_mult": 4}
+      ],
+      "pto_dsl_source": true,
+      "ptoas": true,
+      "validation_assets": true,
+      "validation_compile": false,
+      "sim_correct": false,
+      "npu_correct": false,
+      "docs": true,
+      "notes": "Optional norm-weight merge backward; accumulates fn_grad and normw_grad."
     },
     {"name": "mhc_pre_big_fuse", "family": "mhc", "configs": [], "pto_dsl_source": false, "ptoas": false, "validation_assets": false, "validation_compile": false, "sim_correct": false, "npu_correct": false, "docs": true, "notes": "Deferred: fused path should wait for verified smaller stages."},
     {

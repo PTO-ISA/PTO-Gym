@@ -184,3 +184,121 @@ def build_pre_norm_fn_fwd(
         f"tilekernels_mhc_pre_norm_fn_fwd_m{mhc_mult}_h{hidden_size}"
     )
     return to_ir_module(meta_data=meta_data)(tilekernels_mhc_pre_norm_fn_fwd_kernel)
+
+
+def build_fn_normw_merge_fwd(hidden_size: int, mhc_mult: int = 4):
+    """Build optional MHC FN/norm-weight merge forward."""
+    if mhc_mult != 4:
+        raise ValueError("fn_normw merge currently supports mhc_mult=4")
+    total_hidden = mhc_mult * hidden_size
+    if total_hidden <= 0 or total_hidden % _TILE != 0:
+        raise ValueError(f"mhc_mult * hidden_size must be a positive multiple of {_TILE}")
+
+    mhc_mult3 = mhc_mult * (2 + mhc_mult)
+    num_tiles = total_hidden // _TILE
+    meta_data = _meta_data
+
+    def tilekernels_mhc_fn_normw_merge_fwd_kernel(
+        fn_ptr: "ptr_f32",
+        normw_ptr: "ptr_f32",
+        out_fn_ptr: "ptr_f32",
+    ) -> None:
+        c0 = const(0)
+        c1 = const(1)
+        c_total_hidden = const(total_hidden)
+        c_out_cols = const(mhc_mult3)
+        fn = _tensor_f32(fn_ptr, c_out_cols, c_total_hidden)
+        normw = _tensor_f32(normw_ptr, c1, c_total_hidden)
+        out_fn = _tensor_f32(out_fn_ptr, c_out_cols, c_total_hidden)
+
+        with pto.vector_section():
+            bid = s.index_cast(pto.get_block_idx())
+            nblocks = s.index_cast(pto.get_block_num())
+            rows_per_core = s.ceil_div(c_out_cols, nblocks)
+            row_start = bid * rows_per_core
+            row_end = s.min_u(row_start + rows_per_core, c_out_cols)
+
+            for row in pto.range(row_start, row_end, c1):
+                for tile_idx in range(num_tiles):
+                    col = const(tile_idx * _TILE)
+                    fn_tile = pto.alloc_tile(tile_f32, valid_col=const(_TILE))
+                    normw_tile = pto.alloc_tile(tile_f32, valid_col=const(_TILE))
+                    out_tile = pto.alloc_tile(tile_f32, valid_col=const(_TILE))
+                    pto.load(_slice_f32(fn, row, col, const(_TILE)), fn_tile)
+                    pto.load(_slice_f32(normw, c0, col, const(_TILE)), normw_tile)
+                    tile.mul(fn_tile, normw_tile, out_tile)
+                    pto.store(out_tile, _slice_f32(out_fn, row, col, const(_TILE)))
+
+    tilekernels_mhc_fn_normw_merge_fwd_kernel.__name__ = (
+        f"tilekernels_mhc_fn_normw_merge_fwd_m{mhc_mult}_h{hidden_size}"
+    )
+    return to_ir_module(meta_data=meta_data)(tilekernels_mhc_fn_normw_merge_fwd_kernel)
+
+
+def build_fn_normw_merge_bwd(hidden_size: int, mhc_mult: int = 4):
+    """Build optional MHC FN/norm-weight merge backward."""
+    if mhc_mult != 4:
+        raise ValueError("fn_normw merge currently supports mhc_mult=4")
+    total_hidden = mhc_mult * hidden_size
+    if total_hidden <= 0 or total_hidden % _TILE != 0:
+        raise ValueError(f"mhc_mult * hidden_size must be a positive multiple of {_TILE}")
+
+    mhc_mult3 = mhc_mult * (2 + mhc_mult)
+    num_tiles = total_hidden // _TILE
+    meta_data = _meta_data
+
+    def tilekernels_mhc_fn_normw_merge_bwd_kernel(
+        fn_ptr: "ptr_f32",
+        normw_ptr: "ptr_f32",
+        out_fn_grad_ptr: "ptr_f32",
+        fn_grad_ptr: "ptr_f32",
+        normw_grad_ptr: "ptr_f32",
+    ) -> None:
+        c0 = const(0)
+        c1 = const(1)
+        c_total_hidden = const(total_hidden)
+        c_out_cols = const(mhc_mult3)
+        fn = _tensor_f32(fn_ptr, c_out_cols, c_total_hidden)
+        normw = _tensor_f32(normw_ptr, c1, c_total_hidden)
+        out_fn_grad = _tensor_f32(out_fn_grad_ptr, c_out_cols, c_total_hidden)
+        fn_grad = _tensor_f32(fn_grad_ptr, c_out_cols, c_total_hidden)
+        normw_grad = _tensor_f32(normw_grad_ptr, c1, c_total_hidden)
+
+        with pto.vector_section():
+            bid = s.index_cast(pto.get_block_idx())
+            nblocks = s.index_cast(pto.get_block_num())
+            tiles_per_core = s.ceil_div(const(num_tiles), nblocks)
+            tile_start = bid * tiles_per_core
+            tile_end = s.min_u(tile_start + tiles_per_core, const(num_tiles))
+
+            for dyn_tile in pto.range(tile_start, tile_end, c1):
+                col = dyn_tile * const(_TILE)
+                normw_tile = pto.alloc_tile(tile_f32, valid_col=const(_TILE))
+                normw_grad_acc = pto.alloc_tile(tile_f32, valid_col=const(_TILE))
+                pto.load(_slice_f32(normw, c0, col, const(_TILE)), normw_tile)
+                pto.load(_slice_f32(normw_grad, c0, col, const(_TILE)), normw_grad_acc)
+
+                for row_idx in range(mhc_mult3):
+                    row = const(row_idx)
+                    fn_tile = pto.alloc_tile(tile_f32, valid_col=const(_TILE))
+                    out_grad_tile = pto.alloc_tile(tile_f32, valid_col=const(_TILE))
+                    fn_grad_tile = pto.alloc_tile(tile_f32, valid_col=const(_TILE))
+                    term = pto.alloc_tile(tile_f32, valid_col=const(_TILE))
+
+                    pto.load(_slice_f32(fn, row, col, const(_TILE)), fn_tile)
+                    pto.load(_slice_f32(out_fn_grad, row, col, const(_TILE)), out_grad_tile)
+                    pto.load(_slice_f32(fn_grad, row, col, const(_TILE)), fn_grad_tile)
+
+                    tile.mul(out_grad_tile, normw_tile, term)
+                    tile.add(fn_grad_tile, term, fn_grad_tile)
+                    pto.store(fn_grad_tile, _slice_f32(fn_grad, row, col, const(_TILE)))
+
+                    tile.mul(out_grad_tile, fn_tile, term)
+                    tile.add(normw_grad_acc, term, normw_grad_acc)
+
+                pto.store(normw_grad_acc, _slice_f32(normw_grad, c0, col, const(_TILE)))
+
+    tilekernels_mhc_fn_normw_merge_bwd_kernel.__name__ = (
+        f"tilekernels_mhc_fn_normw_merge_bwd_m{mhc_mult}_h{hidden_size}"
+    )
+    return to_ir_module(meta_data=meta_data)(tilekernels_mhc_fn_normw_merge_bwd_kernel)

@@ -124,6 +124,8 @@ Implemented PTO-DSL builders:
   comb mix.
 - `mhc.pre_norm_fn_fwd`, baseline RMS-normalized residual/FN projection forward
   without optional norm-weight merge.
+- `mhc.fn_normw_merge_fwd` and `mhc.fn_normw_merge_bwd`, optional f32
+  norm-weight merge helpers for `mhc.pre_norm_fn`.
 
 Shape grids are recorded in
 `examples/ptodsl/tilekernels/manifests/tilekernels_gpu_shapes.json`.

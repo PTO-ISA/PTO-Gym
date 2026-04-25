@@ -737,6 +737,40 @@ def _validation_specs(case, config: dict[str, Any]) -> list[dict[str, Any]]:
             })
         return specs
 
+    if name in {"mhc.fn_normw_merge_fwd", "mhc.fn_normw_merge_bwd"}:
+        hidden = int(config["hidden_size"])
+        mhc_mult = int(config["mhc_mult"])
+        mhc_mult3 = mhc_mult * (2 + mhc_mult)
+        total_hidden = mhc_mult * hidden
+        if name.endswith("_fwd"):
+            buffers = {
+                "fn": {"dtype": "f32", "elements": mhc_mult3 * total_hidden, "role": "input"},
+                "normw": {"dtype": "f32", "elements": total_hidden, "role": "input"},
+                "out_fn": {"dtype": "f32", "elements": mhc_mult3 * total_hidden, "role": "output", "eps": 1e-6},
+            }
+        else:
+            buffers = {
+                "fn": {"dtype": "f32", "elements": mhc_mult3 * total_hidden, "role": "input"},
+                "normw": {"dtype": "f32", "elements": total_hidden, "role": "input"},
+                "out_fn_grad": {"dtype": "f32", "elements": mhc_mult3 * total_hidden, "role": "input"},
+                "fn_grad": {"dtype": "f32", "elements": mhc_mult3 * total_hidden, "role": "inout", "eps": 1e-5},
+                "normw_grad": {"dtype": "f32", "elements": total_hidden, "role": "inout", "eps": 1e-4},
+            }
+        return [{
+            "id": _spec_id({"hidden": hidden, "mhc_mult": mhc_mult}),
+            "case": name,
+            "config": config,
+            "seed": 481 + hidden + mhc_mult + (100 if name.endswith("_bwd") else 0),
+            "scalars": {},
+            "buffers": buffers,
+            "shape": {
+                "mhc_mult": mhc_mult,
+                "mhc_mult3": mhc_mult3,
+                "hidden": hidden,
+                "total_hidden": total_hidden,
+            },
+        }]
+
     if name in {"mhc.sinkhorn_normalize_fwd", "mhc.sinkhorn_normalize_bwd"}:
         mhc = int(config["mhc"])
         repeat = int(config["repeat"])
@@ -1558,6 +1592,29 @@ def generate(output_dir: Path) -> None:
         generated["residual"] = residual
         generated["mhc_fn"] = mhc_fn
         golden["output"] = (dots * rms[:, None]).astype(np.float32)
+    elif case == "mhc.fn_normw_merge_fwd":
+        mhc_mult3 = int(shape["mhc_mult3"])
+        total_hidden = int(shape["total_hidden"])
+        fn = rng.normal(0.0, 1e-4, size=(mhc_mult3, total_hidden)).astype(np.float32)
+        normw = (rng.normal(0.0, 0.1, size=(total_hidden,)) + 1.0).astype(np.float32)
+        generated["fn"] = fn
+        generated["normw"] = normw
+        golden["out_fn"] = fn * normw[None, :]
+    elif case == "mhc.fn_normw_merge_bwd":
+        mhc_mult3 = int(shape["mhc_mult3"])
+        total_hidden = int(shape["total_hidden"])
+        fn = rng.normal(0.0, 1e-4, size=(mhc_mult3, total_hidden)).astype(np.float32)
+        normw = (rng.normal(0.0, 0.1, size=(total_hidden,)) + 1.0).astype(np.float32)
+        out_fn_grad = rng.normal(0.0, 0.25, size=(mhc_mult3, total_hidden)).astype(np.float32)
+        fn_grad = rng.normal(0.0, 0.05, size=(mhc_mult3, total_hidden)).astype(np.float32)
+        normw_grad = rng.normal(0.0, 0.05, size=(total_hidden,)).astype(np.float32)
+        generated["fn"] = fn
+        generated["normw"] = normw
+        generated["out_fn_grad"] = out_fn_grad
+        generated["fn_grad"] = fn_grad
+        generated["normw_grad"] = normw_grad
+        golden["fn_grad"] = fn_grad + out_fn_grad * normw[None, :]
+        golden["normw_grad"] = normw_grad + np.sum(out_fn_grad * fn, axis=0, dtype=np.float32)
     elif case == "mhc.sinkhorn_normalize_fwd":
         rows = int(shape["num_tokens"])
         mhc = int(shape["mhc"])

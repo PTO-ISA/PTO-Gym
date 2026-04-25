@@ -62,6 +62,8 @@ Implemented kernels:
 | `post_fwd` | MHC | yes | yes | generated | pending | bf16 post-layer x plus comb-residual branch with f32 accumulation. |
 | `post_bwd` | MHC | yes | yes | generated | pending | Correctness-first backward for x, residual, post mix, and comb mix gradients. |
 | `pre_norm_fn_fwd` | MHC | yes | yes | generated | pending | Baseline RMS-normalized residual/FN projection forward without optional norm-weight merge. |
+| `fn_normw_merge_fwd` | MHC | yes | yes | generated | pending | Optional pre-norm FN/norm-weight merge forward. |
+| `fn_normw_merge_bwd` | MHC | yes | yes | generated | pending | Optional pre-norm FN/norm-weight merge backward for FN and norm-weight gradients. |
 
 The generated validation `main.cpp`, `golden.py`, and `compare.py` contain host
 allocation, kernel launch, output capture, and NumPy comparison logic for
@@ -115,8 +117,9 @@ Gate fields in `kernel_status.json`:
   fused after each stage has ptoas and correctness evidence. The current split
   stages with local `ptoas` coverage are `head_compute_mix_{fwd,bwd}`,
   `pre_split_mixes_{fwd,bwd}`, `pre_apply_mix_{fwd,bwd}`, and
-  `post_{fwd,bwd}`. `pre_norm_fn_fwd` now covers the baseline projection; its
-  backward and optional norm-weight merge remain separate follow-up slices.
+  `post_{fwd,bwd}`. `pre_norm_fn_fwd` now covers the baseline projection, and
+  `fn_normw_merge_{fwd,bwd}` covers the optional norm-weight path; pre-norm
+  backward remains a separate follow-up slice.
 
 ## Commands
 

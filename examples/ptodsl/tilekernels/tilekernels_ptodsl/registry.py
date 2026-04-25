@@ -457,6 +457,42 @@ _CASES: tuple[KernelCase, ...] = (
         ),
     ),
     KernelCase(
+        name="mhc.fn_normw_merge_fwd",
+        family="mhc",
+        builder="tilekernels_ptodsl.mhc.norm_fn:build_fn_normw_merge_fwd",
+        status="implemented",
+        description="MHC f32 optional FN/norm-weight merge forward.",
+        configs=(
+            {"hidden_size": 1280, "mhc_mult": 4},
+            {"hidden_size": 2560, "mhc_mult": 4},
+            {"hidden_size": 7168, "mhc_mult": 4},
+        ),
+        args=(
+            KernelArg("fn", "float"),
+            KernelArg("normw", "float"),
+            KernelArg("out_fn", "float"),
+        ),
+    ),
+    KernelCase(
+        name="mhc.fn_normw_merge_bwd",
+        family="mhc",
+        builder="tilekernels_ptodsl.mhc.norm_fn:build_fn_normw_merge_bwd",
+        status="implemented",
+        description="MHC f32 optional FN/norm-weight merge backward.",
+        configs=(
+            {"hidden_size": 1280, "mhc_mult": 4},
+            {"hidden_size": 2560, "mhc_mult": 4},
+            {"hidden_size": 7168, "mhc_mult": 4},
+        ),
+        args=(
+            KernelArg("fn", "float"),
+            KernelArg("normw", "float"),
+            KernelArg("out_fn_grad", "float"),
+            KernelArg("fn_grad", "float"),
+            KernelArg("normw_grad", "float"),
+        ),
+    ),
+    KernelCase(
         name="mhc.sinkhorn_normalize_fwd",
         family="mhc",
         builder="tilekernels_ptodsl.mhc.sinkhorn:build_sinkhorn_normalize_fwd",
