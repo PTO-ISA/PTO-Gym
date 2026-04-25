@@ -1,0 +1,520 @@
+{
+  "schema_version": 2,
+  "definition_of_done": [
+    "pto_dsl_source",
+    "ptoas",
+    "validation_compile",
+    "sim_correct",
+    "npu_correct",
+    "docs"
+  ],
+  "manifest": "manifests/tilekernels_gpu_shapes.json",
+  "last_local_evidence": {
+    "date": "2026-04-25",
+    "ptoas_flags": "--enable-insert-sync --pto-arch a5",
+    "command": "python3.12 examples/ptodsl/tilekernels/compile_kernels.py --case mhc.pre_norm_fn_fwd --materialize-validation",
+    "result": "3 MHC pre-norm forward PTO-DSL configs emitted nonempty C++ with local PTOAS; 6 MHC pre-norm validation cases materialized."
+  },
+  "kernels": [
+    {
+      "name": "normalize_weight",
+      "family": "moe",
+      "configs": [
+        {"num_topk": 1},
+        {"num_topk": 2},
+        {"num_topk": 6},
+        {"num_topk": 7},
+        {"num_topk": 8},
+        {"num_topk": 9}
+      ],
+      "pto_dsl_source": true,
+      "ptoas": true,
+      "validation_assets": true,
+      "validation_compile": false,
+      "sim_correct": false,
+      "npu_correct": false,
+      "docs": true,
+      "notes": "PTO-DSL uses row_sum, tadds with TileKernels 1e-20 denominator sentinel, row_expand, and row_expand_div. Generated validation assets include host runner and NumPy golden/compare for a deterministic runtime shape."
+    },
+    {
+      "name": "transpose",
+      "family": "transpose",
+      "configs": [
+        {"dtype": "bf16"},
+        {"dtype": "f32"}
+      ],
+      "pto_dsl_source": true,
+      "ptoas": true,
+      "validation_assets": true,
+      "validation_compile": false,
+      "sim_correct": false,
+      "npu_correct": false,
+      "docs": true,
+      "notes": "Dynamic rows/cols port using PTO TTrans tiles. Runtime shape grid mirrors TileKernels deterministic correctness rows in the manifest. fp8_e4m3 remains compile-only/deferred."
+    },
+    {
+      "name": "batched_transpose",
+      "family": "transpose",
+      "configs": [
+        {"dtype": "bf16"},
+        {"dtype": "f32"}
+      ],
+      "pto_dsl_source": true,
+      "ptoas": true,
+      "validation_assets": true,
+      "validation_compile": false,
+      "sim_correct": false,
+      "npu_correct": false,
+      "docs": true,
+      "notes": "Dynamic batches/rows/cols port using PTO TTrans tiles. Generated validation assets include host runner and NumPy golden/compare for one deterministic TileKernels-grid shape."
+    },
+    {
+      "name": "fused_weight",
+      "family": "engram",
+      "configs": [
+        {"hc": 4, "input_dtype": "bf16", "output_dtype": "f32"}
+      ],
+      "pto_dsl_source": true,
+      "ptoas": true,
+      "validation_assets": true,
+      "validation_compile": false,
+      "sim_correct": false,
+      "npu_correct": false,
+      "docs": true,
+      "notes": "Ports the bf16 weight_hidden * weight_embed path with f32 accumulation/output over the TileKernels hidden-size grid."
+    },
+    {
+      "name": "expand_to_mhc_fwd",
+      "family": "mhc",
+      "configs": [
+        {"mhc_mult": 2},
+        {"mhc_mult": 4},
+        {"mhc_mult": 8}
+      ],
+      "pto_dsl_source": true,
+      "ptoas": true,
+      "validation_assets": true,
+      "validation_compile": false,
+      "sim_correct": false,
+      "npu_correct": false,
+      "docs": true,
+      "notes": "Forward copy expands bf16 input rows across the MHC axis for the deterministic n0/n1/hidden manifest grid."
+    },
+    {
+      "name": "expand_to_mhc_bwd",
+      "family": "mhc",
+      "configs": [
+        {"mhc_mult": 2},
+        {"mhc_mult": 4},
+        {"mhc_mult": 8}
+      ],
+      "pto_dsl_source": true,
+      "ptoas": true,
+      "validation_assets": true,
+      "validation_compile": false,
+      "sim_correct": false,
+      "npu_correct": false,
+      "docs": true,
+      "notes": "Backward path reduces bf16 gradients across the MHC axis using f32 tile accumulation before conversion back to bf16."
+    },
+    {
+      "name": "topk_gate",
+      "family": "moe",
+      "configs": [
+        {"num_experts": 72, "num_topk": 6, "sort_ncols": 128},
+        {"num_experts": 32, "num_topk": 6, "sort_ncols": 32},
+        {"num_experts": 64, "num_topk": 6, "sort_ncols": 128},
+        {"num_experts": 96, "num_topk": 6, "sort_ncols": 128},
+        {"num_experts": 16, "num_topk": 6, "sort_ncols": 32},
+        {"num_experts": 36, "num_topk": 6, "sort_ncols": 128},
+        {"num_experts": 108, "num_topk": 6, "sort_ncols": 128},
+        {"num_experts": 128, "num_topk": 6, "sort_ncols": 128},
+        {"num_experts": 144, "num_topk": 6, "sort_ncols": 512},
+        {"num_experts": 256, "num_topk": 8, "sort_ncols": 512}
+      ],
+      "pto_dsl_source": true,
+      "ptoas": true,
+      "validation_assets": true,
+      "validation_compile": false,
+      "sim_correct": false,
+      "npu_correct": false,
+      "docs": true,
+      "notes": "PTO-DSL follows the PTO-ISA manual TopK structure: tfillpad_expand with PadValue::Min pads exact TileKernels expert counts to PTO sort widths, sort32 attaches a uint32 index vector, mrgsort merges, and gather extracts index lanes. PTO-Gym validation currently uses uint32 output indices; TileKernels torch API returns int64."
+    },
+    {
+      "name": "topk_sum_and_topk_group_idx",
+      "family": "moe",
+      "configs": [
+        {"num_experts": 72, "num_groups": 4, "num_group_sum_topk": 1, "num_topk_groups": 2, "group_sort_ncols": 32, "group_score_sort_ncols": 32},
+        {"num_experts": 72, "num_groups": 4, "num_group_sum_topk": 1, "num_topk_groups": 4, "group_sort_ncols": 32, "group_score_sort_ncols": 32},
+        {"num_experts": 72, "num_groups": 4, "num_group_sum_topk": 2, "num_topk_groups": 2, "group_sort_ncols": 32, "group_score_sort_ncols": 32},
+        {"num_experts": 72, "num_groups": 4, "num_group_sum_topk": 2, "num_topk_groups": 4, "group_sort_ncols": 32, "group_score_sort_ncols": 32},
+        {"num_experts": 72, "num_groups": 8, "num_group_sum_topk": 1, "num_topk_groups": 2, "group_sort_ncols": 32, "group_score_sort_ncols": 32},
+        {"num_experts": 72, "num_groups": 8, "num_group_sum_topk": 1, "num_topk_groups": 4, "group_sort_ncols": 32, "group_score_sort_ncols": 32},
+        {"num_experts": 72, "num_groups": 8, "num_group_sum_topk": 2, "num_topk_groups": 2, "group_sort_ncols": 32, "group_score_sort_ncols": 32},
+        {"num_experts": 72, "num_groups": 8, "num_group_sum_topk": 2, "num_topk_groups": 4, "group_sort_ncols": 32, "group_score_sort_ncols": 32},
+        {"num_experts": 72, "num_groups": 12, "num_group_sum_topk": 1, "num_topk_groups": 2, "group_sort_ncols": 32, "group_score_sort_ncols": 32},
+        {"num_experts": 72, "num_groups": 12, "num_group_sum_topk": 1, "num_topk_groups": 4, "group_sort_ncols": 32, "group_score_sort_ncols": 32},
+        {"num_experts": 72, "num_groups": 12, "num_group_sum_topk": 2, "num_topk_groups": 2, "group_sort_ncols": 32, "group_score_sort_ncols": 32},
+        {"num_experts": 72, "num_groups": 12, "num_group_sum_topk": 2, "num_topk_groups": 4, "group_sort_ncols": 32, "group_score_sort_ncols": 32},
+        {"num_experts": 256, "num_groups": 4, "num_group_sum_topk": 1, "num_topk_groups": 2, "group_sort_ncols": 128, "group_score_sort_ncols": 32},
+        {"num_experts": 256, "num_groups": 4, "num_group_sum_topk": 1, "num_topk_groups": 4, "group_sort_ncols": 128, "group_score_sort_ncols": 32},
+        {"num_experts": 256, "num_groups": 4, "num_group_sum_topk": 2, "num_topk_groups": 2, "group_sort_ncols": 128, "group_score_sort_ncols": 32},
+        {"num_experts": 256, "num_groups": 4, "num_group_sum_topk": 2, "num_topk_groups": 4, "group_sort_ncols": 128, "group_score_sort_ncols": 32},
+        {"num_experts": 256, "num_groups": 8, "num_group_sum_topk": 1, "num_topk_groups": 2, "group_sort_ncols": 32, "group_score_sort_ncols": 32},
+        {"num_experts": 256, "num_groups": 8, "num_group_sum_topk": 1, "num_topk_groups": 4, "group_sort_ncols": 32, "group_score_sort_ncols": 32},
+        {"num_experts": 256, "num_groups": 8, "num_group_sum_topk": 2, "num_topk_groups": 2, "group_sort_ncols": 32, "group_score_sort_ncols": 32},
+        {"num_experts": 256, "num_groups": 8, "num_group_sum_topk": 2, "num_topk_groups": 4, "group_sort_ncols": 32, "group_score_sort_ncols": 32},
+        {"num_experts": 256, "num_groups": 16, "num_group_sum_topk": 1, "num_topk_groups": 2, "group_sort_ncols": 32, "group_score_sort_ncols": 32},
+        {"num_experts": 256, "num_groups": 16, "num_group_sum_topk": 1, "num_topk_groups": 4, "group_sort_ncols": 32, "group_score_sort_ncols": 32},
+        {"num_experts": 256, "num_groups": 16, "num_group_sum_topk": 2, "num_topk_groups": 2, "group_sort_ncols": 32, "group_score_sort_ncols": 32},
+        {"num_experts": 256, "num_groups": 16, "num_group_sum_topk": 2, "num_topk_groups": 4, "group_sort_ncols": 32, "group_score_sort_ncols": 32}
+      ],
+      "pto_dsl_source": true,
+      "ptoas": true,
+      "validation_assets": true,
+      "validation_compile": false,
+      "sim_correct": false,
+      "npu_correct": false,
+      "docs": true,
+      "notes": "Grouped TopK now uses PTO sort/pad/gather primitives twice: first inside each group to sum the top expert scores, then over per-group sums to select group indices. PTO-Gym validation currently uses uint32 group indices because PTO sort exposes uint32 index lanes; TileKernels' public torch API returns int64."
+    },
+    {"name": "top2_sum_gate", "family": "moe", "configs": [], "pto_dsl_source": false, "ptoas": false, "validation_assets": false, "validation_compile": false, "sim_correct": false, "npu_correct": false, "docs": true, "notes": "Deferred: remaining TopK-family gate after sort-based topk_gate and grouped topk_sum ports."},
+    {
+      "name": "group_count",
+      "family": "moe",
+      "configs": [
+        {"num_topk": 1, "num_groups": 1},
+        {"num_topk": 2, "num_groups": 4},
+        {"num_topk": 6, "num_groups": 9},
+        {"num_topk": 7, "num_groups": 9},
+        {"num_topk": 8, "num_groups": 32},
+        {"num_topk": 9, "num_groups": 32}
+      ],
+      "pto_dsl_source": true,
+      "ptoas": true,
+      "validation_assets": true,
+      "validation_compile": false,
+      "sim_correct": false,
+      "npu_correct": false,
+      "docs": true,
+      "notes": "Correctness-first scalar PTO scan avoids TileLang atomics by using one block and scanning per expert. This is real validation code, not the final high-throughput algorithm."
+    },
+    {
+      "name": "aux_fi",
+      "family": "moe",
+      "configs": [
+        {"num_topk": 1, "num_experts": 1},
+        {"num_topk": 2, "num_experts": 4},
+        {"num_topk": 6, "num_experts": 9},
+        {"num_topk": 7, "num_experts": 9},
+        {"num_topk": 8, "num_experts": 32},
+        {"num_topk": 9, "num_experts": 32}
+      ],
+      "pto_dsl_source": true,
+      "ptoas": true,
+      "validation_assets": true,
+      "validation_compile": false,
+      "sim_correct": false,
+      "npu_correct": false,
+      "docs": true,
+      "notes": "Correctness-first scalar PTO scan computes per-expert counts and scales by num_experts / (num_tokens * num_aux_topk)."
+    },
+    {
+      "name": "mask_indices_by_tp",
+      "family": "moe",
+      "configs": [
+        {"num_topk": 1, "num_experts": 1, "num_ep_ranks": 1, "num_tp_ranks": 2},
+        {"num_topk": 2, "num_experts": 9, "num_ep_ranks": 8, "num_tp_ranks": 2},
+        {"num_topk": 6, "num_experts": 9, "num_ep_ranks": 8, "num_tp_ranks": 4},
+        {"num_topk": 7, "num_experts": 4, "num_ep_ranks": 64, "num_tp_ranks": 4},
+        {"num_topk": 8, "num_experts": 32, "num_ep_ranks": 8, "num_tp_ranks": 8},
+        {"num_topk": 9, "num_experts": 32, "num_ep_ranks": 8, "num_tp_ranks": 8}
+      ],
+      "pto_dsl_source": true,
+      "ptoas": true,
+      "validation_assets": true,
+      "validation_compile": false,
+      "sim_correct": false,
+      "npu_correct": false,
+      "docs": true,
+      "notes": "Scalar PTO remaps int64 expert indices for the current TP rank and preserves TileKernels -1 sentinel behavior."
+    },
+    {
+      "name": "inplace_unique_group_indices",
+      "family": "moe",
+      "configs": [
+        {"num_topk": 1, "num_groups": 8},
+        {"num_topk": 2, "num_groups": 8},
+        {"num_topk": 6, "num_groups": 8},
+        {"num_topk": 7, "num_groups": 16},
+        {"num_topk": 8, "num_groups": 16},
+        {"num_topk": 9, "num_groups": 72}
+      ],
+      "pto_dsl_source": true,
+      "ptoas": true,
+      "validation_assets": true,
+      "validation_compile": false,
+      "sim_correct": false,
+      "npu_correct": false,
+      "docs": true,
+      "notes": "Correctness-first per-token scalar scan removes later duplicate non-negative group ids by writing TileKernels' -1 sentinel."
+    },
+    {"name": "get_fused_mapping", "family": "moe", "configs": [], "pto_dsl_source": false, "ptoas": false, "validation_assets": false, "validation_compile": false, "sim_correct": false, "npu_correct": false, "docs": true, "notes": "Deferred: scalar scan prototype hit PTOAS unsupported data-dependent scalar stores into pos_to_* mapping arrays; needs PTO tile/scatter design or backend support."},
+    {"name": "expand_to_fused", "family": "moe", "configs": [], "pto_dsl_source": false, "ptoas": false, "validation_assets": false, "validation_compile": false, "sim_correct": false, "npu_correct": false, "docs": true, "notes": "Deferred."},
+    {"name": "expand_to_fused_with_sf", "family": "moe", "configs": [], "pto_dsl_source": false, "ptoas": false, "validation_assets": false, "validation_compile": false, "sim_correct": false, "npu_correct": false, "docs": true, "notes": "Deferred: scale-factor behavior depends on packed low-precision format support."},
+    {"name": "reduce_fused", "family": "moe", "configs": [], "pto_dsl_source": false, "ptoas": false, "validation_assets": false, "validation_compile": false, "sim_correct": false, "npu_correct": false, "docs": true, "notes": "Deferred."},
+    {"name": "per_token_cast", "family": "quant", "configs": [], "pto_dsl_source": false, "ptoas": false, "validation_assets": false, "validation_compile": false, "sim_correct": false, "npu_correct": false, "docs": true, "notes": "Deferred: quant dtype and scale policy required."},
+    {"name": "per_block_cast", "family": "quant", "configs": [], "pto_dsl_source": false, "ptoas": false, "validation_assets": false, "validation_compile": false, "sim_correct": false, "npu_correct": false, "docs": true, "notes": "Deferred: block-scale layout and FP8/FP4 packing policy required."},
+    {"name": "per_channel_cast", "family": "quant", "configs": [], "pto_dsl_source": false, "ptoas": false, "validation_assets": false, "validation_compile": false, "sim_correct": false, "npu_correct": false, "docs": true, "notes": "Deferred."},
+    {"name": "per_channel_cast_fused", "family": "quant", "configs": [], "pto_dsl_source": false, "ptoas": false, "validation_assets": false, "validation_compile": false, "sim_correct": false, "npu_correct": false, "docs": true, "notes": "Deferred."},
+    {"name": "per_channel_cast_and_transpose", "family": "quant", "configs": [], "pto_dsl_source": false, "ptoas": false, "validation_assets": false, "validation_compile": false, "sim_correct": false, "npu_correct": false, "docs": true, "notes": "Deferred: fused quant+transpose needs byte-pattern compare."},
+    {"name": "swiglu_forward_and_per_token_cast", "family": "quant", "configs": [], "pto_dsl_source": false, "ptoas": false, "validation_assets": false, "validation_compile": false, "sim_correct": false, "npu_correct": false, "docs": true, "notes": "Deferred: fused quant path and dtype packing not in this wave."},
+    {"name": "swiglu_backward_and_per_token_cast", "family": "quant", "configs": [], "pto_dsl_source": false, "ptoas": false, "validation_assets": false, "validation_compile": false, "sim_correct": false, "npu_correct": false, "docs": true, "notes": "Deferred: fused quant path and dtype packing not in this wave."},
+    {"name": "swiglu_forward_and_per_channel_cast_and_transpose", "family": "quant", "configs": [], "pto_dsl_source": false, "ptoas": false, "validation_assets": false, "validation_compile": false, "sim_correct": false, "npu_correct": false, "docs": true, "notes": "Deferred: fused quant+transpose path and byte-pattern compare required."},
+    {"name": "cast_back", "family": "quant", "configs": [], "pto_dsl_source": false, "ptoas": false, "validation_assets": false, "validation_compile": false, "sim_correct": false, "npu_correct": false, "docs": true, "notes": "Deferred."},
+    {"name": "per_token_cast_back", "family": "quant", "configs": [], "pto_dsl_source": false, "ptoas": false, "validation_assets": false, "validation_compile": false, "sim_correct": false, "npu_correct": false, "docs": true, "notes": "Deferred."},
+    {"name": "per_block_cast_lossless", "family": "quant", "configs": [], "pto_dsl_source": false, "ptoas": false, "validation_assets": false, "validation_compile": false, "sim_correct": false, "npu_correct": false, "docs": true, "notes": "Deferred: exact packed-lossless semantics need byte-level host compare."},
+    {"name": "e5m6_paths", "family": "quant", "configs": [], "pto_dsl_source": false, "ptoas": false, "validation_assets": false, "validation_compile": false, "sim_correct": false, "npu_correct": false, "docs": true, "notes": "Deferred: PTO dtype support/policy still needs confirmation."},
+    {
+      "name": "engram_hash",
+      "family": "engram",
+      "configs": [
+        {"max_ngram_size": 3, "num_ngram_layers": 2, "num_embed_table_per_ngram": 8}
+      ],
+      "pto_dsl_source": true,
+      "ptoas": true,
+      "validation_assets": true,
+      "validation_compile": false,
+      "sim_correct": false,
+      "npu_correct": false,
+      "docs": true,
+      "notes": "Scalar/token-parallel int hash over n-gram token ids with int64 multipliers, per-layer vocab modulo, and offset addition."
+    },
+    {
+      "name": "engram_gate_fwd",
+      "family": "engram",
+      "configs": [
+        {"hidden_size": 2048, "hc_mult": 4},
+        {"hidden_size": 4096, "hc_mult": 4},
+        {"hidden_size": 7168, "hc_mult": 4}
+      ],
+      "pto_dsl_source": true,
+      "ptoas": true,
+      "validation_assets": true,
+      "validation_compile": false,
+      "sim_correct": false,
+      "npu_correct": false,
+      "docs": true,
+      "notes": "Fixed-hidden forward save path using 1024-wide row tiles, f32 RMS reductions, signed-sqrt sigmoid gating, bf16 output, and saved dot/gate/rstd intermediates."
+    },
+    {
+      "name": "engram_gate_bwd",
+      "family": "engram",
+      "configs": [
+        {"hidden_size": 2048, "num_persistent_blocks": 4, "hc_mult": 4},
+        {"hidden_size": 4096, "num_persistent_blocks": 4, "hc_mult": 4},
+        {"hidden_size": 7168, "num_persistent_blocks": 4, "hc_mult": 4}
+      ],
+      "pto_dsl_source": true,
+      "ptoas": true,
+      "validation_assets": true,
+      "validation_compile": false,
+      "sim_correct": false,
+      "npu_correct": false,
+      "docs": true,
+      "notes": "Correctness-first backward computes grad_x, grad_k, grad_v, and per-persistent-block grad_w_partial with regular tile reductions and stores."
+    },
+    {
+      "name": "grad_w_reduce",
+      "family": "engram",
+      "configs": [
+        {"num_persistent_blocks": 4, "hc_mult": 4},
+        {"num_persistent_blocks": 8, "hc_mult": 4}
+      ],
+      "pto_dsl_source": true,
+      "ptoas": true,
+      "validation_assets": true,
+      "validation_compile": false,
+      "sim_correct": false,
+      "npu_correct": false,
+      "docs": true,
+      "notes": "Tile f32 reduction over persistent partial gradients, bf16-to-f32 weight conversion, and in-place accumulation into hidden/embed weight gradients."
+    },
+    {
+      "name": "sinkhorn_normalize_fwd",
+      "family": "mhc",
+      "configs": [
+        {"mhc": 4, "repeat": 10, "eps": 1e-6}
+      ],
+      "pto_dsl_source": true,
+      "ptoas": true,
+      "validation_assets": true,
+      "validation_compile": false,
+      "sim_correct": false,
+      "npu_correct": false,
+      "docs": true,
+      "notes": "Tile f32 Sinkhorn forward for n0={1,2}, n1={1,1024,4096}; uses PTO texp, row/column reductions, row/column expansion, and tile division."
+    },
+    {
+      "name": "sinkhorn_normalize_bwd",
+      "family": "mhc",
+      "configs": [
+        {"mhc": 4, "repeat": 10, "eps": 1e-6}
+      ],
+      "pto_dsl_source": true,
+      "ptoas": true,
+      "validation_assets": true,
+      "validation_compile": false,
+      "sim_correct": false,
+      "npu_correct": false,
+      "docs": true,
+      "notes": "Tile f32 Sinkhorn backward for n0={1,2}, n1={1,1024,4096}; stores forward stage tiles and applies row/column normalization adjoints in reverse."
+    },
+    {
+      "name": "pre_split_mixes_fwd",
+      "family": "mhc",
+      "configs": [
+        {"mhc_mult": 4, "mhc_post_mult_value": 2.0, "mhc_pre_eps": 1e-2}
+      ],
+      "pto_dsl_source": true,
+      "ptoas": true,
+      "validation_assets": true,
+      "validation_compile": false,
+      "sim_correct": false,
+      "npu_correct": false,
+      "docs": true,
+      "notes": "Tile f32 forward splits 24-wide mix rows into pre/post/comb outputs using PTO tile sigmoid and row arithmetic."
+    },
+    {
+      "name": "pre_split_mixes_bwd",
+      "family": "mhc",
+      "configs": [
+        {"mhc_mult": 4, "mhc_post_mult_value": 2.0}
+      ],
+      "pto_dsl_source": true,
+      "ptoas": true,
+      "validation_assets": true,
+      "validation_compile": false,
+      "sim_correct": false,
+      "npu_correct": false,
+      "docs": true,
+      "notes": "Correctness-first single-block backward writes input gradients plus one partial 3-value scale gradient and 24-value base-gradient row."
+    },
+    {
+      "name": "pre_apply_mix_fwd",
+      "family": "mhc",
+      "configs": [
+        {"mhc_mult": 4}
+      ],
+      "pto_dsl_source": true,
+      "ptoas": true,
+      "validation_assets": true,
+      "validation_compile": false,
+      "sim_correct": false,
+      "npu_correct": false,
+      "docs": true,
+      "notes": "bf16 MHC pre-apply forward computes the hidden-axis weighted sum over mhc lanes with f32 accumulation."
+    },
+    {
+      "name": "pre_apply_mix_bwd",
+      "family": "mhc",
+      "configs": [
+        {"mhc_mult": 4}
+      ],
+      "pto_dsl_source": true,
+      "ptoas": true,
+      "validation_assets": true,
+      "validation_compile": false,
+      "sim_correct": false,
+      "npu_correct": false,
+      "docs": true,
+      "notes": "Correctness-first bf16 backward updates x_grad and writes per-token f32 mix_grad via hidden-axis dot products."
+    },
+    {
+      "name": "pre_norm_fn_fwd",
+      "family": "mhc",
+      "configs": [
+        {"hidden_size": 1280, "mhc_mult": 4, "eps": 1e-6},
+        {"hidden_size": 2560, "mhc_mult": 4, "eps": 1e-6},
+        {"hidden_size": 7168, "mhc_mult": 4, "eps": 1e-6}
+      ],
+      "pto_dsl_source": true,
+      "ptoas": true,
+      "validation_assets": true,
+      "validation_compile": false,
+      "sim_correct": false,
+      "npu_correct": false,
+      "docs": true,
+      "notes": "Baseline forward without optional norm-weight merge; computes RMS-normalized residual/FN projection with f32 output."
+    },
+    {"name": "mhc_pre_big_fuse", "family": "mhc", "configs": [], "pto_dsl_source": false, "ptoas": false, "validation_assets": false, "validation_compile": false, "sim_correct": false, "npu_correct": false, "docs": true, "notes": "Deferred: fused path should wait for verified smaller stages."},
+    {
+      "name": "head_compute_mix_fwd",
+      "family": "mhc",
+      "configs": [
+        {"mhc_mult": 4, "eps": 1e-6}
+      ],
+      "pto_dsl_source": true,
+      "ptoas": true,
+      "validation_assets": true,
+      "validation_compile": false,
+      "sim_correct": false,
+      "npu_correct": false,
+      "docs": true,
+      "notes": "Tile f32 sigmoid head mix forward over num_tokens={0,4001}; uses PTO texp/trecip instead of scalar math.exp."
+    },
+    {
+      "name": "head_compute_mix_bwd",
+      "family": "mhc",
+      "configs": [
+        {"mhc_mult": 4}
+      ],
+      "pto_dsl_source": true,
+      "ptoas": true,
+      "validation_assets": true,
+      "validation_compile": false,
+      "sim_correct": false,
+      "npu_correct": false,
+      "docs": true,
+      "notes": "Correctness-first single-block backward computes input gradient plus one partial scale gradient and one partial base-gradient row."
+    },
+    {
+      "name": "post_fwd",
+      "family": "mhc",
+      "configs": [
+        {"mhc_mult": 4}
+      ],
+      "pto_dsl_source": true,
+      "ptoas": true,
+      "validation_assets": true,
+      "validation_compile": false,
+      "sim_correct": false,
+      "npu_correct": false,
+      "docs": true,
+      "notes": "bf16 MHC post forward combines post-layer x and comb-residual branches with f32 accumulation."
+    },
+    {
+      "name": "post_bwd",
+      "family": "mhc",
+      "configs": [
+        {"mhc_mult": 4}
+      ],
+      "pto_dsl_source": true,
+      "ptoas": true,
+      "validation_assets": true,
+      "validation_compile": false,
+      "sim_correct": false,
+      "npu_correct": false,
+      "docs": true,
+      "notes": "Correctness-first bf16 backward writes gradients for x, residual, post_layer_mix, and comb_res_mix."
+    },
+    {"name": "mhc_multilayer_recompute", "family": "mhc", "configs": [], "pto_dsl_source": false, "ptoas": false, "validation_assets": false, "validation_compile": false, "sim_correct": false, "npu_correct": false, "docs": true, "notes": "Deferred."}
+  ],
+  "gaps": [
+    "Generated validation cases include host allocation, launch, golden-data emission, and output comparison for deterministic runtime shapes per compiled variant; local validation_compile is still blocked by missing Ascend/CANN tooling.",
+    "Atomics-heavy MoE counters and mapping kernels need PTO-native algorithms instead of direct TileLang warp/atomic translation.",
+    "topk_gate and grouped top-k sum now use PTO sort primitives; top2_sum_gate and int64 index widening remain open before the MoE TopK family is complete.",
+    "FP8/FP4/E5M6 and fused quant paths need packed-format policy plus byte-pattern host comparison before correctness can be claimed."
+  ]
+}

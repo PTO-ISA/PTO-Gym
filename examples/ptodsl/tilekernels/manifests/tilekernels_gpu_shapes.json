@@ -1,0 +1,537 @@
+{
+  "schema_version": 1,
+  "source": "/Users/zhoubot/TileKernels non-benchmark correctness grids",
+  "scope": "deterministic GPU/NPU shape grids for PTO-Gym TileKernels validation",
+  "notes": [
+    "These shapes mirror deterministic TileKernels correctness inputs where PTO dtype support exists.",
+    "Randomized TileKernels-dependent row counts are not materialized here; capture them in the CUDA/Ascend environment before adding runtime correctness cases.",
+    "fp8_e4m3 entries are intentionally marked compile_only until host byte-pattern comparison is implemented."
+  ],
+  "kernels": {
+    "moe.normalize_weight": {
+      "compile_configs": [
+        {"num_topk": 1},
+        {"num_topk": 2},
+        {"num_topk": 6},
+        {"num_topk": 7},
+        {"num_topk": 8},
+        {"num_topk": 9}
+      ],
+      "runtime_shapes": {
+        "num_tokens": [0, 4001],
+        "num_topk": [1, 2, 6, 7, 8, 9],
+        "dtype": ["f32"]
+      },
+      "runtime_argument_mapping": {
+        "topk_weights": "[num_tokens, num_topk]",
+        "denominator": "[num_tokens]",
+        "normalized_weights": "[num_tokens, num_topk]"
+      },
+      "reference": "denominator = 1e-20 + sum(topk_weights, axis=1); normalized = topk_weights / denominator[:, None]"
+    },
+    "moe.mask_indices_by_tp": {
+      "runtime_shapes": {
+        "num_tokens": [0, 4001],
+        "num_topk": [1, 2, 6, 7, 8, 9],
+        "num_experts": [1, 4, 9, 32],
+        "num_ep_ranks": [1, 8, 64],
+        "num_tp_ranks": [2, 4, 8],
+        "dtype": ["i64"]
+      },
+      "runtime_argument_mapping": {
+        "indices": "[num_tokens, num_topk]",
+        "masked_indices": "[num_tokens, num_topk]",
+        "per_gpu": "n // num_ep_ranks",
+        "per_dp": "num_tp_ranks * per_gpu",
+        "num_tokens": "indices.shape[0]"
+      },
+      "reference": "keep expert if expert >= 0 and (expert // per_gpu) % num_tp_ranks == tp_rank; then remap by subtracting TP/DP offsets, otherwise -1"
+    },
+    "moe.group_count": {
+      "runtime_shapes": {
+        "num_tokens": [0, 4001],
+        "num_topk": [1, 2, 6, 7, 8, 9],
+        "num_groups": [1, 4, 9, 32],
+        "dtype": ["i64_input", "i32_output"]
+      },
+      "runtime_argument_mapping": {
+        "group_idx": "[num_tokens, num_topk]",
+        "out": "[num_groups]",
+        "num_tokens": "group_idx.shape[0]"
+      },
+      "reference": "out[g] = count_nonzero(group_idx == g), ignoring -1 sentinels",
+      "algorithm_note": "PTO port is a correctness-first single-block scan that avoids TileLang atomics; production path still needs a parallel reduction design."
+    },
+    "moe.aux_fi": {
+      "runtime_shapes": {
+        "num_tokens": [0, 4001],
+        "num_topk": [1, 2, 6, 7, 8, 9],
+        "num_experts": [1, 4, 9, 32],
+        "num_aux_topk": ["1 or num_topk"],
+        "dtype": ["i64_input", "f32_output"]
+      },
+      "runtime_argument_mapping": {
+        "topk_idx": "[num_tokens, num_topk]",
+        "out": "[num_experts]",
+        "num_aux_topk": "TileKernels test parameter",
+        "num_tokens": "topk_idx.shape[0]"
+      },
+      "reference": "out[e] = count_nonzero(topk_idx == e) * num_experts / (num_tokens * num_aux_topk)",
+      "algorithm_note": "PTO port is a correctness-first single-block scan that avoids TileLang atomics; production path still needs a parallel reduction design."
+    },
+    "moe.topk_gate": {
+      "compile_configs": [
+        {"num_experts": 72, "num_topk": 6, "sort_ncols": 128},
+        {"num_experts": 32, "num_topk": 6, "sort_ncols": 32},
+        {"num_experts": 64, "num_topk": 6, "sort_ncols": 128},
+        {"num_experts": 96, "num_topk": 6, "sort_ncols": 128},
+        {"num_experts": 16, "num_topk": 6, "sort_ncols": 32},
+        {"num_experts": 36, "num_topk": 6, "sort_ncols": 128},
+        {"num_experts": 108, "num_topk": 6, "sort_ncols": 128},
+        {"num_experts": 128, "num_topk": 6, "sort_ncols": 128},
+        {"num_experts": 144, "num_topk": 6, "sort_ncols": 512},
+        {"num_experts": 256, "num_topk": 8, "sort_ncols": 512}
+      ],
+      "runtime_shapes": {
+        "num_tokens": [0, 4001, 8001],
+        "num_experts": [16, 32, 36, 64, 72, 96, 108, 128, 144, 256],
+        "num_topk": [6, 8],
+        "dtype": ["f32_input", "u32_output"]
+      },
+      "runtime_argument_mapping": {
+        "scores": "[num_tokens, num_experts]",
+        "inidx": "[sort_ncols], auxiliary uint32 index vector used by PTO-ISA TopK",
+        "topk_idx": "[num_tokens, num_topk]"
+      },
+      "reference": "stable descending TopK over scores; ties prefer the lower expert index",
+      "algorithm_note": "PTO-DSL uses tfillpad_expand with PadValue::Min, sort32, mrgsort, and gather, following the PTO-ISA manual TopK kernel. Output is uint32 in PTO-Gym validation because PTO sort emits uint32 index lanes; TileKernels' public torch wrapper returns int64."
+    },
+    "moe.topk_sum_and_topk_group_idx": {
+      "runtime_shapes": {
+        "num_tokens": [0, 4001, 8001],
+        "num_experts": [72, 256],
+        "num_groups": [4, 8, 12, 16],
+        "num_group_sum_topk": [1, 2],
+        "num_topk_groups": [2, 4],
+        "dtype": ["f32_input", "u32_output"]
+      },
+      "runtime_argument_mapping": {
+        "scores": "[num_tokens, num_groups, num_experts_per_group]",
+        "inidx": "[max(group_sort_ncols, group_score_sort_ncols)], auxiliary uint32 index vector used by PTO sort",
+        "group_idx": "[num_tokens, num_topk_groups]"
+      },
+      "reference": "sum the top num_group_sum_topk expert scores per group, then stable TopK over group scores",
+      "algorithm_note": "PTO-DSL pads and sorts each group with PadValue::Min, gathers the top expert scores, reduces them with row_sum, then pads and sorts the per-group sums to gather uint32 group indices. TileKernels' public torch API widens group indices to int64."
+    },
+    "moe.inplace_unique_group_indices": {
+      "compile_configs": [
+        {"num_topk": 1, "num_groups": 8},
+        {"num_topk": 2, "num_groups": 8},
+        {"num_topk": 6, "num_groups": 8},
+        {"num_topk": 7, "num_groups": 16},
+        {"num_topk": 8, "num_groups": 16},
+        {"num_topk": 9, "num_groups": 72}
+      ],
+      "runtime_shapes": {
+        "num_tokens": [0, 4001],
+        "num_topk": [1, 2, 6, 7, 8, 9],
+        "num_groups": [8, 16, 72],
+        "dtype": ["i64_inout"]
+      },
+      "runtime_argument_mapping": {
+        "group_indices": "[num_tokens, num_topk]",
+        "num_tokens": "group_indices.shape[0]"
+      },
+      "reference": "For each token row, preserve the first non-negative occurrence of each group id and replace later duplicates with -1.",
+      "algorithm_note": "PTO port is a correctness-first scalar row scan. It preserves TileKernels sentinel behavior and avoids the CUDA bit-mask implementation."
+    },
+    "transpose.transpose": {
+      "runtime_shapes": {
+        "num_tokens": [0, 4032, 8064],
+        "hidden": [576, 2048, 2560, 3072, 4096, 6144, 7168],
+        "dtype": ["bf16", "f32"]
+      },
+      "runtime_argument_mapping": {
+        "rows": "num_tokens",
+        "cols": "hidden",
+        "stride": "hidden",
+        "x": "[num_tokens, hidden]",
+        "out": "[hidden, num_tokens]"
+      },
+      "compile_only": {
+        "dtype": ["fp8_e4m3"],
+        "reason": "host byte-pattern compare is not implemented"
+      }
+    },
+    "transpose.batched_transpose": {
+      "runtime_shapes": {
+        "num_experts": [8, 32],
+        "num_tokens": [0, 4032, 8064],
+        "hidden": [576, 2048, 2560, 3072, 4096, 6144, 7168],
+        "dtype": ["bf16", "f32"]
+      },
+      "runtime_argument_mapping": {
+        "batches": "num_experts",
+        "rows": "num_tokens",
+        "cols": "hidden",
+        "stride": "hidden",
+        "x": "[num_experts, num_tokens, hidden]",
+        "out": "[num_experts, hidden, num_tokens]"
+      },
+      "compile_only": {
+        "dtype": ["fp8_e4m3"],
+        "reason": "host byte-pattern compare is not implemented"
+      }
+    },
+    "engram.fused_weight": {
+      "runtime_shapes": {
+        "hc": [4],
+        "hidden": [2048, 2560, 3072, 4096, 6144, 7168],
+        "input_dtype": ["bf16"],
+        "output_dtype": ["f32"]
+      },
+      "runtime_argument_mapping": {
+        "weight_hidden": "[hc, hidden]",
+        "weight_embed": "[hc, hidden]",
+        "weight_fused": "[hc, hidden]"
+      },
+      "reference": "weight_fused = weight_hidden.astype(f32) * weight_embed.astype(f32)"
+    },
+    "engram.engram_hash": {
+      "compile_configs": [
+        {"max_ngram_size": 3, "num_ngram_layers": 2, "num_embed_table_per_ngram": 8}
+      ],
+      "runtime_shapes": {
+        "num_tokens": [0, 4001],
+        "max_ngram_size": [3],
+        "num_ngram_layers": [2],
+        "num_embed_table_per_ngram": [8],
+        "dtype": ["i32_input", "i64_multiplier", "i32_output"]
+      },
+      "runtime_argument_mapping": {
+        "ngram_token_ids": "[num_tokens, max_ngram_size]",
+        "multipliers": "[num_ngram_layers, max_ngram_size]",
+        "vocab_sizes": "[num_ngram_layers, max_ngram_size - 1, num_embed_table_per_ngram]",
+        "offsets": "[num_ngram_layers, (max_ngram_size - 1) * num_embed_table_per_ngram]",
+        "output": "[num_ngram_layers, num_tokens, (max_ngram_size - 1) * num_embed_table_per_ngram]"
+      },
+      "reference": "Layer-local int64 xor hash over n-gram token ids, followed by vocab modulo and offset addition for each embedding table.",
+      "algorithm_note": "PTO port uses scalar/token-parallel integer load/store operations; no TileLang-specific CUDA intrinsics are required."
+    },
+    "engram.engram_gate_fwd": {
+      "compile_configs": [
+        {"hidden_size": 2048, "hc_mult": 4},
+        {"hidden_size": 4096, "hc_mult": 4},
+        {"hidden_size": 7168, "hc_mult": 4}
+      ],
+      "runtime_shapes": {
+        "num_tokens": [0, 17],
+        "hidden": [2048, 4096, 7168],
+        "hc_mult": [4],
+        "input_dtype": ["bf16_xkv", "f32_weight_fused"],
+        "output_dtype": ["bf16_output", "f32_intermediates"]
+      },
+      "runtime_argument_mapping": {
+        "hidden_states": "[num_tokens, hc_mult, hidden]",
+        "k": "[num_tokens, hc_mult, hidden]",
+        "v": "[num_tokens, hidden]",
+        "weight_fused": "[hc_mult, hidden]",
+        "output": "[num_tokens, hc_mult, hidden]",
+        "dot_out": "[num_tokens, hc_mult]",
+        "gate_score": "[num_tokens, hc_mult]",
+        "rstd_x": "[num_tokens, hc_mult]",
+        "rstd_k": "[num_tokens, hc_mult]"
+      },
+      "reference": "output = x + sigmoid(sign(dot)*sqrt(max(abs(dot), clamp))) * v, where dot = sum(x*k*weight_fused)*rstd_x*rstd_k/sqrt(hidden).",
+      "algorithm_note": "PTO-DSL uses fixed-hidden modules, 1024-wide row tiles, f32 row reductions for RMS/dot, tile select for signed sqrt, and TCvt back to bf16 output."
+    },
+    "engram.engram_gate_bwd": {
+      "compile_configs": [
+        {"hidden_size": 2048, "num_persistent_blocks": 4, "hc_mult": 4},
+        {"hidden_size": 4096, "num_persistent_blocks": 4, "hc_mult": 4},
+        {"hidden_size": 7168, "num_persistent_blocks": 4, "hc_mult": 4}
+      ],
+      "runtime_shapes": {
+        "num_tokens": [0, 17],
+        "hidden": [2048, 4096, 7168],
+        "hc_mult": [4],
+        "num_persistent_blocks": [4],
+        "input_dtype": ["bf16_grad_xkv", "f32_weight_and_intermediates"],
+        "output_dtype": ["bf16_grad_xkv", "f32_grad_w_partial"]
+      },
+      "runtime_argument_mapping": {
+        "grad_out": "[num_tokens, hc_mult, hidden]",
+        "hidden_states": "[num_tokens, hc_mult, hidden]",
+        "k": "[num_tokens, hc_mult, hidden]",
+        "v": "[num_tokens, hidden]",
+        "weight_fused": "[hc_mult, hidden]",
+        "dot_in": "[num_tokens, hc_mult]",
+        "gate_in": "[num_tokens, hc_mult]",
+        "rstd_x_in": "[num_tokens, hc_mult]",
+        "rstd_k_in": "[num_tokens, hc_mult]",
+        "grad_x": "[num_tokens, hc_mult, hidden]",
+        "grad_k": "[num_tokens, hc_mult, hidden]",
+        "grad_v": "[num_tokens, hidden]",
+        "grad_w_partial": "[num_persistent_blocks, hc_mult, hidden]"
+      },
+      "reference": "Backward of Engram signed-sqrt gate: grad_v sums grad_out*gate over heads; grad_x/grad_k use dgate-scaled RMSNorm dot adjoints; grad_w_partial stores per-persistent-block sum(dgate*x*k).",
+      "algorithm_note": "Correctness-first PTO-DSL keeps regular row-tile loads/stores and avoids scatter; persistent blocks partition tokens and emit one f32 partial weight-gradient row per block/head."
+    },
+    "engram.grad_w_reduce": {
+      "compile_configs": [
+        {"num_persistent_blocks": 4, "hc_mult": 4},
+        {"num_persistent_blocks": 8, "hc_mult": 4}
+      ],
+      "runtime_shapes": {
+        "hidden": [2048, 4096, 7168],
+        "hc_mult": [4],
+        "num_persistent_blocks": [4, 8],
+        "input_dtype": ["f32_partial", "bf16_weights"],
+        "output_dtype": ["f32_inout"]
+      },
+      "runtime_argument_mapping": {
+        "grad_w_partial": "[num_persistent_blocks, hc_mult, hidden]",
+        "weight_hidden": "[hc_mult, hidden]",
+        "weight_embed": "[hc_mult, hidden]",
+        "grad_weight_hidden": "[hc_mult, hidden]",
+        "grad_weight_embed": "[hc_mult, hidden]"
+      },
+      "reference": "grad_w_sum = sum(grad_w_partial, axis=0); grad_weight_hidden += grad_w_sum * weight_embed.float(); grad_weight_embed += grad_w_sum * weight_hidden.float().",
+      "algorithm_note": "PTO-DSL uses 1024-wide row tiles, TCvt for bf16 weights, and f32 accumulation into inout gradient buffers."
+    },
+    "mhc.expand_to_mhc_fwd": {
+      "runtime_shapes": {
+        "n0": [1, 2],
+        "n1": [1024, 4096],
+        "mhc_mult": [2, 4, 8],
+        "hidden": [1280, 2560, 7168],
+        "dtype": ["bf16"]
+      },
+      "runtime_argument_mapping": {
+        "tokens": "n0 * n1",
+        "x": "[n0, n1, hidden]",
+        "out": "[n0, n1, mhc_mult, hidden]"
+      },
+      "reference": "out[n0, n1, mhc, hidden] = x[n0, n1, hidden]"
+    },
+    "mhc.expand_to_mhc_bwd": {
+      "runtime_shapes": {
+        "n0": [1, 2],
+        "n1": [1024, 4096],
+        "mhc_mult": [2, 4, 8],
+        "hidden": [1280, 2560, 7168],
+        "dtype": ["bf16"]
+      },
+      "runtime_argument_mapping": {
+        "tokens": "n0 * n1",
+        "out_grad": "[n0, n1, mhc_mult, hidden]",
+        "x_grad": "[n0, n1, hidden]"
+      },
+      "reference": "x_grad[n0, n1, hidden] = sum(out_grad[n0, n1, mhc, hidden], axis=mhc)"
+    },
+    "mhc.pre_apply_mix_fwd": {
+      "runtime_shapes": {
+        "n0": [1, 2],
+        "n1": [1024, 4096],
+        "mhc_mult": [4],
+        "hidden": [1280, 2560, 7680],
+        "dtype": ["bf16"]
+      },
+      "runtime_argument_mapping": {
+        "tokens": "n0 * n1",
+        "x": "[n0, n1, mhc_mult, hidden]",
+        "mix": "[n0, n1, mhc_mult]",
+        "out": "[n0, n1, hidden]"
+      },
+      "reference": "out[n0, n1, hidden] = sum(x[n0, n1, mhc, hidden] * mix[n0, n1, mhc], axis=mhc)",
+      "algorithm_note": "PTO-DSL uses 1024-wide hidden tiles, bf16-to-f32 conversion, f32 accumulation, and bf16 output conversion."
+    },
+    "mhc.pre_apply_mix_bwd": {
+      "runtime_shapes": {
+        "n0": [1, 2],
+        "n1": [1024, 4096],
+        "mhc_mult": [4],
+        "hidden": [1280, 2560, 7680],
+        "dtype": ["bf16"]
+      },
+      "runtime_argument_mapping": {
+        "tokens": "n0 * n1",
+        "out_grad": "[n0, n1, hidden]",
+        "x": "[n0, n1, mhc_mult, hidden]",
+        "mix": "[n0, n1, mhc_mult]",
+        "x_grad": "[n0, n1, mhc_mult, hidden]",
+        "mix_grad": "[n0, n1, mhc_mult]"
+      },
+      "reference": "x_grad += mix[..., None] * out_grad[:, :, None, :]; mix_grad = sum(out_grad[:, :, None, :] * x, axis=hidden)",
+      "algorithm_note": "Current PTO port is correctness-first and accumulates each token/mhc mix gradient inside one block row."
+    },
+    "mhc.pre_norm_fn_fwd": {
+      "runtime_shapes": {
+        "num_tokens": [13, 4096],
+        "mhc_mult": [4],
+        "hidden": [1280, 2560, 7168],
+        "eps": [1e-6],
+        "dtype": ["bf16 residual", "f32 fn/output"]
+      },
+      "runtime_argument_mapping": {
+        "residual": "[num_tokens, mhc_mult, hidden]",
+        "mhc_fn": "[mhc_mult * (2 + mhc_mult), mhc_mult * hidden]",
+        "output": "[num_tokens, mhc_mult * (2 + mhc_mult)]"
+      },
+      "reference": "output = (residual.flatten(-2) @ mhc_fn.T) * rsqrt(mean(residual.flatten(-2)^2) + eps)",
+      "algorithm_note": "Baseline forward omits optional norm-weight merge; PTO-DSL uses 1024-wide hidden tiles, f32 dot/sqsum reductions, and tile rsqrt."
+    },
+    "mhc.sinkhorn_normalize_fwd": {
+      "runtime_shapes": {
+        "n0": [1, 2],
+        "n1": [1, 1024, 4096],
+        "mhc": [4],
+        "repeat": [10],
+        "eps": [1e-6],
+        "dtype": ["f32"]
+      },
+      "runtime_argument_mapping": {
+        "num_tokens": "n0 * n1",
+        "x": "[num_tokens, mhc, mhc]",
+        "out": "[num_tokens, mhc, mhc]"
+      },
+      "reference": "TileKernels Sinkhorn order: row softmax, add eps, column normalization, then repeat row/column normalization",
+      "algorithm_note": "PTO-DSL uses tile exp, row/column reductions, row/column expand, and tile division. No scalar math.exp remains."
+    },
+    "mhc.sinkhorn_normalize_bwd": {
+      "runtime_shapes": {
+        "n0": [1, 2],
+        "n1": [1, 1024, 4096],
+        "mhc": [4],
+        "repeat": [10],
+        "eps": [1e-6],
+        "dtype": ["f32"]
+      },
+      "runtime_argument_mapping": {
+        "num_tokens": "n0 * n1",
+        "grad_output": "[num_tokens, mhc, mhc]",
+        "x": "[num_tokens, mhc, mhc]",
+        "grad_input": "[num_tokens, mhc, mhc]"
+      },
+      "reference": "Reverse-mode NumPy reference generated from the same normalization order as TileKernels",
+      "algorithm_note": "PTO-DSL stores forward stage tiles and applies tile row/column normalization adjoints in reverse order."
+    },
+    "mhc.head_compute_mix_fwd": {
+      "runtime_shapes": {
+        "num_tokens": [0, 4001],
+        "mhc_mult": [4],
+        "eps": [1e-6],
+        "dtype": ["f32"]
+      },
+      "runtime_argument_mapping": {
+        "input_mix": "[num_tokens, mhc_mult]",
+        "mhc_scale": "[1]",
+        "mhc_base": "[mhc_mult]",
+        "output_mix": "[num_tokens, mhc_mult]"
+      },
+      "reference": "output_mix = sigmoid(input_mix * mhc_scale[0] + mhc_base[None, :]) + eps",
+      "algorithm_note": "PTO-DSL emits sigmoid through tile texp and trecip operations so local ptoas does not need scalar math.exp lowering."
+    },
+    "mhc.head_compute_mix_bwd": {
+      "runtime_shapes": {
+        "num_tokens": [0, 4001],
+        "mhc_mult": [4],
+        "dtype": ["f32"]
+      },
+      "runtime_argument_mapping": {
+        "output_mix_grad": "[num_tokens, mhc_mult]",
+        "input_mix": "[num_tokens, mhc_mult]",
+        "mhc_scale": "[1]",
+        "mhc_base": "[mhc_mult]",
+        "input_mix_grad": "[num_tokens, mhc_mult]",
+        "mhc_scale_grad_partial": "[1]",
+        "mhc_base_grad_partial": "[mhc_mult]"
+      },
+      "reference": "sig = sigmoid(input_mix * mhc_scale[0] + mhc_base); grad = output_mix_grad * sig * (1 - sig); input_mix_grad = grad * mhc_scale[0]; partial scale/base gradients are row sums.",
+      "algorithm_note": "Current PTO port is correctness-first and single-block for the partial gradient ABI; a later performance pass can distribute reducers across blocks."
+    },
+    "mhc.pre_split_mixes_fwd": {
+      "runtime_shapes": {
+        "num_tokens": [0, 4001],
+        "mhc_mult": [4],
+        "mhc_post_mult_value": [2.0],
+        "mhc_pre_eps": [1e-2],
+        "dtype": ["f32"]
+      },
+      "runtime_argument_mapping": {
+        "input_mixes": "[num_tokens, mhc_mult * 2 + mhc_mult * mhc_mult]",
+        "mhc_scale": "[3]",
+        "mhc_base": "[mhc_mult * 2 + mhc_mult * mhc_mult]",
+        "pre_layer_mix": "[num_tokens, mhc_mult]",
+        "post_layer_mix": "[num_tokens, mhc_mult]",
+        "comb_res_mix": "[num_tokens, mhc_mult * mhc_mult]"
+      },
+      "reference": "pre = sigmoid(input[:4] * scale[0] + base[:4]) + eps; post = sigmoid(input[4:8] * scale[1] + base[4:8]) * post_mult; comb = input[8:24] * scale[2] + base[8:24].",
+      "algorithm_note": "PTO-DSL uses 24-wide row tiles with 4-wide and 16-wide subsets; sigmoid uses tile texp/trecip."
+    },
+    "mhc.post_fwd": {
+      "runtime_shapes": {
+        "n0": [1, 2],
+        "n1": [4096],
+        "mhc_mult": [4],
+        "hidden": [1280, 2560, 7168],
+        "dtype": ["bf16"]
+      },
+      "runtime_argument_mapping": {
+        "tokens": "n0 * n1",
+        "comb_res_mix": "[n0, n1, mhc_mult, mhc_mult]",
+        "residual": "[n0, n1, mhc_mult, hidden]",
+        "post_layer_mix": "[n0, n1, mhc_mult]",
+        "x": "[n0, n1, hidden]",
+        "out": "[n0, n1, mhc_mult, hidden]"
+      },
+      "reference": "out[token, out_mhc, hidden] = post_layer_mix[token, out_mhc] * x[token, hidden] + sum(comb_res_mix[token, in_mhc, out_mhc] * residual[token, in_mhc, hidden], axis=in_mhc)",
+      "algorithm_note": "PTO-DSL uses 1024-wide hidden tiles, bf16-to-f32 conversion, f32 accumulation, and bf16 output conversion."
+    },
+    "mhc.post_bwd": {
+      "runtime_shapes": {
+        "n0": [1, 2],
+        "n1": [4096],
+        "mhc_mult": [4],
+        "hidden": [1280, 2560, 7168],
+        "dtype": ["bf16"]
+      },
+      "runtime_argument_mapping": {
+        "tokens": "n0 * n1",
+        "out_grad": "[n0, n1, mhc_mult, hidden]",
+        "comb_res_mix": "[n0, n1, mhc_mult, mhc_mult]",
+        "residual": "[n0, n1, mhc_mult, hidden]",
+        "post_layer_mix": "[n0, n1, mhc_mult]",
+        "x": "[n0, n1, hidden]",
+        "comb_res_mix_grad": "[n0, n1, mhc_mult, mhc_mult]",
+        "residual_grad": "[n0, n1, mhc_mult, hidden]",
+        "post_layer_mix_grad": "[n0, n1, mhc_mult]",
+        "x_grad": "[n0, n1, hidden]"
+      },
+      "reference": "Backward of the post-layer x branch and comb-residual branch, with hidden-axis reductions for mix gradients.",
+      "algorithm_note": "Current PTO port is correctness-first and computes each token's mix-gradient rows inside one block."
+    },
+    "mhc.pre_split_mixes_bwd": {
+      "runtime_shapes": {
+        "num_tokens": [0, 4001],
+        "mhc_mult": [4],
+        "mhc_post_mult_value": [2.0],
+        "dtype": ["f32"]
+      },
+      "runtime_argument_mapping": {
+        "pre_layer_mix_grad": "[num_tokens, mhc_mult]",
+        "post_layer_mix_grad": "[num_tokens, mhc_mult]",
+        "comb_res_mix_grad": "[num_tokens, mhc_mult * mhc_mult]",
+        "input_mixes": "[num_tokens, mhc_mult * 2 + mhc_mult * mhc_mult]",
+        "post_layer_mix": "[num_tokens, mhc_mult]",
+        "mhc_scale": "[3]",
+        "mhc_base": "[mhc_mult * 2 + mhc_mult * mhc_mult]",
+        "input_mixes_grad": "[num_tokens, mhc_mult * 2 + mhc_mult * mhc_mult]",
+        "mhc_scale_grad_partial": "[3]",
+        "mhc_base_grad_partial": "[mhc_mult * 2 + mhc_mult * mhc_mult]"
+      },
+      "reference": "Backward of the pre/post sigmoid branches plus linear comb branch; partial scale gradients are sum(unscaled_grad * input), base gradients are sum(unscaled_grad).",
+      "algorithm_note": "Current PTO port is correctness-first and single-block for the partial-gradient ABI; a later performance pass can distribute reducers across blocks."
+    }
+  }
+}

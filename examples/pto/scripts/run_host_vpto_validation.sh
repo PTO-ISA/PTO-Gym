@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 VPTO_ROOT="${ROOT_DIR}/examples/pto"
-CASES_ROOT="${VPTO_ROOT}"
+CASES_ROOT="${CASES_ROOT:-${VPTO_ROOT}}"
 
 WORK_SPACE="${WORK_SPACE:-}"
 ASCEND_HOME_PATH="${ASCEND_HOME_PATH:-}"
