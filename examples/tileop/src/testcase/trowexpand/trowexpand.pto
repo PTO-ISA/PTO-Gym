@@ -1,0 +1,276 @@
+// Copyright (c) 2026 Huawei Technologies Co., Ltd.
+// This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+// CANN Open Software License Agreement Version 2.0 (the "License").
+// Please refer to the License for details. You can not use this file except in compliance with the License.
+// THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+// INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+// See LICENSE in the root of the software repository for the full text of the License.
+
+// TileLang ST kernels for pto.trowexpand: row broadcast operation.
+// dst[row, col] = src[row, 0] (broadcast scalar per row)
+// srcCols = 32/sizeof(dtype) for NPU 32-byte alignment
+
+module {
+  // f32_16x128: rows=16, srcCols=8, dstValidCols=128, dstCols=128
+  func.func @TROWEXPAND_f32_16x128(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+    %c0    = arith.constant 0    : index
+    %c1    = arith.constant 1    : index
+    %c8    = arith.constant 8    : index
+    %c16   = arith.constant 16   : index
+    %c128  = arith.constant 128  : index
+    %c2048 = arith.constant 2048 : index
+
+    %src_view = pto.make_tensor_view %src_ptr,
+      shape = [%c1, %c1, %c1, %c16, %c8],
+      strides = [%c128, %c128, %c128, %c8, %c1]
+      : !pto.tensor_view<1x1x1x16x8xf32>
+    %dst_view = pto.make_tensor_view %dst_ptr,
+      shape = [%c1, %c1, %c1, %c16, %c128],
+      strides = [%c2048, %c2048, %c2048, %c128, %c1]
+      : !pto.tensor_view<1x1x1x16x128xf32>
+
+    %src_part = pto.partition_view %src_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c16, %c8]
+      : !pto.tensor_view<1x1x1x16x8xf32> -> !pto.partition_tensor_view<1x1x1x16x8xf32>
+    %dst_part = pto.partition_view %dst_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c16, %c128]
+      : !pto.tensor_view<1x1x1x16x128xf32> -> !pto.partition_tensor_view<1x1x1x16x128xf32>
+
+    %src = pto.alloc_tile
+      : !pto.tile_buf<vec, 16x8xf32, valid=16x1>
+    %dst = pto.alloc_tile
+      : !pto.tile_buf<vec, 16x128xf32>
+
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x16x8xf32>)
+              outs(%src : !pto.tile_buf<vec, 16x8xf32, valid=16x1>)
+
+    pto.trowexpand ins(%src : !pto.tile_buf<vec, 16x8xf32, valid=16x1>)
+                   outs(%dst : !pto.tile_buf<vec, 16x128xf32>)
+
+    pto.tstore ins(%dst : !pto.tile_buf<vec, 16x128xf32>)
+               outs(%dst_part : !pto.partition_tensor_view<1x1x1x16x128xf32>)
+    return
+  }
+
+  // f32_16x127: rows=16, srcCols=8, dstValidCols=127, dstCols=128
+  func.func @TROWEXPAND_f32_16x127(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+    %c0    = arith.constant 0    : index
+    %c1    = arith.constant 1    : index
+    %c8    = arith.constant 8    : index
+    %c16   = arith.constant 16   : index
+    %c127  = arith.constant 127  : index
+    %c128  = arith.constant 128  : index
+    %c2048 = arith.constant 2048 : index
+
+    %src_view = pto.make_tensor_view %src_ptr,
+      shape = [%c1, %c1, %c1, %c16, %c8],
+      strides = [%c128, %c128, %c128, %c8, %c1]
+      : !pto.tensor_view<1x1x1x16x8xf32>
+    %dst_view = pto.make_tensor_view %dst_ptr,
+      shape = [%c1, %c1, %c1, %c16, %c128],
+      strides = [%c2048, %c2048, %c2048, %c128, %c1]
+      : !pto.tensor_view<1x1x1x16x128xf32>
+
+    %src_part = pto.partition_view %src_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c16, %c8]
+      : !pto.tensor_view<1x1x1x16x8xf32> -> !pto.partition_tensor_view<1x1x1x16x8xf32>
+    %dst_part = pto.partition_view %dst_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c16, %c127]
+      : !pto.tensor_view<1x1x1x16x128xf32> -> !pto.partition_tensor_view<1x1x1x16x127xf32>
+
+    %src = pto.alloc_tile
+      : !pto.tile_buf<vec, 16x8xf32, valid=16x1>
+    %dst = pto.alloc_tile
+      : !pto.tile_buf<vec, 16x128xf32, valid=16x127>
+
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x16x8xf32>)
+              outs(%src : !pto.tile_buf<vec, 16x8xf32, valid=16x1>)
+
+    pto.trowexpand ins(%src : !pto.tile_buf<vec, 16x8xf32, valid=16x1>)
+                   outs(%dst : !pto.tile_buf<vec, 16x128xf32, valid=16x127>)
+
+    pto.tstore ins(%dst : !pto.tile_buf<vec, 16x128xf32, valid=16x127>)
+               outs(%dst_part : !pto.partition_tensor_view<1x1x1x16x127xf32>)
+    return
+  }
+
+  // f16_16x512: rows=16, srcCols=16, dstValidCols=512, dstCols=512
+  func.func @TROWEXPAND_f16_16x512(%src_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) {
+    %c0    = arith.constant 0    : index
+    %c1    = arith.constant 1    : index
+    %c16   = arith.constant 16   : index
+    %c256  = arith.constant 256  : index
+    %c512  = arith.constant 512  : index
+    %c8192 = arith.constant 8192 : index
+
+    %src_view = pto.make_tensor_view %src_ptr,
+      shape = [%c1, %c1, %c1, %c16, %c16],
+      strides = [%c256, %c256, %c256, %c16, %c1]
+      : !pto.tensor_view<1x1x1x16x16xf16>
+    %dst_view = pto.make_tensor_view %dst_ptr,
+      shape = [%c1, %c1, %c1, %c16, %c512],
+      strides = [%c8192, %c8192, %c8192, %c512, %c1]
+      : !pto.tensor_view<1x1x1x16x512xf16>
+
+    %src_part = pto.partition_view %src_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c16, %c16]
+      : !pto.tensor_view<1x1x1x16x16xf16> -> !pto.partition_tensor_view<1x1x1x16x16xf16>
+    %dst_part = pto.partition_view %dst_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c16, %c512]
+      : !pto.tensor_view<1x1x1x16x512xf16> -> !pto.partition_tensor_view<1x1x1x16x512xf16>
+
+    %src = pto.alloc_tile
+      : !pto.tile_buf<vec, 16x16xf16>
+    %dst = pto.alloc_tile
+      : !pto.tile_buf<vec, 16x512xf16>
+
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x16x16xf16>)
+              outs(%src : !pto.tile_buf<vec, 16x16xf16>)
+
+    pto.trowexpand ins(%src : !pto.tile_buf<vec, 16x16xf16>)
+                   outs(%dst : !pto.tile_buf<vec, 16x512xf16>)
+
+    pto.tstore ins(%dst : !pto.tile_buf<vec, 16x512xf16>)
+               outs(%dst_part : !pto.partition_tensor_view<1x1x1x16x512xf16>)
+    return
+  }
+
+  // f16_16x511: rows=16, srcCols=16, dstValidCols=511, dstCols=512
+  func.func @TROWEXPAND_f16_16x511(%src_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) {
+    %c0    = arith.constant 0    : index
+    %c1    = arith.constant 1    : index
+    %c16   = arith.constant 16   : index
+    %c256  = arith.constant 256  : index
+    %c511  = arith.constant 511  : index
+    %c512  = arith.constant 512  : index
+    %c8192 = arith.constant 8192 : index
+
+    %src_view = pto.make_tensor_view %src_ptr,
+      shape = [%c1, %c1, %c1, %c16, %c16],
+      strides = [%c256, %c256, %c256, %c16, %c1]
+      : !pto.tensor_view<1x1x1x16x16xf16>
+    %dst_view = pto.make_tensor_view %dst_ptr,
+      shape = [%c1, %c1, %c1, %c16, %c512],
+      strides = [%c8192, %c8192, %c8192, %c512, %c1]
+      : !pto.tensor_view<1x1x1x16x512xf16>
+
+    %src_part = pto.partition_view %src_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c16, %c16]
+      : !pto.tensor_view<1x1x1x16x16xf16> -> !pto.partition_tensor_view<1x1x1x16x16xf16>
+    %dst_part = pto.partition_view %dst_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c16, %c511]
+      : !pto.tensor_view<1x1x1x16x512xf16> -> !pto.partition_tensor_view<1x1x1x16x511xf16>
+
+    %src = pto.alloc_tile
+      : !pto.tile_buf<vec, 16x16xf16>
+    %dst = pto.alloc_tile
+      : !pto.tile_buf<vec, 16x512xf16, valid=16x511>
+
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x16x16xf16>)
+              outs(%src : !pto.tile_buf<vec, 16x16xf16>)
+
+    pto.trowexpand ins(%src : !pto.tile_buf<vec, 16x16xf16>)
+                   outs(%dst : !pto.tile_buf<vec, 16x512xf16, valid=16x511>)
+
+    pto.tstore ins(%dst : !pto.tile_buf<vec, 16x512xf16, valid=16x511>)
+               outs(%dst_part : !pto.partition_tensor_view<1x1x1x16x511xf16>)
+    return
+  }
+
+  // i8_16x256: rows=16, srcCols=32, dstValidCols=256, dstCols=256
+  func.func @TROWEXPAND_i8_16x256(%src_ptr: !pto.ptr<i8>, %dst_ptr: !pto.ptr<i8>) {
+    %c0    = arith.constant 0    : index
+    %c1    = arith.constant 1    : index
+    %c16   = arith.constant 16   : index
+    %c32   = arith.constant 32   : index
+    %c256  = arith.constant 256  : index
+    %c512  = arith.constant 512  : index
+    %c4096 = arith.constant 4096 : index
+
+    %src_view = pto.make_tensor_view %src_ptr,
+      shape = [%c1, %c1, %c1, %c16, %c32],
+      strides = [%c512, %c512, %c512, %c32, %c1]
+      : !pto.tensor_view<1x1x1x16x32xi8>
+    %dst_view = pto.make_tensor_view %dst_ptr,
+      shape = [%c1, %c1, %c1, %c16, %c256],
+      strides = [%c4096, %c4096, %c4096, %c256, %c1]
+      : !pto.tensor_view<1x1x1x16x256xi8>
+
+    %src_part = pto.partition_view %src_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c16, %c32]
+      : !pto.tensor_view<1x1x1x16x32xi8> -> !pto.partition_tensor_view<1x1x1x16x32xi8>
+    %dst_part = pto.partition_view %dst_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c16, %c256]
+      : !pto.tensor_view<1x1x1x16x256xi8> -> !pto.partition_tensor_view<1x1x1x16x256xi8>
+
+    %src = pto.alloc_tile
+      : !pto.tile_buf<vec, 16x32xi8>
+    %dst = pto.alloc_tile
+      : !pto.tile_buf<vec, 16x256xi8>
+
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x16x32xi8>)
+              outs(%src : !pto.tile_buf<vec, 16x32xi8>)
+
+    pto.trowexpand ins(%src : !pto.tile_buf<vec, 16x32xi8>)
+                   outs(%dst : !pto.tile_buf<vec, 16x256xi8>)
+
+    pto.tstore ins(%dst : !pto.tile_buf<vec, 16x256xi8>)
+               outs(%dst_part : !pto.partition_tensor_view<1x1x1x16x256xi8>)
+    return
+  }
+
+  // i8_16x255: rows=16, srcCols=32, dstValidCols=255, dstCols=256
+  func.func @TROWEXPAND_i8_16x255(%src_ptr: !pto.ptr<i8>, %dst_ptr: !pto.ptr<i8>) {
+    %c0    = arith.constant 0    : index
+    %c1    = arith.constant 1    : index
+    %c16   = arith.constant 16   : index
+    %c32   = arith.constant 32   : index
+    %c255  = arith.constant 255  : index
+    %c256  = arith.constant 256  : index
+    %c512  = arith.constant 512  : index
+    %c4096 = arith.constant 4096 : index
+
+    %src_view = pto.make_tensor_view %src_ptr,
+      shape = [%c1, %c1, %c1, %c16, %c32],
+      strides = [%c512, %c512, %c512, %c32, %c1]
+      : !pto.tensor_view<1x1x1x16x32xi8>
+    %dst_view = pto.make_tensor_view %dst_ptr,
+      shape = [%c1, %c1, %c1, %c16, %c256],
+      strides = [%c4096, %c4096, %c4096, %c256, %c1]
+      : !pto.tensor_view<1x1x1x16x256xi8>
+
+    %src_part = pto.partition_view %src_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c16, %c32]
+      : !pto.tensor_view<1x1x1x16x32xi8> -> !pto.partition_tensor_view<1x1x1x16x32xi8>
+    %dst_part = pto.partition_view %dst_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c16, %c255]
+      : !pto.tensor_view<1x1x1x16x256xi8> -> !pto.partition_tensor_view<1x1x1x16x255xi8>
+
+    %src = pto.alloc_tile
+      : !pto.tile_buf<vec, 16x32xi8>
+    %dst = pto.alloc_tile
+      : !pto.tile_buf<vec, 16x256xi8, valid=16x255>
+
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x16x32xi8>)
+              outs(%src : !pto.tile_buf<vec, 16x32xi8>)
+
+    pto.trowexpand ins(%src : !pto.tile_buf<vec, 16x32xi8>)
+                   outs(%dst : !pto.tile_buf<vec, 16x256xi8, valid=16x255>)
+
+    pto.tstore ins(%dst : !pto.tile_buf<vec, 16x256xi8, valid=16x255>)
+               outs(%dst_part : !pto.partition_tensor_view<1x1x1x16x255xi8>)
+    return
+  }
+}

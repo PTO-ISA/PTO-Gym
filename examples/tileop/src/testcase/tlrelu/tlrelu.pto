@@ -1,0 +1,214 @@
+// Copyright (c) 2026 Huawei Technologies Co., Ltd.
+// This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+// CANN Open Software License Agreement Version 2.0 (the "License").
+// Please refer to the License for details. You may not use this file except in compliance with the License.
+// THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+// INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+// See LICENSE in the root of the software repository for the full text of the License.
+
+// TileLang ST kernels for pto.tlrelu: tload(src) + tlrelu(src, slope)->dst + tstore(dst).
+// Multiple cases with different shapes in a single module.
+// Compiled by ptoas --enable-insert-sync --enable-tile-op-expand --vpto-emit-hivm-llvm
+// to produce LLVM IR.
+
+module {
+  // Case 0: f32 src 32x64 -> dst 32x128 (valid 32x64)
+  func.func @TLRELU_f32_32x64_dst128(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>, %slope: f32) {
+    %c0   = arith.constant 0    : index
+    %c1   = arith.constant 1    : index
+    %c32  = arith.constant 32   : index
+    %c64  = arith.constant 64   : index
+    %c128 = arith.constant 128  : index
+    %c2048 = arith.constant 2048 : index
+    %c4096 = arith.constant 4096 : index
+
+    // Src GM view: 1x1x1x32x64
+    %src_view = pto.make_tensor_view %src_ptr,
+      shape = [%c1, %c1, %c1, %c32, %c64],
+      strides = [%c2048, %c2048, %c2048, %c64, %c1]
+      : !pto.tensor_view<1x1x1x32x64xf32>
+
+    // Dst GM view: shape=valid_shape (32x64), strides based on dst allocation (32x128)
+    %dst_view = pto.make_tensor_view %dst_ptr,
+      shape = [%c1, %c1, %c1, %c32, %c64],
+      strides = [%c4096, %c4096, %c4096, %c128, %c1]
+      : !pto.tensor_view<1x1x1x32x64xf32>
+
+    %src_part = pto.partition_view %src_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c32, %c64]
+      : !pto.tensor_view<1x1x1x32x64xf32> -> !pto.partition_tensor_view<1x1x1x32x64xf32>
+    // Dst partition: sizes = valid_shape (32x64)
+    %dst_part = pto.partition_view %dst_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c32, %c64]
+      : !pto.tensor_view<1x1x1x32x64xf32> -> !pto.partition_tensor_view<1x1x1x32x64xf32>
+
+    // Src UB tile: 32x64, valid 32x64
+    %src_tile = pto.alloc_tile
+      : !pto.tile_buf<vec, 32x64xf32>
+    // Dst UB tile: 32x64, valid 32x64
+    %dst_tile = pto.alloc_tile
+      : !pto.tile_buf<vec, 32x64xf32>
+
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x32x64xf32>)
+              outs(%src_tile : !pto.tile_buf<vec, 32x64xf32>)
+
+    pto.tlrelu ins(%src_tile, %slope : !pto.tile_buf<vec, 32x64xf32>, f32)
+               outs(%dst_tile : !pto.tile_buf<vec, 32x64xf32>)
+
+    pto.tstore ins(%dst_tile : !pto.tile_buf<vec, 32x64xf32>)
+               outs(%dst_part : !pto.partition_tensor_view<1x1x1x32x64xf32>)
+    return
+  }
+
+  // Case 1: f16 src 63x64 -> dst 63x128 (valid 63x64)
+  func.func @TLRELU_f16_63x64_dst128(%src_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>, %slope: f32) {
+    %c0   = arith.constant 0    : index
+    %c1   = arith.constant 1    : index
+    %c63  = arith.constant 63   : index
+    %c64  = arith.constant 64   : index
+    %c128 = arith.constant 128  : index
+    %c4032 = arith.constant 4032 : index
+    %c8064 = arith.constant 8064 : index
+
+    // Src GM view: 1x1x1x63x64
+    %src_view = pto.make_tensor_view %src_ptr,
+      shape = [%c1, %c1, %c1, %c63, %c64],
+      strides = [%c4032, %c4032, %c4032, %c64, %c1]
+      : !pto.tensor_view<1x1x1x63x64xf16>
+
+    // Dst GM view: shape=valid_shape (63x64), strides based on dst allocation (63x128)
+    %dst_view = pto.make_tensor_view %dst_ptr,
+      shape = [%c1, %c1, %c1, %c63, %c64],
+      strides = [%c8064, %c8064, %c8064, %c128, %c1]
+      : !pto.tensor_view<1x1x1x63x64xf16>
+
+    %src_part = pto.partition_view %src_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c63, %c64]
+      : !pto.tensor_view<1x1x1x63x64xf16> -> !pto.partition_tensor_view<1x1x1x63x64xf16>
+    // Dst partition: sizes = valid_shape (63x64)
+    %dst_part = pto.partition_view %dst_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c63, %c64]
+      : !pto.tensor_view<1x1x1x63x64xf16> -> !pto.partition_tensor_view<1x1x1x63x64xf16>
+
+    // Src UB tile: 63x64, valid 63x64
+    %src_tile = pto.alloc_tile
+      : !pto.tile_buf<vec, 63x64xf16>
+    // Dst UB tile: 63x64, valid 63x64
+    %dst_tile = pto.alloc_tile
+      : !pto.tile_buf<vec, 63x64xf16>
+
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x63x64xf16>)
+              outs(%src_tile : !pto.tile_buf<vec, 63x64xf16>)
+
+    pto.tlrelu ins(%src_tile, %slope : !pto.tile_buf<vec, 63x64xf16>, f32)
+               outs(%dst_tile : !pto.tile_buf<vec, 63x64xf16>)
+
+    pto.tstore ins(%dst_tile : !pto.tile_buf<vec, 63x64xf16>)
+               outs(%dst_part : !pto.partition_tensor_view<1x1x1x63x64xf16>)
+    return
+  }
+
+  // Case 2: f32 src 7x448 -> dst 7x512 (valid 7x448)
+  func.func @TLRELU_f32_7x448_dst512(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>, %slope: f32) {
+    %c0   = arith.constant 0    : index
+    %c1   = arith.constant 1    : index
+    %c7   = arith.constant 7    : index
+    %c448 = arith.constant 448  : index
+    %c512 = arith.constant 512  : index
+    %c3136 = arith.constant 3136 : index
+    %c3584 = arith.constant 3584 : index
+
+    // Src GM view: 1x1x1x7x448
+    %src_view = pto.make_tensor_view %src_ptr,
+      shape = [%c1, %c1, %c1, %c7, %c448],
+      strides = [%c3136, %c3136, %c3136, %c448, %c1]
+      : !pto.tensor_view<1x1x1x7x448xf32>
+
+    // Dst GM view: shape=valid_shape (7x448), strides based on dst allocation (7x512)
+    %dst_view = pto.make_tensor_view %dst_ptr,
+      shape = [%c1, %c1, %c1, %c7, %c448],
+      strides = [%c3584, %c3584, %c3584, %c512, %c1]
+      : !pto.tensor_view<1x1x1x7x448xf32>
+
+    %src_part = pto.partition_view %src_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c7, %c448]
+      : !pto.tensor_view<1x1x1x7x448xf32> -> !pto.partition_tensor_view<1x1x1x7x448xf32>
+    // Dst partition: sizes = valid_shape (7x448)
+    %dst_part = pto.partition_view %dst_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c7, %c448]
+      : !pto.tensor_view<1x1x1x7x448xf32> -> !pto.partition_tensor_view<1x1x1x7x448xf32>
+
+    // Src UB tile: 7x448, valid 7x448
+    %src_tile = pto.alloc_tile
+      : !pto.tile_buf<vec, 7x448xf32>
+    // Dst UB tile: 7x448, valid 7x448
+    %dst_tile = pto.alloc_tile
+      : !pto.tile_buf<vec, 7x448xf32>
+
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x7x448xf32>)
+              outs(%src_tile : !pto.tile_buf<vec, 7x448xf32>)
+
+    pto.tlrelu ins(%src_tile, %slope : !pto.tile_buf<vec, 7x448xf32>, f32)
+               outs(%dst_tile : !pto.tile_buf<vec, 7x448xf32>)
+
+    pto.tstore ins(%dst_tile : !pto.tile_buf<vec, 7x448xf32>)
+               outs(%dst_part : !pto.partition_tensor_view<1x1x1x7x448xf32>)
+    return
+  }
+
+  // Case 3: f32 src 256x16 -> dst 256x32 (valid 256x16)
+  func.func @TLRELU_f32_256x16_dst32(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>, %slope: f32) {
+    %c0   = arith.constant 0    : index
+    %c1   = arith.constant 1    : index
+    %c16  = arith.constant 16   : index
+    %c32  = arith.constant 32   : index
+    %c256 = arith.constant 256  : index
+    %c4096 = arith.constant 4096 : index
+    %c8192 = arith.constant 8192 : index
+
+    // Src GM view: 1x1x1x256x16
+    %src_view = pto.make_tensor_view %src_ptr,
+      shape = [%c1, %c1, %c1, %c256, %c16],
+      strides = [%c4096, %c4096, %c4096, %c16, %c1]
+      : !pto.tensor_view<1x1x1x256x16xf32>
+
+    // Dst GM view: shape=valid_shape (256x16), strides based on dst allocation (256x32)
+    %dst_view = pto.make_tensor_view %dst_ptr,
+      shape = [%c1, %c1, %c1, %c256, %c16],
+      strides = [%c8192, %c8192, %c8192, %c32, %c1]
+      : !pto.tensor_view<1x1x1x256x16xf32>
+
+    %src_part = pto.partition_view %src_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c256, %c16]
+      : !pto.tensor_view<1x1x1x256x16xf32> -> !pto.partition_tensor_view<1x1x1x256x16xf32>
+    // Dst partition: sizes = valid_shape (256x16)
+    %dst_part = pto.partition_view %dst_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c256, %c16]
+      : !pto.tensor_view<1x1x1x256x16xf32> -> !pto.partition_tensor_view<1x1x1x256x16xf32>
+
+    // Src UB tile: 256x16, valid 256x16
+    %src_tile = pto.alloc_tile
+      : !pto.tile_buf<vec, 256x16xf32>
+    // Dst UB tile: 256x16, valid 256x16
+    %dst_tile = pto.alloc_tile
+      : !pto.tile_buf<vec, 256x16xf32>
+
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x256x16xf32>)
+              outs(%src_tile : !pto.tile_buf<vec, 256x16xf32>)
+
+    pto.tlrelu ins(%src_tile, %slope : !pto.tile_buf<vec, 256x16xf32>, f32)
+               outs(%dst_tile : !pto.tile_buf<vec, 256x16xf32>)
+
+    pto.tstore ins(%dst_tile : !pto.tile_buf<vec, 256x16xf32>)
+               outs(%dst_part : !pto.partition_tensor_view<1x1x1x256x16xf32>)
+    return
+  }
+}

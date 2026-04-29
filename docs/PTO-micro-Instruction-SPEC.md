@@ -1,5 +1,6 @@
 # PTO micro Instruction Spec — Draft (A5)
 
+- v0.4: Refresh bundled micro Instruction SPEC and add a standalone Tile Instruction companion doc
 - v0.3: Add runtime block query and vector-interval legality notes; Normalize load/store distribution families; Update get_buf/rls_buf details
 - v0.2: Update micro Instruction latency and throughput
 - v0.1: Doc Init
@@ -22,7 +23,7 @@ The PTO micro Instruction operates as a very low-level intermediate representati
 
 Within the end-to-end PTO software stack, PTO instructions may appear in three closely related authoring or lowering modes:
 
-- **PTO Tile Instruction**: tile-oriented PTO code that serves as a nano-kernel encapsulation of Tile operations, primarily expressing computation and data movement in terms of tile buffers, tile shapes, and tile-local layout.
+- **PTO Tile Instruction**: tile-oriented PTO code that serves as a nano-kernel encapsulation of tile instructions, primarily expressing computation and data movement in terms of tile buffers, tile shapes, and tile-local layout.
 - **PTO micro Instruction**: vector-execution-oriented PTO code that makes DMA setup, vector registers, masks, synchronization, and `__VEC_SCOPE__` boundaries explicit. This document is centered on this mode.
 - **PTO Tile+micro Instruction**: a hybrid PTO form that keeps tile-level orchestration while embedding explicit micro-instruction regions where direct vector-pipeline control is required.
 
@@ -143,15 +144,19 @@ The PTO micro Instruction enforces a strict memory hierarchy. The Unified Buffer
 └─────────────────────────────────────────────┘
 ```
 
-1. **GM → UB**: DMA transfer via MTE2 (`pto.copy_gm_to_ubuf`)
+1. **GM → UB**: DMA transfer via MTE2 (`pto.dma_load`)
 2. **UB → vreg**: Vector Load instructions (`pto.vlds`, `pto.vldsx2`, etc.)
 3. **vreg → vreg**: Compute instructions (`pto.vadd`, `pto.vmul`, etc.)
 4. **vreg → UB**: Vector Store instructions (`pto.vsts`, `pto.vstsx2`, etc.)
-5. **UB → GM**: DMA transfer via MTE3 (`pto.copy_ubuf_to_gm`)
+5. **UB → GM**: DMA transfer via MTE3 (`pto.dma_store`)
+
+The grouped DMA surface in this specification covers GM↔UB transfer only.
+Low-level raw copy families such as UB→UB copy use separate operand contracts
+and are outside this grouped DMA interface.
 
 **Load/Store Access Patterns**:
 
-For UB↔vreg data movement, besides contiguous load/store, the architecture provides rich access pattern support including strided access, pack/unpack, interleave/deinterleave, broadcast, upsample/downsample, channel split/merge, gather/scatter, and squeeze/expand operations. For detailed instruction syntax and distribution modes, refer to the [Vector Load/Store](#isa-03-vector-load-store) group in the ISA specification.
+For UB↔vreg data movement, besides contiguous load/store, the architecture provides rich access pattern support including strided access, pack/unpack, interleave/deinterleave, broadcast, upsample/downsample, channel split/merge, gather/scatter, and squeeze/expand operations. For detailed instruction syntax and distribution modes, refer to the [Vector Load/Store](#micro-03-vector-load-store) group in the ISA specification.
 
 #### Synchronization Model
 
@@ -248,12 +253,9 @@ pto.strict_vecscope(%ub, %ub_out, %lane) {
 ### Example: VecScope
 
 ```mlir
-pto.set_loop2_stride_outtoub %c4096_i64, %c4096_i64 : i64, i64
-pto.set_loop1_stride_outtoub %c4096_i64, %c4096_i64 : i64, i64
-pto.set_loop_size_outtoub %c1_i64, %c1_i64 : i64, i64
-pto.copy_gm_to_ubuf %7, %2, %3, %3, %c0_i64, %c32_i64, %4, %c0_i64, %c0_i64,
-    %false, %c0_i64, %c128_i64, %c128_i64
-    : !pto.ptr<f32, gm>, !pto.ptr<f32, ub>, i64, i64, i64, i64, i64, i64, i64, i1, i64, i64, i64
+pto.dma_load %7, %2, %c0_i64, %c128_i64
+  nburst(%c32_i64, %c128_i64, %c128_i64)
+  : !pto.ptr<f32, gm>, !pto.ptr<f32, ub>, i64, i64, i64
 
 pto.set_flag["PIPE_MTE2", "PIPE_V", "EVENT_ID0"]
 pto.wait_flag["PIPE_MTE2", "PIPE_V", "EVENT_ID0"]
@@ -269,11 +271,9 @@ pto.vecscope {
 
 pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
 pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
-pto.set_loop_size_ubtoout %c1_i64, %c1_i64 : i64, i64
-pto.set_loop1_stride_ubtoout %c4096_i64, %c4096_i64 : i64, i64
-pto.set_loop2_stride_ubtoout %c4096_i64, %c4096_i64 : i64, i64
-pto.copy_ubuf_to_gm %8, %14, %3, %3, %c0_i64, %c32_i64, %4, %c0_i64, %c128_i64, %c128_i64
-    : !pto.ptr<f32, ub>, !pto.ptr<f32, gm>, i64, i64, i64, i64, i64, i64, i64, i64
+pto.dma_store %8, %14, %c128_i64
+  nburst(%c32_i64, %c128_i64, %c128_i64)
+  : !pto.ptr<f32, ub>, !pto.ptr<f32, gm>, i64, i64, i64, i64
 ```
 
 ### Example: Strict VecScope
@@ -289,6 +289,156 @@ pto.strict_vecscope(%ub_in, %ub_out, %lane, %remaining) {
 ```
 
 Use `pto.strict_vecscope` when the source form should make all vector-scope inputs explicit in the region signature instead of relying on surrounding SSA visibility. The scope op itself only defines the vector-interval boundary and region argument contract.
+
+### Cluster Programming Model
+
+#### Overview
+
+An A5 cluster contains one **Cube block** (AIC) and two **Vector blocks** (AIV0, AIV1). Each
+block runs an **independent program** under its own Scalar Unit (SU), with its own issue queues:
+
+| Block | Issue Queues |
+|---|---|
+| Cube (AIC) | MTE2, MTE1, CUBE, FIXP |
+| Vector (AIV) | MTE2, VEC, MTE3 |
+
+There is no implicit synchronization between blocks. All coordination between the Cube and Vector
+programs is **explicit**, via the primitives described below.
+
+```
+┌─────────────────────────────────────── A5 CLUSTER ───────────────────────────────────────┐
+│                                                                                           │
+│  ┌─────────────────────┐    ┌─────────────────────┐    ┌─────────────────────┐           │
+│  │   CUBE CORE (AIC)   │    │  VECTOR 0 (AIV0)    │    │  VECTOR 1 (AIV1)    │           │
+│  │                     │    │   subblock_id = 0   │    │   subblock_id = 1   │           │
+│  │  ┌───────────────┐  │    │  ┌───────────────┐  │    │  ┌───────────────┐  │           │
+│  │  │  Scalar Unit  │  │    │  │  Scalar Unit  │  │    │  │  Scalar Unit  │  │           │
+│  │  │  (SU)         │  │    │  │  (SU)         │  │    │  │  (SU)         │  │           │
+│  │  │  runs cube    │  │    │  │  runs vec     │  │    │  │  runs vec     │  │           │
+│  │  │  program      │  │    │  │  program      │  │    │  │  program      │  │           │
+│  │  └───────────────┘  │    │  └───────────────┘  │    │  └───────────────┘  │           │
+│  │   ── Issue Queues ─ │    │   ── Issue Queues ─ │    │   ── Issue Queues ─ │           │
+│  │  ┌───────────────┐  │    │  ┌───────────────┐  │    │  ┌───────────────┐  │           │
+│  │  │     MTE2      │  │    │  │     MTE2      │  │    │  │     MTE2      │  │           │
+│  │  │    GM → L1    │  │    │  │    GM → UB    │  │    │  │    GM → UB    │  │           │
+│  │  ├───────────────┤  │    │  ├───────────────┤  │    │  ├───────────────┤  │           │
+│  │  │     MTE1      │  │    │  │      VEC      │  │    │  │      VEC      │  │           │
+│  │  │   L1 → L0A/B  │  │    │  │  SIMD compute │  │    │  │  SIMD compute │  │           │
+│  │  ├───────────────┤  │    │  ├───────────────┤  │    │  ├───────────────┤  │           │
+│  │  │     CUBE      │  │    │  │     MTE3      │  │    │  │     MTE3      │  │           │
+│  │  │  MMAD (L0C)   │  │    │  │    UB → GM    │  │    │  │    UB → GM    │  │           │
+│  │  ├───────────────┤  │    │  └───────────────┘  │    │  └───────────────┘  │           │
+│  │  │     FIXP      │  │    │                     │    │                     │           │
+│  │  │  L0C → UB     │  │    │                     │    │                     │           │
+│  │  │  (fixpipe)    │  │    │                     │    │                     │           │
+│  │  └───────────────┘  │    │                     │    │                     │           │
+│  └─────────────────────┘    └─────────────────────┘    └─────────────────────┘           │
+│                                                                                           │
+│  ┌────────────────────── SC (System Controller) ──────────────────────────────────────┐  │
+│  │                                                                                     │  │
+│  │   32 semaphores · 4-bit counter each · shared for C→V and V→C directions           │  │
+│  │                                                                                     │  │
+│  │   ┌──────────────────────────────────────────────────────────────────────────────┐ │  │
+│  │   │  sema_id 0 –15  │ [ 0][ 1][ 2][ 3][ 4][ 5][ 6][ 7][ 8][ 9][10][11][12][13][14][15] │ │  │
+│  │   │                 │                    ↕  C→V / V→C  ↕                         │ │  │
+│  │   │                 │              communicate with AIV0 (subblock_id=0)          │ │  │
+│  │   ├──────────────────────────────────────────────────────────────────────────────┤ │  │
+│  │   │  sema_id 16–31  │ [16][17][18][19][20][21][22][23][24][25][26][27][28][29][30][31] │ │  │
+│  │   │                 │                    ↕  C→V / V→C  ↕                         │ │  │
+│  │   │                 │              communicate with AIV1 (subblock_id=1)          │ │  │
+│  │   └──────────────────────────────────────────────────────────────────────────────┘ │  │
+│  │                                                                                     │  │
+│  │   → 16 sema_id pairs (0–15) available for 1:2 C:V sync per slot                   │  │
+│  │                                                                                     │  │
+│  │   set_intra_block(trigger_pipe, sema_id)  ──►  increments semaphore                │  │
+│  │   wait_intra_core(wait_pipe,    sema_id)  ──►  stalls pipe until semaphore > 0     │  │
+│  │                                                                                     │  │
+│  └─────────────────────────────────────────────────────────────────────────────────────┘  │
+└───────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### Intra-Cluster Synchronization
+
+Within a cluster, the PTO micro ISA provides two levels of synchronization:
+
+**Intra-core pipeline sync** (`pto.set_flag` / `pto.wait_flag`): coordinates the asynchronous
+pipelines *within a single block* — for example, ensuring MTE2 completes a GM→UB load before
+the VEC pipeline begins computation. This does not cross block boundaries.
+
+**Inter-block sync** (`pto.set_intra_block` / `pto.wait_intra_core`): coordinates between the
+Cube block and a Vector block within the same cluster. The sender specifies which **local
+pipeline** commits the signal, ensuring the preceding operation on that pipeline has completed
+before the signal is issued. The receiver specifies which **local pipeline** should stall until
+the signal arrives. This is the fundamental IPC primitive for Cube–Vector cooperation on A5.
+
+> **Note:** `pto.set_cross_core` / `pto.wait_cross_core` operate at **multi-cluster** scope and
+> are not used for intra-cluster communication.
+
+#### Intra-Cluster Data Paths
+
+A5 provides dedicated on-chip data paths between the Cube and Vector blocks, bypassing Global
+Memory entirely. These are the **recommended high-performance paths** for intra-cluster tile
+exchange.
+
+##### C→V: Cube L0C → Vector UB (fixpipe)
+
+The **fixpipe** instruction transfers data directly from Cube's L0C buffer to a Vector block's UB.
+Because Cube natively produces results in **NZ fractal layout** and Vector operates on **ND
+(row-major) layout**, fixpipe performs the layout conversion in hardware:
+
+```
+Cube L0C  (NZ layout)  ──[fixpipe, NZ2ND]──▶  Vector UB  (ND layout)
+```
+
+Fixpipe supports a **dual-destination mode**: a single transfer can write to *both* AIV0's UB and
+AIV1's UB simultaneously, with the tile split in hardware along either the row axis
+(`DualModeSplitM`) or the column axis (`DualModeSplitN`):
+
+| Split | AIV0 receives | AIV1 receives |
+|---|---|---|
+| Split-M (rows) | Upper `[M/2, N]` in ND | Lower `[M/2, N]` in ND |
+| Split-N (cols) | Left `[M, N/2]` in ND | Right `[M, N/2]` in ND |
+
+This 1→2 broadcast with in-hardware tile split is the architectural basis for 1:2
+Cube-to-Vector tile distribution.
+
+##### V→C: Vector UB → Cube L1 (TMOV ub2l1)
+
+The reverse path uses `TMOV ub2l1` to transfer data from a Vector block's UB into Cube's L1
+buffer. A key architectural constraint: Cube's L1 stores tiles in **NZ fractal layout** (e.g.
+`K1M1M0K0` — for fp16: `K0=16`, `M0=16`) so they can be loaded into L0A/L0B for MMAD
+computation. Since Vector produces tiles in **ND layout**, the layout conversion from ND to NZ
+must be applied as part of the V→C transfer:
+
+```
+Vector UB  (ND layout)  ──[TMOV ub2l1, ND→NZ]──▶  Cube L1  (NZ K1M1M0K0)
+```
+
+For 1:2 mode, both AIV0 and AIV1 each transfer a sub-tile into Cube's L1. The two sub-tiles are
+assembled into a single contiguous NZ Mat tile in L1, ready for use as a LeftTile or RightTile
+input to MMAD:
+
+| Split | AIV0 writes to L1 | AIV1 writes to L1 | Assembled in L1 |
+|---|---|---|---|
+| Split-M (rows) | `[K/2, N]` NZ at base | `[K/2, N]` NZ at offset | Full `[K, N]` NZ Mat tile |
+| Split-N (cols) | `[K, N/2]` NZ at base | `[K, N/2]` NZ at offset | Full `[K, N]` NZ Mat tile |
+
+##### Fallback: GM-Staged Transfer
+
+When the local data path is not applicable, data can be exchanged via a **Global Memory staging
+buffer**: the producer DMAs data to GM, and the consumer DMAs from GM. This path incurs off-chip
+bandwidth cost and higher latency, but serves as a general fallback.
+
+#### Programming Model
+
+The common pattern for Cube–Vector co-programming is a **software pipeline**: the Cube and Vector
+programs run a coordinated loop where each iteration the Cube produces a tile and the Vector
+consumes it (or vice versa), with explicit `pto.set_intra_block` / `pto.wait_intra_core`
+handshakes at each step to maintain correct data ordering.
+
+The PTO micro ISA exposes all the hardware primitives above directly. Higher-level constructs
+that simplify this pattern (such as in-order FIFO abstractions) can be implemented as software
+libraries on top of these primitives; they are not part of the ISA itself.
 
 ### Scope
 
@@ -454,7 +604,61 @@ Typical examples:
 - `!pto.ptr<f32, ub>`
 - `!pto.ptr<bf16, gm>`
 
+### Tensor View Metadata Query Ops
+
+VPTO source programs may keep GM tensor operands in logical `!pto.tensor_view`
+form instead of exposing them as raw memrefs. Two metadata-query ops are used to
+read shape and stride information from that logical view:
+
+#### `pto.get_tensor_view_dim`
+
+- **syntax:** `%dim = pto.get_tensor_view_dim %tv, %idx : !pto.tensor_view<...> -> index`
+- **semantics:** Returns the runtime extent of dimension `%idx` from the logical tensor view.
+
+```c
+dim = tv.shape[idx];
+```
+
+Example:
+
+```mlir
+%d2 = pto.get_tensor_view_dim %src, %c2 : !pto.tensor_view<?x?x?x?x?xf32> -> index
+```
+
+#### `pto.get_tensor_view_stride`
+
+- **syntax:** `%stride = pto.get_tensor_view_stride %tv, %idx : !pto.tensor_view<...> -> index`
+- **semantics:** Returns the logical stride of dimension `%idx`, measured in elements rather than bytes.
+
+```c
+stride = tv.strides[idx];
+```
+
+Example:
+
+```mlir
+%s2 = pto.get_tensor_view_stride %src, %c2 : !pto.tensor_view<?x?x?x?x?xf32> -> index
+```
+
+Notes:
+
+- These ops are metadata queries only and do not trigger any hardware pipeline activity.
+- In authoring-form IR, they operate on `!pto.tensor_view`.
+- During compiler-internal lowering, they may be rewritten to equivalent memref metadata queries such as `memref.dim` and extracted strided metadata.
+
 ### Pointer Operations
+
+#### `pto.tensor_view_addr`
+
+- **syntax:** `%result = pto.tensor_view_addr %src : !pto.tensor_view<...> -> memref<...>`
+- **syntax:** `%result = pto.tensor_view_addr %src : !pto.tensor_view<...> -> !pto.ptr<T, gm>`
+- **semantics:** Extract the underlying address view from a `tensor_view` or `partition_tensor_view`.
+
+```c
+result = addr_of(src);
+```
+
+`pto.tensor_view_addr` is an address-extraction operation. It does not move data and does not by itself imply any hardware side effect. When the result type is a memref, it exposes the lowered view directly. When the result type is `!pto.ptr<..., gm>`, it exposes the same address in pointer form. After compiler-internal view lowering, the operand may already be a memref; in that case the op is folded away or rewritten to an equivalent memref-to-ptr cast.
 
 #### `pto.castptr`
 
@@ -613,8 +817,6 @@ dst[i] = mask[i] ? op(src0[i], src1[i]) : 0    // ZEROING mode
     : !pto.align, i32, !pto.vreg<64xf32>, !pto.ptr<f32, ub> -> !pto.align
 ```
 
----
-
 ## Part II: Notation Convention
 
 This section defines the MLIR syntax patterns and C-style semantic notation used throughout the ISA reference (Part III).
@@ -674,7 +876,7 @@ pto.vstsx2 %low, %high, %dest[%offset], "DIST", %mask : !pto.vreg<NxT>, !pto.vre
 **Conversion (one vector in, different-typed vector out):**
 
 ```mlir
-%result = pto.vcvt %input {rnd = "R", sat = "SAT", part = "EVEN"} : !pto.vreg<NxT0> -> !pto.vreg<MxT1>
+%result = pto.vcvt %input, %mask {rnd = "R", sat = "SAT", part = "EVEN"} : !pto.vreg<NxT0>, !pto.mask<G> -> !pto.vreg<MxT1>
 ```
 
 **Predicate construction:**
@@ -798,62 +1000,11 @@ for (int g = 0; g < 8; g++) {
 }
 ```
 
-### Template Placeholder Conventions
+For A5 reduction result types:
 
-| Placeholder | Meaning |
-|-------------|---------|
-| `"SRC_PIPE"`, `"DST_PIPE"` | Pipeline identifiers: `"PIPE_MTE2"`, `"PIPE_V"`, `"PIPE_MTE3"` |
-| `"EVENT_ID"` | Event identifier: `"EVENT_ID0"` etc. |
-| `"DIST"` | Distribution mode string (see the relevant load/store ISA group in Part III) |
-| `"CMP_MODE"` | Compare predicate: `eq \| ne \| lt \| le \| gt \| ge` |
-| `"RND"` | Rounding mode: `R \| A \| F \| C \| Z \| O` |
-| `"SAT"` | Saturation: `SAT \| NOSAT` |
-| `"PART"` | Half selector: `EVEN \| ODD` |
-| `"PAT_*"` | Predicate pattern literal |
-| `T` | Element type (f32, f16, bf16, i32, i16, i8, etc.) |
-| `N` | Lane count (`N * bitwidth(T) = 2048`) |
-
----
-
-### C-Style Semantics Convention
-
-For each ISA operation in Part III, semantics are expressed as C code. The convention:
-
-```c
-// Vector register contents as arrays:
-T dst[N];       // destination
-T src0[N];      // first source
-T src1[N];      // second source (binary ops)
-T scalar;       // scalar operand (vec-scalar ops)
-int mask[N];    // per-lane predicate (0 or 1)
-
-// N = lane count determined by type:
-//   N = 256 for i8/si8/ui8
-//   N = 128 for i16/si16/ui16/f16/bf16
-//   N = 64  for i32/si32/ui32/f32
-//   N = 32  for i64/si64/ui64
-```
-
-**Example — pto.vadd semantics:**
-
-```c
-for (int i = 0; i < N; i++)
-    dst[i] = src0[i] + src1[i];
-```
-
-**Example — pto.vcgadd (group reduction per VLane) semantics:**
-
-```c
-int K = N / 8;  // elements per VLane
-for (int g = 0; g < 8; g++) {
-    T sum = 0;
-    for (int i = 0; i < K; i++)
-        sum += src[g*K + i];
-    dst[g*K] = sum;
-    for (int i = 1; i < K; i++)
-        dst[g*K + i] = 0;
-}
-```
+- `pto.vcadd` widens `i8 -> i16`, `u8 -> u16`, `i16 -> i32`, and `u16 -> u32`,
+  with the lane count halved in each widening case.
+- `pto.vcadd` keeps the same result type for `f16`, `f32`, `i32`, and `u32`.
 
 ### Template Placeholder Conventions
 
@@ -869,42 +1020,37 @@ for (int g = 0; g < 8; g++) {
 | `"PAT_*"` | Predicate pattern literal |
 | `T` | Element type (f32, f16, bf16, i32, i16, i8, etc.) |
 | `N` | Lane count (`N * bitwidth(T) = 2048`) |
-
----
 
 ## Part III: ISA Instruction Reference — Summary
 
-This section provides a categorized overview of all PTO micro Instruction operations plus the shared MLIR `arith` and `scf` ops that may appear in PTO micro Instruction programs. Detailed documentation for each group is included later in this merged document.
-
----
+This section provides a categorized overview of all PTO micro Instruction operations plus the shared MLIR `arith` and `scf` ops that may appear in PTO micro Instruction programs. Detailed documentation for each group is available in the linked files.
 
 ## Instruction Groups
 
 | # | Group | Description | Count | Details |
 |---|-------|-------------|-------|---------|
-| 1 | [Pipeline Sync](#isa-01-pipeline-sync) | Intra-core pipeline synchronization | 5 | `pto.set_flag`, `pto.wait_flag`, `pto.pipe_barrier`, `pto.get_buf`, `pto.rls_buf` |
-| 2 | [DMA Copy Programming](#isa-02-dma-copy) | DMA configuration and transfer between GM↔UB | 9 | `pto.set_loop*_stride_*`, `pto.set_loop_size_*`, `pto.copy_gm_to_ubuf`, `pto.copy_ubuf_to_ubuf`, `pto.copy_ubuf_to_gm` |
-| 3 | [Vector Load/Store](#isa-03-vector-load-store) | UB↔vreg data movement with various access patterns | ~20 | `pto.vlds`, `pto.vldsx2`, `pto.vgather2`, `pto.vsts`, `pto.vstsx2`, `pto.vscatter`, etc. |
-| 4 | [Predicate Load/Store](#isa-04-predicate-load-store) | UB↔mask register movement | 5 | `pto.plds`, `pto.pldi`, `pto.psts`, `pto.psti`, `pto.pstu` |
-| 5 | [Materialization & Predicate Ops](#isa-05-materialization-predicate) | Scalar broadcast, predicate generation and manipulation | ~17 | `pto.vbr`, `pto.vdup`, `pto.pset_b*`, `pto.pge_b*`, `pto.plt_b*`, `pto.ppack`, `pto.punpack`, `pto.pnot`, `pto.psel`, etc. |
-| 6 | [Unary Vector Ops](#isa-06-unary-vector-ops) | Single-input element-wise operations | 6 | `pto.vabs`, `pto.vexp`, `pto.vln`, `pto.vsqrt`, `pto.vrelu`, `pto.vnot` |
-| 7 | [Binary Vector Ops](#isa-07-binary-vector-ops) | Two-input element-wise operations | 13 | `pto.vadd`, `pto.vsub`, `pto.vmul`, `pto.vdiv`, `pto.vmax`, `pto.vmin`, `pto.vand`, `pto.vor`, `pto.vxor`, `pto.vshl`, `pto.vshr`, `pto.vaddc`, `pto.vsubc` |
-| 8 | [Vec-Scalar Ops](#isa-08-vec-scalar-ops) | Vector-scalar operations | 9 | `pto.vadds`, `pto.vmuls`, `pto.vmaxs`, `pto.vmins`, `pto.vlrelu`, `pto.vshls`, `pto.vshrs`, `pto.vaddcs`, `pto.vsubcs` |
-| 9 | [Conversion Ops](#isa-09-conversion-ops) | Type conversion with rounding/saturation control | 2 | `pto.vcvt`, `pto.vtrc` |
-| 10 | [Reduction Ops](#isa-10-reduction-ops) | Vector reductions | 7 | `pto.vcadd`, `pto.vcmax`, `pto.vcmin`, `pto.vcgadd`, `pto.vcgmax`, `pto.vcgmin`, `pto.vcpadd` |
-| 11 | [Compare & Select](#isa-11-compare-select) | Comparison and conditional selection | 4 (+1 not A5) | `pto.vcmp`, `pto.vcmps`, `pto.vsel`, `pto.vselr` (`pto.vselrv2` removed: not A5) |
-| 12 | [Data Rearrangement](#isa-12-data-rearrangement) | In-register data movement and permutation | 2 (+2 not A5) | `pto.vintlv`, `pto.vdintlv` (`pto.vintlvv2`, `pto.vdintlvv2` removed: not A5) |
-| 13 | [DSA/SFU Ops](#isa-13-dsa-sfu-ops) | Specialized ops, index generation, and sorting helpers | 9 | `pto.vlrelu`, `pto.vprelu`, `pto.vexpdiff`, `pto.vaxpy`, `pto.vmull`, `pto.vmula`, `pto.vci`, `pto.vbitsort`, `pto.vmrgsort4` |
-| 14 | [Arith (Shared MLIR Dialect)](#isa-14-shared-arith) | Full scalar `arith` surface used around PTO ops; the companion page lists categories and representative examples | all scalar ops | `arith.constant`, `arith.addi`, `arith.addf`, `arith.cmpi`, `arith.cmpf`, `arith.select`, `arith.index_cast`, `arith.extsi`, `arith.trunci`, `arith.andi`, `arith.shli`, etc. |
-| 15 | [SCF (Shared MLIR Dialect)](#isa-15-shared-scf) | Structured loops, branches, and loop-carried state around PTO regions | 5 | `scf.for`, `scf.if`, `scf.while`, `scf.condition`, `scf.yield` |
-
----
+| 1 | [Pipeline Sync](#micro-01-pipeline-sync) | Intra-core pipeline synchronization | 5 | `pto.set_flag`, `pto.wait_flag`, `pto.pipe_barrier`, `pto.get_buf`, `pto.rls_buf` |
+| 2 | [DMA Copy Programming](#micro-02-dma-copy) | Public DMA transfer interface between GM↔UB and UB↔UB | 3 | `pto.dma_load`, `pto.dma_store`, `pto.dma_copy` |
+| 3 | [Vector Load/Store](#micro-03-vector-load-store) | UB↔vreg data movement with various access patterns | ~20 | `pto.vlds`, `pto.vldsx2`, `pto.vgather2`, `pto.vsts`, `pto.vstsx2`, `pto.vscatter`, etc. |
+| 4 | [Predicate Load/Store](#micro-04-predicate-load-store) | UB↔mask register movement | 5 | `pto.plds`, `pto.pldi`, `pto.psts`, `pto.psti`, `pto.pstu` |
+| 5 | [Materialization & Predicate Ops](#micro-05-materialization-predicate) | Scalar broadcast, predicate generation and manipulation | ~17 | `pto.vbr`, `pto.vdup`, `pto.pset_b*`, `pto.pge_b*`, `pto.plt_b*`, `pto.ppack`, `pto.punpack`, `pto.pnot`, `pto.psel`, etc. |
+| 6 | [Unary Vector Ops](#micro-06-unary-vector-ops) | Single-input element-wise operations | 6 | `pto.vabs`, `pto.vexp`, `pto.vln`, `pto.vsqrt`, `pto.vrelu`, `pto.vnot` |
+| 7 | [Binary Vector Ops](#micro-07-binary-vector-ops) | Two-input element-wise operations | 13 | `pto.vadd`, `pto.vsub`, `pto.vmul`, `pto.vdiv`, `pto.vmax`, `pto.vmin`, `pto.vand`, `pto.vor`, `pto.vxor`, `pto.vshl`, `pto.vshr`, `pto.vaddc`, `pto.vsubc` |
+| 8 | [Vec-Scalar Ops](#micro-08-vec-scalar-ops) | Vector-scalar operations | 9 | `pto.vadds`, `pto.vmuls`, `pto.vmaxs`, `pto.vmins`, `pto.vlrelu`, `pto.vshls`, `pto.vshrs`, `pto.vaddcs`, `pto.vsubcs` |
+| 9 | [Conversion Ops](#micro-09-conversion-ops) | Type conversion with rounding/saturation control | 4 | `pto.vcvt`, `pto.vtrc`, `pto.vbitcast`, `pto.pbitcast` |
+| 10 | [Reduction Ops](#micro-10-reduction-ops) | Vector reductions | 7 | `pto.vcadd`, `pto.vcmax`, `pto.vcmin`, `pto.vcgadd`, `pto.vcgmax`, `pto.vcgmin`, `pto.vcpadd` |
+| 11 | [Compare & Select](#micro-11-compare-select) | Comparison and conditional selection | 4 (+1 not A5) | `pto.vcmp`, `pto.vcmps`, `pto.vsel`, `pto.vselr` (`pto.vselrv2` removed: not A5) |
+| 12 | [Data Rearrangement](#micro-12-data-rearrangement) | In-register data movement and permutation | 2 (+2 not A5) | `pto.vintlv`, `pto.vdintlv` (`pto.vintlvv2`, `pto.vdintlvv2` removed: not A5) |
+| 13 | [DSA/SFU Ops](#micro-13-dsa-sfu-ops) | Specialized ops, index generation, and sorting helpers | 9 | `pto.vlrelu`, `pto.vprelu`, `pto.vexpdif`, `pto.vaxpy`, `pto.vmull`, `pto.vmula`, `pto.vci`, `pto.vbitsort`, `pto.vmrgsort4` |
+| 14 | [Arith (Shared MLIR Dialect)](#micro-14-shared-arith) | Full scalar `arith` surface used around PTO ops; the companion page lists categories and representative examples | all scalar ops | `arith.constant`, `arith.addi`, `arith.addf`, `arith.cmpi`, `arith.cmpf`, `arith.select`, `arith.index_cast`, `arith.extsi`, `arith.trunci`, `arith.andi`, `arith.shli`, etc. |
+| 15 | [SCF (Shared MLIR Dialect)](#micro-15-shared-scf) | Structured loops, branches, and loop-carried state around PTO regions | 5 | `scf.for`, `scf.if`, `scf.while`, `scf.condition`, `scf.yield` |
+| 16 | [Cube Matrix Multiply (MAT)](#micro-16-cube-matmul) | GM↔L1 cube staging, L0A/L0B loads, L0C matmul, and L0C/L1 side-buffer moves | 10+ | `pto.copy_gm_to_cbuf`, `pto.copy_gm_to_cbuf_multi_nd2nz`, `pto.copy_gm_to_cbuf_multi_dn2nz`, `pto.load_cbuf_to_ca`, `pto.load_cbuf_to_cb`, `pto.mad`, `pto.copy_matrix_cc_to_gm`, `pto.copy_matrix_cc_to_cbuf`, `pto.copy_matrix_cc_to_ub`, `pto.copy_cbuf_to_bt`, `pto.copy_cbuf_to_fbuf` |
 
 ## Detailed ISA Group Reference
 
-This section inlines the 15 ISA group documents so the architectural overview, notation, summary table, and per-group semantics can be read in a single file.
+This section inlines the 16 ISA group documents so the architectural overview, notation, summary table, and per-group semantics can be read in a single file.
 
-<a id="isa-01-pipeline-sync"></a>
+<a id="micro-01-pipeline-sync"></a>
 
 ### 1. Pipeline Synchronization
 
@@ -962,16 +1108,16 @@ pipe_barrier(pipe);
 
 **Pipe identifiers:** `PIPE_MTE2`, `PIPE_V`, `PIPE_MTE3`
 
-**Example:** Two back-to-back `copy_ubuf_to_gm` calls writing to the same GM address. Without a barrier, MTE3 may reorder them and the final GM value is non-deterministic:
+**Example:** Two back-to-back `dma_store` calls writing to the same GM address. Without a barrier, MTE3 may reorder them and the final GM value is non-deterministic:
 
 ```mlir
 // Both stores target the same GM address — order matters!
-pto.copy_ubuf_to_gm %ub_partial_0, %gm_result, ...
+pto.dma_store %ub_partial_0, %gm_result, ...
 // Without pipe_barrier, MTE3 could execute the second copy before the first
 // completes, producing a non-deterministic result at %gm_result.
 pto.pipe_barrier "PIPE_MTE3"
 // After barrier: first copy is guaranteed complete. Second copy overwrites deterministically.
-pto.copy_ubuf_to_gm %ub_partial_1, %gm_result, ...
+pto.dma_store %ub_partial_1, %gm_result, ...
 ```
 
 ---
@@ -1024,21 +1170,30 @@ The `mode` parameter controls how `get_buf` and `rls_buf` interact with pipeline
 ##### `pto.mem_bar`
 
 - **syntax:** `pto.mem_bar "BARRIER_TYPE"`
-- **semantics:** Intra-vector-pipe memory fence within `__VEC_SCOPE__`. Required when UB addresses alias between vector load/store operations.
+- **semantics:** Shared-memory (UB address space) memory fence within `__VEC_SCOPE__`. Required when UB addresses alias between memory operations. The barrier type selects which classes of prior instructions must complete before which classes of subsequent instructions may proceed.
 
 ```c
 mem_bar(barrier_type);
 ```
 
-**Barrier types:**
+**Barrier types** are organized into three families by the scope of prior vs. subsequent instructions:
 
-| Type | Semantics |
-|------|-----------|
-| `VV_ALL` | All prior vector ops complete before subsequent |
-| `VST_VLD` | All prior vector stores visible before subsequent loads |
-| `VLD_VST` | All prior vector loads complete before subsequent stores |
+| Family | Barrier type | Prior instructions | Subsequent instructions |
+|--------|-------------|-------------------|------------------------|
+| **VV** (vector→vector) | `VV_ALL` | All vector load/store | All vector load/store |
+| | `VST_VLD` | All vector store | All vector load |
+| | `VLD_VST` | All vector load | All vector store |
+| | `VST_VST` | All vector store | All vector store |
+| **VS** (vector→scalar) | `VS_ALL` | All vector load/store | All scalar load/store |
+| | `VST_LD` | All vector store | All scalar load |
+| | `VLD_ST` | All vector load | All scalar store |
+| | `VST_ST` | All vector store | All scalar store |
+| **SV** (scalar→vector) | `SV_ALL` | All scalar load/store | All vector load/store |
+| | `ST_VLD` | All scalar store | All vector load |
+| | `LD_VST` | All scalar load | All vector store |
+| | `ST_VST` | All scalar store | All vector store |
 
-**Example:** Ensure stores are visible before loads to same UB region:
+**Example:** Ensure vector stores are visible before subsequent vector loads to the same UB region:
 ```mlir
 pto.vsts %v0, %ub[%c0] : !pto.vreg<64xf32>, !pto.ptr<f32, ub>
 pto.mem_bar "VST_VLD"
@@ -1068,7 +1223,7 @@ For non-1:1 producer-consumer ratios (e.g., 1 MTE2 load : N Vector compute slice
 ```mlir
 // set_flag/wait_flag: 1 MTE2 load, 8 Vector computes on slices
 // MTE2 loads large tile once
-pto.copy_gm_to_ubuf %gm_ptr, %ub_tile, ...
+pto.dma_load %gm_ptr, %ub_tile, ...
 pto.set_flag["PIPE_MTE2", "PIPE_V", "EVT_TILE_READY"]  // ◀ MUST be outside loop
 
 // Vector consumes in 8 slices — but wait_flag can only fire ONCE
@@ -1085,7 +1240,7 @@ With `get_buf`/`rls_buf`, acquire/release can be **inside the loop** — no peel
 // get_buf/rls_buf: same 1:8 pattern, acquire/release inside loop works fine
 // MTE2 loads large tile
 pto.get_buf "PIPE_MTE2", %bufid_tile, %c0 : i64, i64
-pto.copy_gm_to_ubuf %gm_ptr, %ub_tile, ...
+pto.dma_load %gm_ptr, %ub_tile, ...
 pto.rls_buf "PIPE_MTE2", %bufid_tile, %c0 : i64, i64
 
 // Vector acquires/releases per slice — all 8 iterations work correctly
@@ -1160,7 +1315,7 @@ Each cross-pipeline data dependency requires an explicit signal/wait pair. The p
 
 ```mlir
 // ─── Stage 1: MTE2 loads data from GM into UB ───
-pto.copy_gm_to_ubuf %gm_ptr, %ub_ptr, ...
+pto.dma_load %gm_ptr, %ub_ptr, ...
 
 // MTE2 signals: "UB data is ready for Vector pipe"
 pto.set_flag["PIPE_MTE2", "PIPE_V", "EVENT_ID0"]
@@ -1183,7 +1338,7 @@ pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
 // MTE3 waits until Vector's signal arrives
 pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
 
-pto.copy_ubuf_to_gm %ub_out, %gm_out, ...
+pto.dma_store %ub_out, %gm_out, ...
 ```
 
 **Key property:** Every cross-pipeline edge is an explicit `(set_flag, wait_flag)` pair. Simple for straight-line code, but gets verbose in loops (see Example 3).
@@ -1198,7 +1353,7 @@ Instead of naming events, each pipeline declares when it **acquires** (`get_buf`
 // ─── Stage 1: MTE2 loads data into UB ───
 // MTE2 acquires ub_ptr — blocks if Vector hasn't released it from a prior iteration
 pto.get_buf "PIPE_MTE2", %bufid_ub_ptr, %c0 : i64, i64   // mode=0 (default)
-pto.copy_gm_to_ubuf %gm_ptr, %ub_ptr, ...
+pto.dma_load %gm_ptr, %ub_ptr, ...
 // MTE2 done writing ub_ptr — release it so Vector can consume
 pto.rls_buf "PIPE_MTE2", %bufid_ub_ptr, %c0 : i64, i64
 
@@ -1223,7 +1378,7 @@ pto.rls_buf "PIPE_V", %bufid_ub_out, %c0 : i64, i64
 // ─── Stage 3: MTE3 stores result to GM ───
 // MTE3 acquires ub_out — blocks until Vector releases it (RAW: V write → MTE3 read)
 pto.get_buf "PIPE_MTE3", %bufid_ub_out, %c0 : i64, i64
-pto.copy_ubuf_to_gm %ub_out, %gm_out, ...
+pto.dma_store %ub_out, %gm_out, ...
 // MTE3 done reading ub_out — release so Vector can reuse it in next iteration
 pto.rls_buf "PIPE_MTE3", %bufid_ub_out, %c0 : i64, i64
 ```
@@ -1276,7 +1431,7 @@ scf.for %i = %c0 to %N step %c1 {
   // ── MTE2: load tile[i] into buf_in[i%2] ──
   // WAR: wait until Vector has released buf_in[i%2] from iteration i-2
   pto.wait_flag["PIPE_V", "PIPE_MTE2", "EVT_IN_REV_{pp}"]
-  pto.copy_gm_to_ubuf %gm_ptr[%i], %ub_in[%pp], ...
+  pto.dma_load %gm_ptr[%i], %ub_in[%pp], ...
   // RAW: signal Vector that buf_in[i%2] data is ready
   pto.set_flag["PIPE_MTE2", "PIPE_V", "EVT_IN_FWD_{pp}"]
 
@@ -1299,7 +1454,7 @@ scf.for %i = %c0 to %N step %c1 {
   // ── MTE3: store result from buf_out[i%2] to GM ──
   // RAW: wait for Vector to finish writing buf_out[i%2]
   pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVT_OUT_FWD_{pp}"]
-  pto.copy_ubuf_to_gm %ub_out[%pp], %gm_out[%i], ...
+  pto.dma_store %ub_out[%pp], %gm_out[%i], ...
   // WAR: tell Vector "done reading buf_out[i%2]"
   pto.set_flag["PIPE_MTE3", "PIPE_V", "EVT_OUT_REV_{pp}"]
 }
@@ -1330,7 +1485,7 @@ scf.for %i = %c0 to %N step %c1 {
   // Acquires buf[i%2] — on first iteration, buffer is free so proceeds immediately.
   // On later iterations, blocks until Vector releases buf[i%2] (WAR: automatic).
   pto.get_buf "PIPE_MTE2", %bufid_buf[%pp], %c0 : i64, i64   // mode=0
-  pto.copy_gm_to_ubuf %gm_ptr[%i], %ub_buf[%pp], ...
+  pto.dma_load %gm_ptr[%i], %ub_buf[%pp], ...
   pto.rls_buf "PIPE_MTE2", %bufid_buf[%pp], %c0 : i64, i64
 
   // ── Vector: compute on buf[i%2] ──
@@ -1350,7 +1505,7 @@ scf.for %i = %c0 to %N step %c1 {
   // ── MTE3: store result ──
   // Acquires out[i%2] — blocks until Vector releases it (RAW: automatic)
   pto.get_buf "PIPE_MTE3", %bufid_out[%pp], %c0 : i64, i64
-  pto.copy_ubuf_to_gm %ub_out[%pp], %gm_out[%i], ...
+  pto.dma_store %ub_out[%pp], %gm_out[%i], ...
   pto.rls_buf "PIPE_MTE3", %bufid_out[%pp], %c0 : i64, i64
 }
 // No post-loop drain needed — last rls_buf completes the pipeline.
@@ -1498,200 +1653,168 @@ A5 wait_intra_core "PIPE_MTE2" (per-pipe stall):
          └── PIPE_MTE3 ─── ✓ RUNNING
 ```
 
-<a id="isa-02-dma-copy"></a>
+<a id="micro-02-dma-copy"></a>
 
 ### 2. DMA Copy Programming
 
 > **Category:** DMA transfer configuration and execution
 > **Pipelines:** MTE2 (GM→UB), MTE3 (UB→GM)
 
-DMA transfers move data between Global Memory (GM) and Unified Buffer (UB). The MTE engines operate asynchronously from the Vector core, requiring explicit sync (see [Pipeline Sync](#isa-01-pipeline-sync)).
+DMA transfers move data between Global Memory (GM) and Unified Buffer (UB). The MTE engines operate asynchronously from the Vector core, requiring explicit sync (see [Pipeline Sync](#micro-01-pipeline-sync)).
 
-The MTE2/MTE3 DMA engine executes a **multi-level nested loop** transfer. Before issuing the copy instruction, stride and loop-size registers must be configured.
+This document describes the public grouped DMA interfaces:
 
----
+- `pto.dma_load`
+- `pto.dma_store`
+- `pto.dma_copy`
 
-#### Loop Stride Configuration (GM→UB)
-
-These ops configure the MTE2 DMA engine's hardware loops for GM→UB transfers. They must be set **before** calling `pto.copy_gm_to_ubuf`.
-
-##### `pto.set_loop_size_outtoub`
-
-- **syntax:** `pto.set_loop_size_outtoub %loop1_count, %loop2_count : i64, i64`
-- **semantics:** Configure HW loop iteration counts for GM→UB DMA.
-
-**Parameter Table:**
-
-| Parameter | Width | Description |
-|-----------|-------|-------------|
-| `%loop1_count` | 21 bits | Inner HW loop iteration count |
-| `%loop2_count` | 21 bits | Outer HW loop iteration count |
-
-When not using multi-level looping, set both to 1.
-
----
-
-##### `pto.set_loop2_stride_outtoub`
-
-- **syntax:** `pto.set_loop2_stride_outtoub %src_stride, %dst_stride : i64, i64`
-- **semantics:** Configure outer loop (loop2) pointer advance for GM→UB DMA.
-
-**Parameter Table:**
-
-| Parameter | Width | Description |
-|-----------|-------|-------------|
-| `%src_stride` | 40 bits | GM source pointer advance per loop2 iteration (bytes) |
-| `%dst_stride` | 21 bits | UB destination pointer advance per loop2 iteration (bytes) |
-
-After each loop2 iteration, the DMA engine advances the GM read pointer by `%src_stride` and UB write pointer by `%dst_stride`.
-
----
-
-##### `pto.set_loop1_stride_outtoub`
-
-- **syntax:** `pto.set_loop1_stride_outtoub %src_stride, %dst_stride : i64, i64`
-- **semantics:** Configure inner loop (loop1) pointer advance for GM→UB DMA.
-
-**Parameter Table:**
-
-| Parameter | Width | Description |
-|-----------|-------|-------------|
-| `%src_stride` | 40 bits | GM source pointer advance per loop1 iteration (bytes) |
-| `%dst_stride` | 21 bits | UB destination pointer advance per loop1 iteration (bytes) |
-
----
-
-#### Loop Stride Configuration (UB→GM)
-
-These ops configure the MTE3 DMA engine's hardware loops for UB→GM transfers. They must be set **before** calling `pto.copy_ubuf_to_gm`.
-
-Note: UB stride fields are 21 bits (sufficient for 256KB UB address space), GM stride fields are 40 bits (full GM address range).
-
-##### `pto.set_loop_size_ubtoout`
-
-- **syntax:** `pto.set_loop_size_ubtoout %loop1_count, %loop2_count : i64, i64`
-- **semantics:** Configure HW loop iteration counts for UB→GM DMA.
-
-**Parameter Table:**
-
-| Parameter | Width | Description |
-|-----------|-------|-------------|
-| `%loop1_count` | 21 bits | Inner HW loop iteration count |
-| `%loop2_count` | 21 bits | Outer HW loop iteration count |
-
----
-
-##### `pto.set_loop2_stride_ubtoout`
-
-- **syntax:** `pto.set_loop2_stride_ubtoout %src_stride, %dst_stride : i64, i64`
-- **semantics:** Configure outer loop (loop2) pointer advance for UB→GM DMA.
-
-**Parameter Table:**
-
-| Parameter | Width | Description |
-|-----------|-------|-------------|
-| `%src_stride` | 21 bits | UB source pointer advance per loop2 iteration (bytes) |
-| `%dst_stride` | 40 bits | GM destination pointer advance per loop2 iteration (bytes) |
-
----
-
-##### `pto.set_loop1_stride_ubtoout`
-
-- **syntax:** `pto.set_loop1_stride_ubtoout %src_stride, %dst_stride : i64, i64`
-- **semantics:** Configure inner loop (loop1) pointer advance for UB→GM DMA.
-
-**Parameter Table:**
-
-| Parameter | Width | Description |
-|-----------|-------|-------------|
-| `%src_stride` | 21 bits | UB source pointer advance per loop1 iteration (bytes) |
-| `%dst_stride` | 40 bits | GM destination pointer advance per loop1 iteration (bytes) |
+This chapter covers the public grouped DMA interfaces. The legacy raw copy
+family remains documented separately; in particular, `pto.copy_ubuf_to_ubuf`
+shares the same UB→UB copy contract as `pto.dma_copy` but remains a legacy
+surface op.
 
 ---
 
 #### DMA Transfer Execution
 
-##### `pto.copy_gm_to_ubuf`
+##### `pto.dma_load`
 
 - **syntax:**
 ```mlir
-pto.copy_gm_to_ubuf %gm_src, %ub_dst,
-    %sid, %n_burst, %len_burst, %left_padding, %right_padding,
-    %data_select_bit, %l2_cache_ctl, %src_stride, %dst_stride
-    : !pto.ptr<T, gm>, !pto.ptr<T, ub>, i64, i64, i64,
-      i64, i64, i1, i64, i64, i64
+pto.dma_load %gm_src, %ub_dst, %l2_cache_ctl, %len_burst
+  nburst(%n_burst, %src_stride, %dst_stride)
+  [loop(%loop_count, %loop_src_stride, %loop_dst_stride)]*
+  [pad(%pad_value[, %left_padding_count, %right_padding_count])]
+  : !pto.ptr<T, gm>, !pto.ptr<T, ub>, i64, i64, i64,
+    [loop i64, i64, i64,]*
+    [pad T[, i64, i64]]
 ```
-- **semantics:** DMA transfer from Global Memory (`!pto.ptr<T, gm>`) to Unified Buffer (`!pto.ptr<T, ub>`).
+- **semantics:** Grouped GM→UB DMA transfer. `nburst(...)` defines the innermost repeated burst transfer, optional `loop(...)` groups add outer repetition levels, and `pad(...)` controls UB row padding.
 
-**Parameters:**
+**Parameter Table:**
 
-| Parameter | Description |
-|-----------|-------------|
-| `%gm_src` | GM source pointer (`!pto.ptr<T, gm>`) |
-| `%ub_dst` | UB destination pointer (`!pto.ptr<T, ub>`, 32B-aligned) |
-| `%sid` | Stream ID (usually 0) |
-| `%n_burst` | Number of burst rows (innermost loop count) |
-| `%len_burst` | Contiguous bytes transferred per burst row |
-| `%left_padding` | Left padding count (bytes) |
-| `%right_padding` | Right padding count (bytes) |
-| `%data_select_bit` | Padding / data-select control bit (`i1`) |
-| `%l2_cache_ctl` | L2 cache allocate control (TBD — controls whether DMA allocates in L2 cache) |
-| `%src_stride` | GM source stride: start-to-start distance between consecutive burst rows (bytes) |
-| `%dst_stride` | UB destination stride: start-to-start distance between consecutive burst rows (bytes, 32B-aligned) |
+| Parameter | Width | Description |
+|-----------|-------|-------------|
+| `%gm_src` | ptr | GM source pointer (`!pto.ptr<T, gm>`) |
+| `%ub_dst` | ptr | UB destination pointer (`!pto.ptr<T, ub>`, 32B-aligned) |
+| `%l2_cache_ctl` | 2 bits | L2 cache allocate control |
+| `%len_burst` | 16 bits | Contiguous bytes transferred per burst row |
+| `nburst(%n_burst, %src_stride, %dst_stride)` | 16 bits / 40 bits / 21 bits | Required innermost burst group: count, GM source stride, UB destination stride |
+| `loop(%loop_count, %loop_src_stride, %loop_dst_stride)` | 21 bits / 40 bits / 21 bits | Optional outer repetition group: count, GM source stride, UB destination stride |
+| `pad(%pad_value[, %left_padding_count, %right_padding_count])` | scalar / 8 bits / 8 bits | Optional padding: fill value, optional left padding count, optional right padding count |
+
+**Constraints:**
+
+- `nburst(...)` is always required.
+- Each `loop(...)` group must be provided as a complete triple when present.
+- `nburst(...)` is the innermost group.
+- `loop(...)` groups are ordered from inner to outer.
+- The first `loop(...)` group wraps `nburst(...)`.
+- Each additional `loop(...)` group wraps all earlier groups.
+- `pad(...)` may contain only `%pad_value`; omitted left and right padding counts default to 0.
+- If either left or right padding count is provided, both counts must be provided.
+- `pad(...)` is independent of the optional `loop(...)` groups.
+- A DMA load may use `nburst(...) pad(...)` without any `loop(...)` group.
+
+**Example:**
+
+```mlir
+pto.dma_load %gm_in, %ub_out, %cache, %len_burst
+  nburst(%rows, %gm_row_stride, %ub_row_stride)
+  loop(%tiles, %gm_tile_stride, %ub_tile_stride)
+  pad(%pad)
+  : !pto.ptr<f16, gm>, !pto.ptr<f16, ub>, i64, i64,
+    loop i64, i64, i64, pad f16
+```
 
 ---
 
-##### `pto.copy_ubuf_to_gm`
+##### `pto.dma_store`
 
 - **syntax:**
 ```mlir
-pto.copy_ubuf_to_gm %ub_src, %gm_dst,
-    %sid, %n_burst, %len_burst, %reserved, %dst_stride, %src_stride
-    : !pto.ptr<T, ub>, !pto.ptr<T, gm>, i64, i64, i64, i64, i64, i64
+pto.dma_store %ub_src, %gm_dst, %len_burst
+  nburst(%n_burst, %src_stride, %dst_stride)
+  [loop(%loop_count, %loop_src_stride, %loop_dst_stride)]*
+  : !pto.ptr<T, ub>, !pto.ptr<T, gm>, i64, i64, i64, i64,
+    [loop i64, i64, i64,]*
 ```
-- **semantics:** DMA transfer from Unified Buffer (`!pto.ptr<T, ub>`) to Global Memory (`!pto.ptr<T, gm>`). MTE3 reads only `len_burst` bytes from each UB row (de-padding).
+- **semantics:** Grouped UB→GM DMA transfer. `nburst(...)` defines the innermost repeated burst transfer, and optional `loop(...)` groups add outer repetition levels.
 
-**Parameters:**
+**Parameter Table:**
 
-| Parameter | Description |
-|-----------|-------------|
-| `%ub_src` | UB source pointer (`!pto.ptr<T, ub>`, 32B-aligned) |
-| `%gm_dst` | GM destination pointer (`!pto.ptr<T, gm>`) |
-| `%sid` | Stream ID (usually 0) |
-| `%n_burst` | Number of burst rows |
-| `%len_burst` | Contiguous bytes transferred per burst row |
-| `%reserved` | Reserved field (set to 0) |
-| `%dst_stride` | GM destination stride: start-to-start distance between consecutive burst rows (bytes) |
-| `%src_stride` | UB source stride: start-to-start distance between consecutive burst rows (bytes, 32B-aligned) |
+| Parameter | Width | Description |
+|-----------|-------|-------------|
+| `%ub_src` | ptr | UB source pointer (`!pto.ptr<T, ub>`, 32B-aligned) |
+| `%gm_dst` | ptr | GM destination pointer (`!pto.ptr<T, gm>`) |
+| `%len_burst` | 16 bits | Contiguous bytes transferred per burst row |
+| `nburst(%n_burst, %src_stride, %dst_stride)` | 16 bits / 21 bits / 40 bits | Required innermost burst group: count, UB source stride, GM destination stride |
+| `loop(%loop_count, %loop_src_stride, %loop_dst_stride)` | 21 bits / 21 bits / 40 bits | Optional outer repetition group: count, UB source stride, GM destination stride |
+
+**Constraints:**
+
+- `nburst(...)` is always required.
+- Each `loop(...)` group must be provided as a complete triple when present.
+- `nburst(...)` is the innermost group.
+- `loop(...)` groups are ordered from inner to outer.
+- The first `loop(...)` group wraps `nburst(...)`.
+- Each additional `loop(...)` group wraps all earlier groups.
+
+**Example:**
+
+```mlir
+pto.dma_store %ub_in, %gm_out, %len_burst
+  nburst(%rows, %ub_row_stride, %gm_row_stride)
+  loop(%tiles, %ub_tile_stride, %gm_tile_stride)
+  loop(%batches, %ub_batch_stride, %gm_batch_stride)
+  : !pto.ptr<f16, ub>, !pto.ptr<f16, gm>, i64, i64, i64, i64,
+    loop i64, i64, i64, loop i64, i64, i64
+```
 
 ---
 
-##### `pto.copy_ubuf_to_ubuf`
+##### `pto.dma_copy`
 
 - **syntax:**
 ```mlir
-pto.copy_ubuf_to_ubuf %source, %dest, %sid, %n_burst, %len_burst, %src_stride, %dst_stride
-    : !pto.ptr<T, ub>, !pto.ptr<T, ub>, i64 x5
+pto.dma_copy %ub_src, %ub_dst, %len_burst
+  nburst(%n_burst, %src_gap, %dst_gap)
+  : !pto.ptr<T, ub>, !pto.ptr<T, ub>, i64, i64, i64, i64
 ```
-- **semantics:** Copy within Unified Buffer.
+- **semantics:** Grouped UB→UB raw copy..
 
-**Parameters:**
+**Parameter Table:**
 
-| Parameter | Description |
-|-----------|-------------|
-| `%source` | UB source pointer |
-| `%dest` | UB destination pointer |
-| `%sid` | Stream ID |
-| `%n_burst` | Number of bursts |
-| `%len_burst` | Length per burst |
-| `%src_stride` | Source stride |
-| `%dst_stride` | Destination stride |
+| Parameter | Width | Description |
+|-----------|-------|-------------|
+| `%ub_src` | ptr | UB source pointer (`!pto.ptr<T, ub>`, 32B-aligned) |
+| `%ub_dst` | ptr | UB destination pointer (`!pto.ptr<T, ub>`, 32B-aligned) |
+| `%len_burst` | 16 bits | Burst length in units of 32 bytes |
+| `nburst(%n_burst, %src_gap, %dst_gap)` | 16 bits / 16 bits / 16 bits | Required UB→UB outer burst group: count, source gap, destination gap |
+
+**Constraints:**
+
+- UB source and destination addresses must be 32B-aligned.
+- `%len_burst`, `%src_gap`, and `%dst_gap` are encoded in units of 32 bytes.
+
+**Example:**
+
+```mlir
+pto.dma_copy %ub_src, %ub_dst, %len32b
+  nburst(%rows, %src_gap, %dst_gap)
+  : !pto.ptr<i16, ub>, !pto.ptr<i16, ub>, i64, i64, i64, i64
+```
 
 ---
 
-#### Burst / Stride / Pad Model
+#### GM↔UB Burst / Stride / Pad Model
 
-All A5 DMA addresses are **stride-based**: stride is the distance from the start of one row to the start of the next row (`stride >= lenBurst`). There is no separate "gap" parameter.
+This section describes the grouped GM↔UB DMA interfaces in this document:
+`pto.dma_load` and `pto.dma_store`.
+
+For these grouped GM↔UB DMA ops, the innermost `nburst(...)` group is
+**stride-based**: the source and destination stride operands are the
+start-to-start byte distance from one burst row to the next row.
 
 ##### Key Terms
 
@@ -1704,10 +1827,29 @@ pad      = ub_stride - lenBurst, padded to the 32B alignment boundary
 ##### Alignment Constraints
 
 - **UB addresses** (both source and destination) must be **32-byte aligned**.
-- **GM→UB padding**: When `data_select_bit = true`, each UB row is padded from `lenBurst` up to the **32B-aligned boundary** of `ub_stride` with `pad_val` (set via `set_mov_pad_val`). This ensures every UB row starts at a 32B-aligned offset.
+- **GM→UB padding**: When `pad(...)` is present on `pto.dma_load`, each UB row is padded from `lenBurst` up to the **32B-aligned boundary** of `ub_stride` with `pad_val`. This ensures every UB row starts at a 32B-aligned offset.
 - **UB→GM de-padding**: MTE3 reads `lenBurst` bytes from each 32B-aligned UB row (skipping any padding that was added during load), writing only valid data to GM. This effectively strips padding on store.
 
-##### 2D Diagram: GM→UB (pto.copy_gm_to_ubuf)
+---
+
+#### UB→UB Burst / Gap Model
+
+This section describes the grouped UB→UB DMA interface in this document:
+`pto.dma_copy`.
+
+For `pto.dma_copy`, each burst copies `len_burst * 32` bytes.
+
+The next burst starts at:
+
+```text
+src_next = src_curr + (len_burst + src_gap) * 32 bytes
+dst_next = dst_curr + (len_burst + dst_gap) * 32 bytes
+```
+
+So `src_gap` and `dst_gap` are additional gaps after the copied 32B blocks.
+They are not start-to-start strides.
+
+##### 2D Diagram: GM→UB (`pto.dma_load`)
 
 ```
 GM (source, `!pto.ptr<T, gm>`):
@@ -1732,12 +1874,12 @@ Row N-1:  [##DATA########][000000 PAD 000000000000000]
 
 N = n_burst
 stride = start of row[r] to start of row[r+1]
-pad    = filled with pad_val to 32B boundary (data_select_bit=true)
+pad    = filled with pad_val to 32B boundary (`pad(...)` present)
 [DATA] = valid data transferred by DMA
-[PAD]  = pad_val fill (set via set_mov_pad_val)
+[PAD]  = pad_val fill (from `pad(...)`)
 ```
 
-##### 2D Diagram: UB→GM (pto.copy_ubuf_to_gm)
+##### 2D Diagram: UB→GM (`pto.dma_store`)
 
 ```
 UB (source, `!pto.ptr<T, ub>`, 32B-aligned start addr):
@@ -1767,54 +1909,87 @@ Only len_burst bytes are written to each GM row.
 
 ---
 
-#### Multi-Level Loop Semantics (C Code)
+#### Multi-Level Loop Semantics
 
-The full DMA transfer is a nested loop. The HW loop registers (set before the copy) control the outer levels, and the copy instruction parameters control the innermost burst level.
+The full DMA transfer is a nested loop. `nburst(...)` is the innermost group.
+If one or more `loop(...)` groups are present, they wrap `nburst(...)` in the
+same order they appear in the op: the first `loop(...)` is the innermost outer
+group, the second `loop(...)` wraps the first one, and so on.
 
 ##### GM→UB Full Loop
 
+For a form
+
+```mlir
+pto.dma_load %gm_src, %ub_dst, %l2_cache_ctl, %len_burst
+  nburst(%n_burst, %src_stride, %dst_stride)
+  loop(%c0, %s0, %d0)
+  loop(%c1, %s1, %d1)
+  ...
+  loop(%cN, %sN, %dN)
+  [pad(%pad_value[, %left_padding_count, %right_padding_count])]
+```
+
+the transfer is equivalent to:
+
 ```c
-// C equivalent of what the HW executes:
-for (int j = 0; j < loop2_count; j++) {                // HW outer loop
-    uint8_t *gm1 = gm_src + j * loop2_src_stride;
-    uint8_t *ub1 = ub_dst + j * loop2_dst_stride;
-
-    for (int k = 0; k < loop1_count; k++) {            // HW inner loop
-        uint8_t *gm2 = gm1 + k * loop1_src_stride;
-        uint8_t *ub2 = ub1 + k * loop1_dst_stride;
-
-        for (int r = 0; r < n_burst; r++) {            // burst engine
-            memcpy(ub2 + r * dst_stride,               //   UB dest row
-                   gm2 + r * src_stride,               //   GM src row
-                   len_burst);                          //   contiguous bytes
-            if (data_select_bit)
-                memset(ub2 + r * dst_stride + len_burst,
-                       pad_val, dst_stride - len_burst);
-        }
+for (int lN = 0; lN < cN; ++lN) {
+  ...
+  for (int l1 = 0; l1 < c1; ++l1) {
+    for (int l0 = 0; l0 < c0; ++l0) {
+      uint8_t *gm_base = gm_src + l0 * s0 + l1 * s1 + ... + lN * sN;
+      uint8_t *ub_base = ub_dst + l0 * d0 + l1 * d1 + ... + lN * dN;
+      for (int r = 0; r < n_burst; ++r) {
+        memcpy(ub_base + r * dst_stride,
+               gm_base + r * src_stride,
+               len_burst);
+        if (pad_enabled)
+          memset(ub_base + r * dst_stride + len_burst,
+                 pad_val,
+                 dst_stride - len_burst);
+      }
     }
+  }
 }
 ```
+
+If no `loop(...)` group is present, only the innermost `nburst(...)` loop
+remains.
 
 ##### UB→GM Full Loop
 
+For a form
+
+```mlir
+pto.dma_store %ub_src, %gm_dst, %len_burst
+  nburst(%n_burst, %src_stride, %dst_stride)
+  loop(%c0, %s0, %d0)
+  loop(%c1, %s1, %d1)
+  ...
+  loop(%cN, %sN, %dN)
+```
+
+the transfer is equivalent to:
+
 ```c
-// C equivalent:
-for (int j = 0; j < loop2_count; j++) {
-    uint8_t *ub1 = ub_src + j * loop2_src_stride;
-    uint8_t *gm1 = gm_dst + j * loop2_dst_stride;
-
-    for (int k = 0; k < loop1_count; k++) {
-        uint8_t *ub2 = ub1 + k * loop1_src_stride;
-        uint8_t *gm2 = gm1 + k * loop1_dst_stride;
-
-        for (int r = 0; r < n_burst; r++) {
-            memcpy(gm2 + r * dst_stride,               //   GM dest row
-                   ub2 + r * src_stride,               //   UB src row
-                   len_burst);                          //   contiguous bytes
-        }
+for (int lN = 0; lN < cN; ++lN) {
+  ...
+  for (int l1 = 0; l1 < c1; ++l1) {
+    for (int l0 = 0; l0 < c0; ++l0) {
+      uint8_t *ub_base = ub_src + l0 * s0 + l1 * s1 + ... + lN * sN;
+      uint8_t *gm_base = gm_dst + l0 * d0 + l1 * d1 + ... + lN * dN;
+      for (int r = 0; r < n_burst; ++r) {
+        memcpy(gm_base + r * dst_stride,
+               ub_base + r * src_stride,
+               len_burst);
+      }
     }
+  }
 }
 ```
+
+If no `loop(...)` group is present, only the innermost `nburst(...)` loop
+remains.
 
 ---
 
@@ -1846,21 +2021,10 @@ UB layout (32 × 32 f32, 32B-aligned, contiguous):
 ```
 
 ```mlir
-// Simple 2D load — no multi-level loops needed
-pto.set_loop_size_outtoub %c1_i64, %c1_i64 : i64, i64
-
-pto.copy_gm_to_ubuf %arg0, %ub_in,
-    %c0_i64,       // sid = 0
-    %c32_i64,      // n_burst = 32 (32 rows)
-    %c128_i64,     // len_burst = 128 bytes per row
-    %c0_i64,       // left_padding = 0
-    %c0_i64,       // right_padding = 0
-    %false,        // data_select_bit = false
-    %c0_i64,       // l2_cache_ctl = 0
-    %c128_i64,     // src_stride = 128 bytes
-    %c128_i64      // dst_stride = 128 bytes
-    : !pto.ptr<f32, gm>, !pto.ptr<f32, ub>, i64, i64, i64,
-      i64, i64, i1, i64, i64, i64
+// Simple 2D load — only nburst(...) is needed
+pto.dma_load %arg0, %ub_in, %c0_i64, %c128_i64
+  nburst(%c32_i64, %c128_i64, %c128_i64)
+  : !pto.ptr<f32, gm>, !pto.ptr<f32, ub>, i64, i64, i64
 ```
 
 ---
@@ -1896,23 +2060,9 @@ UB layout (64 × 128 f16, 32B-aligned, contiguous):
 ```
 
 ```mlir
-// Simple 2D load — no multi-level loops needed
-pto.set_loop_size_outtoub %c1_i64, %c1_i64 : i64, i64
-pto.set_loop1_stride_outtoub %c0_i64, %c0_i64 : i64, i64
-pto.set_loop2_stride_outtoub %c0_i64, %c0_i64 : i64, i64
-
-pto.copy_gm_to_ubuf %gm_ptr, %ub_ptr,
-    %c0_i64,       // sid = 0
-    %c64_i64,      // n_burst = 64 (64 rows)
-    %c256_i64,     // len_burst = 256 bytes per row
-    %c0_i64,       // left_padding = 0
-    %c0_i64,       // right_padding = 0
-    %false,        // data_select_bit = false
-    %c0_i64,       // l2_cache_ctl = 0
-    %c1024_i64,    // src_stride = 1024 bytes (full matrix row)
-    %c256_i64      // dst_stride = 256 bytes (tile row)
-    : !pto.ptr<f16, gm>, !pto.ptr<f16, ub>, i64, i64, i64,
-      i64, i64, i1, i64, i64, i64
+pto.dma_load %gm_ptr, %ub_ptr, %c0_i64, %c256_i64
+  nburst(%c64_i64, %c1024_i64, %c256_i64)
+  : !pto.ptr<f16, gm>, !pto.ptr<f16, ub>, i64, i64, i64
 ```
 
 ---
@@ -1947,22 +2097,11 @@ UB (128 cols wide, 32B-aligned, padded):
 ```
 
 ```mlir
-pto.set_loop_size_outtoub %c1_i64, %c1_i64 : i64, i64
-pto.set_loop1_stride_outtoub %c0_i64, %c0_i64 : i64, i64
-pto.set_loop2_stride_outtoub %c0_i64, %c0_i64 : i64, i64
-
-pto.copy_gm_to_ubuf %gm_ptr, %ub_ptr,
-    %c0_i64,       // sid = 0
-    %c64_i64,      // n_burst = 64
-    %c200_i64,     // len_burst = 200 bytes
-    %c0_i64,       // left_padding = 0
-    %c0_i64,       // right_padding = 0
-    %true,         // data_select_bit = true (enable padding)
-    %c0_i64,       // l2_cache_ctl = 0
-    %c200_i64,     // src_stride = 200 bytes
-    %c256_i64      // dst_stride = 256 bytes (32B-aligned)
-    : !pto.ptr<f16, gm>, !pto.ptr<f16, ub>, i64, i64, i64,
-      i64, i64, i1, i64, i64, i64
+%pad = arith.constant 0 : i16
+pto.dma_load %gm_ptr, %ub_ptr, %c0_i64, %c200_i64
+  nburst(%c64_i64, %c200_i64, %c256_i64)
+  pad(%pad, %c0_i64, %c0_i64)
+  : !pto.ptr<f16, gm>, !pto.ptr<f16, ub>, i64, i64, i64, pad i16, i64, i64
 ```
 
 ---
@@ -1994,17 +2133,9 @@ GM (dest, 32 × 32 f32):
 ```
 
 ```mlir
-// Configure MTE3 strides
-pto.set_loop_size_ubtoout %c1_i64, %c1_i64 : i64, i64
-
-pto.copy_ubuf_to_gm %ub_out, %arg1,
-    %c0_i64,       // sid = 0
-    %c32_i64,      // n_burst = 32
-    %c128_i64,     // len_burst = 128 bytes
-    %c0_i64,       // reserved = 0
-    %c128_i64,     // dst_stride = 128 bytes
-    %c128_i64      // src_stride = 128 bytes
-    : !pto.ptr<f32, ub>, !pto.ptr<f32, gm>, i64, i64, i64, i64, i64, i64
+pto.dma_store %ub_out, %arg1, %c128_i64
+  nburst(%c32_i64, %c128_i64, %c128_i64)
+  : !pto.ptr<f32, ub>, !pto.ptr<f32, gm>, i64, i64, i64, i64
 ```
 
 ---
@@ -2040,26 +2171,17 @@ GM (dest, into 1024 × 512 matrix):
 ```
 
 ```mlir
-// Configure MTE3 strides
-pto.set_loop_size_ubtoout %c1_i64, %c1_i64 : i64, i64
-pto.set_loop1_stride_ubtoout %c0_i64, %c0_i64 : i64, i64
-pto.set_loop2_stride_ubtoout %c0_i64, %c0_i64 : i64, i64
-
-pto.copy_ubuf_to_gm %ub_ptr, %gm_ptr,
-    %c0_i64,       // sid = 0
-    %c64_i64,      // n_burst = 64
-    %c256_i64,     // len_burst = 256 bytes
-    %c0_i64,       // reserved = 0
-    %c1024_i64,    // dst_stride = 1024 bytes (GM row)
-    %c256_i64      // src_stride = 256 bytes (UB row)
-    : !pto.ptr<f16, ub>, !pto.ptr<f16, gm>, i64, i64, i64, i64, i64, i64
+pto.dma_store %ub_ptr, %gm_ptr, %c256_i64
+  nburst(%c64_i64, %c256_i64, %c1024_i64)
+  : !pto.ptr<f16, ub>, !pto.ptr<f16, gm>, i64, i64, i64, i64
 ```
 
 ---
 
 #### Example 6: GM→UB with Multi-Level Loop (Batch of Tiles)
 
-Load 4 batches of 8×128 tiles from a [4, 8, 128] f16 tensor using loop1.
+Load 4 batches of 8×128 tiles from a [4, 8, 128] f16 tensor using one outer
+`loop(...)` group.
 
 ```
 GM [4, 8, 128] f16 (contiguous):        UB (4 tiles laid out sequentially):
@@ -2067,43 +2189,29 @@ GM [4, 8, 128] f16 (contiguous):        UB (4 tiles laid out sequentially):
     batch 0: 8 rows × 256 bytes          [batch 0: 8×128][batch 1: 8×128]
     batch 1: 8 rows × 256 bytes          [batch 2: 8×128][batch 3: 8×128]
     batch 2: 8 rows × 256 bytes
-    batch 3: 8 rows × 256 bytes          loop1 src_stride = 2048 bytes (8 × 256)
-                                          loop1 dst_stride = 2048 bytes (8 × 256)
-    Each batch = 8 × 256 = 2048 bytes     loop1_count = 4 (iterate over batches)
+    batch 3: 8 rows × 256 bytes          outer loop src_stride = 2048 bytes (8 × 256)
+                                          outer loop dst_stride = 2048 bytes (8 × 256)
+    Each batch = 8 × 256 = 2048 bytes     outer loop count = 4 (iterate over batches)
 ```
 
 ```mlir
-// loop1_count = 4 batches, loop2_count = 1 (not used)
-pto.set_loop_size_outtoub %c4_i64, %c1_i64 : i64, i64
-
-// loop1 stride: advance by one batch (2048 bytes) in both GM and UB
-pto.set_loop1_stride_outtoub %c2048_i64, %c2048_i64 : i64, i64
-pto.set_loop2_stride_outtoub %c0_i64, %c0_i64 : i64, i64
-
-pto.copy_gm_to_ubuf %gm_ptr, %ub_ptr,
-    %c0_i64,       // sid = 0
-    %c8_i64,       // n_burst = 8 rows per batch
-    %c256_i64,     // len_burst = 256 bytes per row
-    %c0_i64,       // left_padding = 0
-    %c0_i64,       // right_padding = 0
-    %false,        // data_select_bit = false
-    %c0_i64,       // l2_cache_ctl = 0
-    %c256_i64,     // src_stride = 256 (contiguous rows)
-    %c256_i64      // dst_stride = 256 (contiguous rows)
-    : !pto.ptr<f16, gm>, !pto.ptr<f16, ub>, i64, i64, i64,
-      i64, i64, i1, i64, i64, i64
+// One outer loop group over 4 batches
+pto.dma_load %gm_ptr, %ub_ptr, %c0_i64, %c256_i64
+  nburst(%c8_i64, %c256_i64, %c256_i64)
+  loop(%c4_i64, %c2048_i64, %c2048_i64)
+  : !pto.ptr<f16, gm>, !pto.ptr<f16, ub>, i64, i64, i64, loop i64, i64, i64
 ```
 
 Execution trace:
 
 ```
-loop1 iter 0: gm_ptr + 0×2048 → ub_ptr + 0×2048, DMA 8 rows × 256B
-loop1 iter 1: gm_ptr + 1×2048 → ub_ptr + 1×2048, DMA 8 rows × 256B
-loop1 iter 2: gm_ptr + 2×2048 → ub_ptr + 2×2048, DMA 8 rows × 256B
-loop1 iter 3: gm_ptr + 3×2048 → ub_ptr + 3×2048, DMA 8 rows × 256B
+loop iter 0: gm_ptr + 0×2048 → ub_ptr + 0×2048, DMA 8 rows × 256B
+loop iter 1: gm_ptr + 1×2048 → ub_ptr + 1×2048, DMA 8 rows × 256B
+loop iter 2: gm_ptr + 2×2048 → ub_ptr + 2×2048, DMA 8 rows × 256B
+loop iter 3: gm_ptr + 3×2048 → ub_ptr + 3×2048, DMA 8 rows × 256B
 ```
 
-<a id="isa-03-vector-load-store"></a>
+<a id="micro-03-vector-load-store"></a>
 
 ### 3. Vector Load/Store
 
@@ -2143,7 +2251,7 @@ Vector loads move data from Unified Buffer (UB) to vector registers (`vreg`). Ve
 |-------------|-------------|------------------------------|
 | `RV_VLD` | `dist:NORMAL` / `NORAML` | **9** |
 | `RV_VLDI` | `dist:DINTLV` (dual vreg) | **9** |
-| `RV_VST` / `RV_VSTI` | `dist:NORM` | **9** |
+| `RV_VST` / `RV_VSTI` | `dist:NORM_B8` / `NORM_B16` / `NORM_B32` | **9** |
 | `RV_VGATHER2` | `Dtype: B32` | **27–28** |
 | `RV_VGATHERB` | indexed byte gather | **~21** |
 | `RV_VSCATTER` | `Dtype: B16` | **~17** |
@@ -2151,17 +2259,17 @@ Vector loads move data from Unified Buffer (UB) to vector registers (`vreg`). Ve
 
 ##### `dist:` tokens (issue→retire)
 
-Most **`dist:`** tokens are **9** issue→retire cycles. **`INTLV`** on **`RV_VSTI`** is **12** cycles.
+Most **`dist:`** tokens are **9** issue→retire cycles. **`INTLV_B8` / `INTLV_B16` / `INTLV_B32`** on **`RV_VSTI`** are **12** cycles.
 
 | `dist:` (as in log) | RV op | issue→retire (cycles) |
 |---------------------|-------|----------------------|
-| `DINTLV` | `RV_VLDI` | **9** |
-| `BRC` | `RV_VLD` | **9** |
+| `DINTLV_B8` / `DINTLV_B16` / `DINTLV_B32` | `RV_VLDI` | **9** |
+| `BRC_B8` / `BRC_B16` / `BRC_B32` | `RV_VLD` | **9** |
 | `BRC_BLK` | `RV_VLD` | **9** |
-| `INTLV` | `RV_VSTI` | **12** |
-| `UNPK` | `RV_VLD` | **9** |
-| `NORM` | `RV_VSTI` | **9** |
-| `PK` | `RV_VSTI` | **9** |
+| `INTLV_B8` / `INTLV_B16` / `INTLV_B32` | `RV_VSTI` | **12** |
+| `UNPK_B8` / `UNPK_B16` / `UNPK_B32` | `RV_VLD` | **9** |
+| `NORM_B8` / `NORM_B16` / `NORM_B32` | `RV_VSTI` | **9** |
+| `PK_B16` / `PK_B32` / `PK_B64` / `PK4_B32` | `RV_VSTI` | **9** |
 | `NORMAL` / `NORAML` | `RV_VLD` | **9** |
 
 **Note:** PTO intrinsic **`BRC_BLK`** matches the **`BRC_BLK`** `dist:` string on **`RV_VLD`** in simulator logs (block-replicate path; not a plain contiguous copy in the usual tiling use).
@@ -2179,21 +2287,21 @@ Most **`dist:`** tokens are **9** issue→retire cycles. **`INTLV`** on **`RV_VS
 | PTO `dist` (load) | Latency |
 |-------------------|-------------------|
 | `NORM` | **9** cycles |
-| `UNPK` | **9** cycles |
-| `DINTLV` | **9** cycles (`RV_VLDI`) |
-| `BRC` | **9** cycles (`RV_VLD`) |
+| `UNPK_B8` / `UNPK_B16` / `UNPK_B32` | **9** cycles |
+| `DINTLV_B8` / `DINTLV_B16` / `DINTLV_B32` | **9** cycles (`RV_VLDI`) |
+| `BRC_B8` / `BRC_B16` / `BRC_B32` | **9** cycles (`RV_VLD`) |
 | `BRC_BLK` | **9** cycles as **`dist:BRC_BLK`** on `RV_VLD` |
 | `BDINTLV` | **9** cycles |
-| `US`, `DS`, `SPLT4CHN`, `SPLT2CHN` | **9** cycles |
+| `US_B8` / `US_B16`, `DS_B8` / `DS_B16`, `SPLT4CHN`, `SPLT2CHN_B8` / `SPLT2CHN_B16` | **9** cycles |
 
 ##### PTO `dist` summary (stores)
 
 | PTO `dist` (store) | Latency |
 |--------------------|-------------------|
-| `NORM` | **9** cycles (`RV_VSTI`) |
-| `PK` | **9** cycles |
-| `INTLV` (`pto.vstx2`) | **12** cycles |
-| `MRG4CHN`, `MRG2CHN` | **9** cycles |
+| `NORM_B8` / `NORM_B16` / `NORM_B32` | **9** cycles (`RV_VSTI`) |
+| `PK_B16` / `PK_B32` / `PK_B64` / `PK4_B32` | **9** cycles |
+| `INTLV_B8` / `INTLV_B16` / `INTLV_B32` (`pto.vstsx2`) | **12** cycles |
+| `MRG4CHN_B8`, `MRG2CHN_B8`, `MRG2CHN_B16` | **9** cycles (surface retained; current A5 hardware still reports them unsupported at validation time) |
 
 ##### Gather, scatter, and special addressing
 
@@ -2238,20 +2346,21 @@ DMA **`TLOAD` / `TSTORE`** (global memory ↔ UB) use **MTE** pipes, not `RV_VLD
 | Family | Allowed element widths | C semantics | Latency |
 |------|-------------|-------------|-------------|
 | `NORM` | width-agnostic | `dst[i] = UB[base + i * sizeof(T)]` | **9** cycles |
-| `BRC` | `b8`, `b16`, `b32` | `dst[i] = UB[base]` for all `i` | **9** cycles |
-| `US` | `b8`, `b16` | `dst[2*i] = dst[2*i+1] = UB[base + i]` | **9** cycles |
-| `DS` | `b8`, `b16` | `dst[i] = UB[base + 2*i]` | **9** cycles |
-| `UNPK` | `b8`, `b16`, `b32` | Expand packed source data into wider lanes | **9** cycles |
+| `BRC_B8` / `BRC_B16` / `BRC_B32` | `b8`, `b16`, `b32` | `dst[i] = UB[base]` for all `i` | **9** cycles |
+| `US_B8` / `US_B16` | `b8`, `b16` | `dst[2*i] = dst[2*i+1] = UB[base + i]` | **9** cycles |
+| `DS_B8` / `DS_B16` | `b8`, `b16` | `dst[i] = UB[base + 2*i]` | **9** cycles |
+| `UNPK_B8` / `UNPK_B16` / `UNPK_B32` | `b8`, `b16`, `b32` | Expand packed source data into wider lanes | **9** cycles |
 | `BRC_BLK` | width-agnostic | Block-replicate load path; simulator logs may print `dist:BRC_BLK` | **9** cycles |
-| `E2B` | `b16`, `b32` | Load element groups and expand them into byte-oriented lane layout | **9** cycles |
+| `E2B_B16` / `E2B_B32` | `b16`, `b32` | Load element groups and expand them into byte-oriented lane layout | **9** cycles |
 | `UNPK4` | `b8` | Unpack 4-way packed `b8` source groups into destination lanes | **9** cycles |
 | `SPLT4CHN` | `b8` | Split 4-channel interleaved source into one channel plane | **9** cycles |
-| `SPLT2CHN` | `b8`, `b16` | Split 2-channel interleaved source into one channel plane | **9** cycles |
+| `SPLT2CHN_B8` / `SPLT2CHN_B16` | `b8`, `b16` | Split 2-channel interleaved source into one channel plane | **9** cycles |
 
 `pto.vlds` currently covers only single-result load families. Dual-result
 deinterleave forms are modeled separately in PTO surface as
 [`pto.vldsx2`](#ptovldsx2): `BDINTLV` is the block-deinterleave family, while
-`DINTLV` is the element-width-sensitive deinterleave family.
+`DINTLV_B8` / `DINTLV_B16` / `DINTLV_B32` are the element-width-sensitive
+deinterleave forms.
 
 **Example — Contiguous load:**
 ```mlir
@@ -2260,7 +2369,7 @@ deinterleave forms are modeled separately in PTO surface as
 
 **Example — Broadcast scalar to all lanes:**
 ```mlir
-%v = pto.vlds %ub[%c0] {dist = "BRC"} : !pto.ptr<f32, ub> -> !pto.vreg<64xf32>
+%v = pto.vlds %ub[%c0] {dist = "BRC_B32"} : !pto.ptr<f32, ub> -> !pto.vreg<64xf32>
 ```
 
 ---
@@ -2340,19 +2449,21 @@ deinterleave forms are modeled separately in PTO surface as
   This family is only legal for interleave/deinterleave style distributions.
   The two outputs form an ordered pair, and that pairing MUST be preserved.
   PTO surface accepts deinterleave families. `BDINTLV` is element-width
-  agnostic, while `DINTLV` supports only the element widths listed in the
+  agnostic, while `DINTLV_B8` / `DINTLV_B16` / `DINTLV_B32` support only the
+  element widths listed in the
   table.
-- **latency:** `BDINTLV` / `DINTLV` are both **9** cycles.
+- **latency:** `BDINTLV` / `DINTLV_B8` / `DINTLV_B16` / `DINTLV_B32` are all
+  **9** cycles.
 
 **Distribution families:**
 
 | Family | Allowed element widths | C semantics | Latency |
 |------|-------------|-------------|-------------|
 | `BDINTLV` | width-agnostic | Block deinterleave into two destination vectors | **9** cycles |
-| `DINTLV` | `b8`, `b16`, `b32` | Deinterleave alternating elements into `%low` / `%high` | **9** cycles |
+| `DINTLV_B8` / `DINTLV_B16` / `DINTLV_B32` | `b8`, `b16`, `b32` | Deinterleave alternating elements into `%low` / `%high` | **9** cycles |
 
 ```c
-// DINTLV family on 32-bit elements: deinterleave 32-bit elements
+// DINTLV_B32 family on 32-bit elements: deinterleave 32-bit elements
 for (int i = 0; i < 64; i++) {
     low[i]  = UB[base + 8*i];       // even elements
     high[i] = UB[base + 8*i + 4];   // odd elements
@@ -2361,7 +2472,7 @@ for (int i = 0; i < 64; i++) {
 
 **Example — Load interleaved XY pairs into separate X/Y vectors:**
 ```mlir
-%x, %y = pto.vldsx2 %ub[%offset], "DINTLV" : !pto.ptr<f32, ub>, index -> !pto.vreg<64xf32>, !pto.vreg<64xf32>
+%x, %y = pto.vldsx2 %ub[%offset], "DINTLV_B32" : !pto.ptr<f32, ub>, index -> !pto.vreg<64xf32>, !pto.vreg<64xf32>
 ```
 
 ##### `pto.vsldb`
@@ -2396,22 +2507,23 @@ for (int blk = 0; blk < 8; ++blk) {
 
 ##### `pto.vgather2`
 
-- **syntax:** `%result = pto.vgather2 %source, %offsets, %active_lanes : !pto.ptr<T, ub>, !pto.vreg<NxI>, index -> !pto.vreg<NxT>`
+- **syntax:** `%result = pto.vgather2 %source, %offsets, %mask : !pto.ptr<T, ub>, !pto.vreg<NxI>, !pto.mask<G> -> !pto.vreg<NxT>`
 - **semantics:** Indexed gather from UB.
 - **inputs:**
   `%source` is the UB base pointer, `%offsets` provides per-lane element
-  offsets, and `%active_lanes` bounds how many lanes participate.
+  offsets, and `%mask` selects the active requests.
 - **outputs:**
   `%result` is the gathered vector.
 - **constraints and limitations:**
-  Only the first `%active_lanes` indices participate. The index element width
+  Only masked-on indices participate. The index element width
   and interpretation MUST match the selected gather form, and each effective
   address must satisfy that form's alignment rules.
 - **Latency:** **27–28** cycles per `RV_VGATHER2`; throughput much lower than contiguous `RV_VLD` (see **Latency and throughput (A5)** at the start of this chapter).
 
 ```c
-for (int i = 0; i < active_lanes; i++)
-    dst[i] = UB[base + offsets[i] * sizeof(T)];
+for (int i = 0; i < N; i++)
+    if (mask[i])
+        dst[i] = UB[base + offsets[i] * sizeof(T)];
 ```
 
 ---
@@ -2473,7 +2585,7 @@ for (int blk = 0; blk < VL / 32; ++blk) {
 - **semantics:** Vector store with distribution mode.
 - **inputs:**
   `%value` is the source vector, `%dest` is the UB base pointer, `%offset` is
-  the displacement, `%mask` selects the active lanes or sub-elements, and
+  the displacement, `%mask` is the predicate operand, and
   `DIST` selects the store distribution.
 - **outputs:**
   This op has no SSA result; it writes to UB memory.
@@ -2489,16 +2601,18 @@ for (int blk = 0; blk < VL / 32; ++blk) {
 
 | Family | Allowed element widths | C semantics | Latency |
 |------|-------------|-------------|-------------|
-| `NORM` | `b8`, `b16`, `b32` | `UB[base + i] = src[i]` | **9** cycles |
-| `1PT` | `b8`, `b16`, `b32` | Only element 0 is written to the destination footprint | **9** cycles |
-| `PK` | `b16`, `b32`, `b64` | Pack low half bits of each source element before store | **9** cycles |
-| `PK4` | `b32` | Pack low 8 bits of each `b32` element before store | **9** cycles |
-| `MRG4CHN` | `b8` | Merge 4 channel planes into an interleaved 4-channel layout | **9** cycles |
-| `MRG2CHN` | `b8`, `b16` | Merge 2 channel planes into an interleaved 2-channel layout | **9** cycles |
+| `NORM_B8` / `NORM_B16` / `NORM_B32` | `b8`, `b16`, `b32` | `UB[base + i] = src[i]` | **9** cycles |
+| `1PT_B8` / `1PT_B16` / `1PT_B32` | `b8`, `b16`, `b32` | Only element 0 is written to the destination footprint; the predicate register is ignored. | **9** cycles |
+| `PK_B16` | `b16` | Pack the source vector, extract the lower half bits of all elements, and only store the active elements. The predicate is interpreted for 16-bit data. | **9** cycles |
+| `PK_B32` | `b32` | Pack the source vector, extract the lower half bits of all elements, and only store the active elements. The predicate is interpreted for 32-bit data. | **9** cycles |
+| `PK_B64` | `b64` | Pack the source vector, extract the lower half bits of all elements, and only store the active elements. The predicate is interpreted for 64-bit data. | **9** cycles |
+| `PK4_B32` | `b32` | Pack the source vector, extract the lower 8 bits of all elements, and only store the active elements. The predicate is interpreted for 32-bit data. | **9** cycles |
+| `MRG4CHN_B8` | `b8` | Merge 4 interleaved 8-bit channels within each 32B block; the predicate is interpreted for 32-bit data and applies after channel merge. | **9** cycles |
+| `MRG2CHN_B8` / `MRG2CHN_B16` | `b8`, `b16` | Merge 2 interleaved channels within each 32B block; for `MRG2CHN_B8` the predicate is interpreted for 16-bit data, and for `MRG2CHN_B16` it is interpreted for 32-bit data; in both cases it applies after channel merge. | **9** cycles |
 
 **Example — Contiguous store:**
 ```mlir
-pto.vsts %v, %ub[%offset], %mask {dist = "NORM"} : !pto.vreg<64xf32>, !pto.ptr<f32, ub>, !pto.mask<G>
+pto.vsts %v, %ub[%offset], %mask {dist = "NORM_B32"} : !pto.vreg<64xf32>, !pto.ptr<f32, ub>, !pto.mask<G>
 ```
 
 ---
@@ -2512,16 +2626,15 @@ pto.vsts %v, %ub[%offset], %mask {dist = "NORM"} : !pto.vreg<64xf32>, !pto.ptr<f
 - **inputs:**
   `%low` and `%high` are the two source vectors, `%dest` is the UB base pointer,
   `%offset` is the displacement, `DIST` selects the interleave layout, and
-  `%mask` gates the participating elements.
+  `%mask` is the predicate operand.
 - **outputs:**
   This op has no SSA result; it writes an interleaved stream to UB.
 - **constraints and limitations:**
   This family is only legal for interleave distributions. The two source
   vectors form an ordered pair, and the interleave semantics of that pair MUST
   be preserved. PTO surface accepts the `INTLV` family, which only supports the
-  element widths listed below.
-  be preserved. PTO surface accepts the `INTLV` family, which only supports the
-  element widths listed below.
+  element widths listed below. For all `INTLV_*` distributions, the predicate
+  register is ignored.
 - **latency:** `INTLV` is **12** cycles。
 
 **Distribution families:**
@@ -2529,7 +2642,6 @@ pto.vsts %v, %ub[%offset], %mask {dist = "NORM"} : !pto.vreg<64xf32>, !pto.ptr<f
 | Family | Allowed element widths | C semantics | Latency |
 |------|-------------|-------------|-------------|
 | `INTLV` | `b8`, `b16`, `b32` | Interleave `%low` / `%high` into one destination stream | **12** cycles |
-| `INTLV` | `b8`, `b16`, `b32` |
 
 ```c
 // INTLV family on 32-bit elements:
@@ -2568,11 +2680,11 @@ for (int blk = 0; blk < 8; ++blk) {
 
 ##### `pto.vscatter`
 
-- **syntax:** `pto.vscatter %value, %dest, %offsets, %active_lanes : !pto.vreg<NxT>, !pto.ptr<T, ub>, !pto.vreg<NxI>, index`
+- **syntax:** `pto.vscatter %value, %dest, %offsets, %mask : !pto.vreg<NxT>, !pto.ptr<T, ub>, !pto.vreg<NxI>, !pto.mask<G>`
 - **semantics:** Indexed scatter to UB.
 - **inputs:**
   `%value` is the source vector, `%dest` is the UB base pointer, `%offsets`
-  provides per-lane or per-block indices, and `%active_lanes` bounds the active
+  provides per-lane or per-block indices, and `%mask` selects the active
   requests.
 - **outputs:**
   This op writes UB memory and returns no SSA value.
@@ -2584,8 +2696,9 @@ for (int blk = 0; blk < 8; ++blk) {
 - **Latency:** **~17** cycles for **`Dtype: B16`**.
 
 ```c
-for (int i = 0; i < active_lanes; i++)
-    UB[base + offsets[i] * sizeof(T)] = src[i];
+for (int i = 0; i < N; i++)
+    if (mask[i])
+        UB[base + offsets[i] * sizeof(T)] = src[i];
 ```
 
 ---
@@ -2701,7 +2814,7 @@ These ops make reference-updated state explicit as SSA results.
   `NO_POST_UPDATE`.
 - **Latency:** **9** cycles.
 
-<a id="isa-04-predicate-load-store"></a>
+<a id="micro-04-predicate-load-store"></a>
 
 ### 4. Predicate Load/Store
 
@@ -2839,7 +2952,7 @@ pto.psts %mask, %ub_mask[%c0], "NORM" : !pto.mask<b32>, !pto.ptr<T, ub>, index
 %result = pto.vsel %v_true, %v_false, %saved_mask : !pto.vreg<64xf32>, !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
 ```
 
-<a id="isa-05-materialization-predicate"></a>
+<a id="micro-05-materialization-predicate"></a>
 
 ### 5. Materialization & Predicate Ops
 
@@ -3164,7 +3277,7 @@ for (int i = 0; i < N; i++)
 %result = pto.vsel %true_vals, %false_vals, %combined : !pto.vreg<64xf32>, !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
 ```
 
-<a id="isa-06-unary-vector-ops"></a>
+<a id="micro-06-unary-vector-ops"></a>
 
 ### 6. Unary Vector Ops
 
@@ -3294,7 +3407,7 @@ for (int i = 0; i < N; i++)
 ##### `pto.vrelu`
 
 - **syntax:** `%result = pto.vrelu %input, %mask : !pto.vreg<NxT>, !pto.mask<G> -> !pto.vreg<NxT>`
-- **A5 types:** f16, f32
+- **A5 types:** si32, i32, f16, f32
 
 ```c
 for (int i = 0; i < N; i++)
@@ -3303,8 +3416,9 @@ for (int i = 0; i < N; i++)
 
 - **inputs:** `%input` is the source vector and `%mask` selects active lanes.
 - **outputs:** `%result` holds `max(input[i], 0)` per active lane.
-- **constraints and limitations:** Only floating-point element types are legal
-  on the current A5 surface described here.
+- **constraints and limitations:** Signed or signless 32-bit integer and
+  floating-point element types are legal on the current A5 surface described
+  here.
 
 ---
 
@@ -3339,7 +3453,7 @@ for (int i = 0; i < N; i++)
 %activated = pto.vrelu %linear_out, %mask : !pto.vreg<64xf32>, !pto.mask<G> -> !pto.vreg<64xf32>
 ```
 
-<a id="isa-07-binary-vector-ops"></a>
+<a id="micro-07-binary-vector-ops"></a>
 
 ### 7. Binary Vector Ops
 
@@ -3635,7 +3749,7 @@ for (int i = 0; i < N; i++) {
 %masked = pto.vand %data, %bitmask, %mask : !pto.vreg<64xi32>, !pto.vreg<64xi32>, !pto.mask<G> -> !pto.vreg<64xi32>
 ```
 
-<a id="isa-08-vec-scalar-ops"></a>
+<a id="micro-08-vec-scalar-ops"></a>
 
 ### 8. Vec-Scalar Ops
 
@@ -3874,7 +3988,7 @@ for (int i = 0; i < N; i++) {
 %shifted = pto.vshrs %data, %c4, %mask : !pto.vreg<64xi32>, i16, !pto.mask<G> -> !pto.vreg<64xi32>
 ```
 
-<a id="isa-09-conversion-ops"></a>
+<a id="micro-09-conversion-ops"></a>
 
 ### 9. Conversion Ops
 
@@ -3907,17 +4021,21 @@ Cycle-accurate simulator **popped→retire** latency (cycles). Only representati
 
 #### `pto.vci`
 
-- **syntax:** `%result = pto.vci %index {order = "ORDER"} : integer -> !pto.vreg<NxT>`
-- **semantics:** Generate a lane-index vector from a scalar seed/index value.
+- **syntax:** `%result = pto.vci %index {order = "ASC|DESC"} : T -> !pto.vreg<NxT>`
+- **semantics:** Generate a lane-index vector from a scalar base value.
 - **inputs:**
-  `%index` is the scalar seed or base index.
+  `%index` is the scalar base value. Supported scalar types are `i8/i16/i32`,
+  `f16`, and `f32`.
 - **outputs:**
   `%result` is the generated index vector.
 - **constraints and limitations:**
-  This is an index-generation family, not a numeric conversion. `ORDER` and the
-  result element type together determine how indices are generated. `%result`
-  uses an integer element type, and the scalar `%index` type matches that
-  result element type.
+  This is an index-generation family, not a numeric conversion. `order` and
+  the result element type together determine whether lanes are generated as
+  `base + lane_id` or `base - lane_id`. Supported result types are
+  `!pto.vreg<256xsi8>`, `!pto.vreg<128xsi16>`, `!pto.vreg<64xsi32>`,
+  `!pto.vreg<128xf16>`, and `!pto.vreg<64xf32>`. `%index` must use the
+  matching scalar type for `f16`/`f32`; for integer results, `%index` must use
+  the same bit width and may be signless or signed.
 
 ---
 
@@ -3972,13 +4090,26 @@ for (int i = 0; i < min(N, M); i++)
 ##### Part Modes
 
 Use `part` when a width-changing conversion writes only one half of each wider
-destination lane group. This is typically used in even/odd placement forms such
-as `32 -> 16` or `16 -> 32` style conversions.
+destination lane group.
+
+- `Part` (`PART_EVEN`, `PART_ODD`)
+  - Used by ordinary width-changing conversions.
+  - Typical cases include `32 -> 16`, `16 -> 32`, and other even/odd packing
+    or unpacking forms.
+- `Part_T` (`PART_P0`, `PART_P1`, `PART_P2`, `PART_P3`)
+  - Used by lower-level packed placement forms.
+  - Typical cases include `32 -> 8`, packed fp8/fp4 conversion paths, and
+    other flows where the result is written into one of four sub-parts before a
+    later merge or compact step.
 
 | Mode | Description |
 |------|-------------|
 | `EVEN` | Output to even-indexed lanes |
 | `ODD` | Output to odd-indexed lanes |
+| `P0` | Output to sub-part 0 in 4-way packed placement forms |
+| `P1` | Output to sub-part 1 in 4-way packed placement forms |
+| `P2` | Output to sub-part 2 in 4-way packed placement forms |
+| `P3` | Output to sub-part 3 in 4-way packed placement forms |
 
 ---
 
@@ -4014,6 +4145,7 @@ as `32 -> 16` or `16 -> 32` style conversions.
 
 - `%dst = pto.vcvt %src, %mask {rnd, sat, part} : !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<128xf16>`
 - `%dst = pto.vcvt %src, %mask {rnd, sat, part} : !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<128xbf16>`
+- `%dst = pto.vcvt %src, %mask {rnd, sat} : !pto.vreg<128xbf16>, !pto.mask<b16> -> !pto.vreg<128xf16>`
 - `%dst = pto.vcvt %src, %mask {part} : !pto.vreg<128xf16>, !pto.mask<b16> -> !pto.vreg<64xf32>`
 - `%dst = pto.vcvt %src, %mask {part} : !pto.vreg<128xbf16>, !pto.mask<b16> -> !pto.vreg<64xf32>`
 
@@ -4060,7 +4192,7 @@ per-form entries above as the source of truth.
 | `si64` |  |  |  |  |  |  |  |  |  |  |
 | `f16` | Y | Y |  | Y |  | Y |  |  | Y |  |
 | `f32` |  |  |  | Y |  | Y | Y | Y |  | Y |
-| `bf16` |  |  |  |  |  | Y |  |  | Y |  |
+| `bf16` |  |  |  |  |  | Y |  | Y | Y |  |
 
 ---
 
@@ -4129,7 +4261,86 @@ for (int i = 0; i < N; i++)
     : !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xi32>
 ```
 
-<a id="isa-10-reduction-ops"></a>
+---
+
+#### `pto.vbitcast`
+
+- **syntax:** `%result = pto.vbitcast %input : !pto.vreg<NxT0> -> !pto.vreg<MxT1>`
+- **semantics:** Bitwise reinterpretation of a vreg vector without changing the underlying bit pattern. This operation performs a pure type cast that preserves the exact bits of each element, changing only their interpretation (e.g., from floating-point to integer).
+
+- **inputs:**
+  `%input` is the source vector register value.
+- **outputs:**
+  `%result` is the reinterpreted vector register value.
+- **constraints and limitations:**
+  1. Both source and result must be `!pto.vreg<...>` types.
+  2. Source and result vectors must have the same total bit width (currently 2048 bits).
+  3. Only integer and floating-point element types are supported.
+
+**Element bit-width equality examples:**
+- `f32<64>` → `i32<64>`  (both 32-bit elements, total 2048 bits)
+- `f16<128>` → `i16<128>` (both 16-bit elements, total 2048 bits)
+- `bf16<128>` → `ui16<128>` (both 16-bit elements, total 2048 bits)
+- `si32<64>` → `ui32<64>` (both 32-bit elements, total 2048 bits)
+- `f32<64>` → `i16<128>` (32-bit/16-bit elements, total 2048 bits)
+
+**Verification:** The operation verifies that:
+1. Both input and result are `!pto.vreg<...>` types.
+2. Total bit width equals 2048 (the fixed vreg size).
+
+**Comparison with `pto.vcvt`:**
+- `pto.vcvt` performs value conversion with rounding, saturation, and lane placement control.
+- `pto.vbitcast` performs bitwise reinterpretation without changing the underlying bit pattern.
+
+**Example: Reinterpreting float as integer for bit manipulation**
+```mlir
+// Prepare a vector of float values
+%fvec = pto.vlds %ub[%lane] : !pto.ptr<f32, ub> -> !pto.vreg<64xf32>
+
+// Reinterpret as integer for bitwise operations
+%ivec = pto.vbitcast %fvec : !pto.vreg<64xf32> -> !pto.vreg<64xi32>
+
+// Extract sign bit (bit 31)
+%sign_bits = pto.vand %ivec, %sign_mask, %mask : !pto.vreg<64xi32>, !pto.vreg<64xi32>, !pto.mask<b32> -> !pto.vreg<64xi32>
+
+// Reinterpret back to float
+%fvec_without_sign = pto.vbitcast %sign_bits : !pto.vreg<64xi32> -> !pto.vreg<64xf32>
+```
+
+**Example: Type punning between signed and unsigned integer**
+```mlir
+// Convert signed to unsigned without changing bits
+%signed = pto.vlds %ub[%lane] : !pto.ptr<si32, ub> -> !pto.vreg<64xsi32>
+%unsigned = pto.vbitcast %signed : !pto.vreg<64xsi32> -> !pto.vreg<64xui32>
+// Bits are identical; interpretation changes from signed to unsigned
+```
+
+#### `pto.pbitcast`
+
+- **syntax:** `%result = pto.pbitcast %input : !pto.mask<G0> -> !pto.mask<G1>`
+- **semantics:** Bitwise reinterpretation of a predicate register without
+  changing the underlying predicate-register image. This op makes mask-family
+  reinterpretation explicit in VPTO IR when a producer and consumer expect
+  different `!pto.mask<...>` views of the same hardware predicate state.
+
+- **inputs:**
+  `%input` is the source predicate register value.
+- **outputs:**
+  `%result` is the reinterpreted predicate register value.
+- **constraints and limitations:**
+  1. Both source and result must be `!pto.mask<...>` types.
+  2. `pto.pbitcast` does not materialize or normalize predicate contents; it
+     only changes which mask granularity the surrounding VPTO IR uses to
+     interpret the same predicate bits.
+
+**Example: Reinterpret a b16 predicate as b32 before a consumer**
+```mlir
+%m16 = pto.pintlv_b16 %lhs, %rhs : !pto.mask<b16>, !pto.mask<b16> -> !pto.mask<b16>, !pto.mask<b16>
+%m32 = pto.pbitcast %m16#0 : !pto.mask<b16> -> !pto.mask<b32>
+%result = pto.vsel %a, %b, %m32 : !pto.vreg<64xf32>, !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
+```
+
+<a id="micro-10-reduction-ops"></a>
 
 ### 10. Reduction Ops
 
@@ -4152,8 +4363,8 @@ Operations that reduce a vector to a scalar or per-group result.
 
 ##### `pto.vcadd`
 
-- **syntax:** `%result = pto.vcadd %input, %mask : !pto.vreg<NxT>, !pto.mask<G> -> !pto.vreg<NxT>`
-- **A5 types:** i16-i64, f16, f32
+- **syntax:** `%result = pto.vcadd %input, %mask : !pto.vreg<NxT>, !pto.mask<G> -> !pto.vreg<MxU>`
+- **A5 types:** i8-i32, f16, f32
 - **semantics:** Sum all elements. Result in lane 0, others zeroed.
 
 ```c
@@ -4168,9 +4379,11 @@ for (int i = 1; i < N; i++)
 - **inputs:** `%input` is the source vector and `%mask` selects participating
   lanes.
 - **outputs:** `%result` contains the reduction result in its low element(s).
-- **constraints and limitations:** Some narrow integer forms may widen the
-  internal accumulation or result placement. If all predicate bits are zero, the
-  result is zero.
+- **constraints and limitations:** On A5, `i8/u8` inputs produce widened
+  `i16/u16` results with half as many lanes (`M = N / 2`), and `i16/u16` inputs
+  produce widened `i32/u32` results with half as many lanes. For
+  `i32/u32/f16/f32` inputs, `U = T` and `M = N`. If all predicate bits are
+  zero, the result is zero.
 
 ---
 
@@ -4362,7 +4575,7 @@ for (int i = 1; i < N; i++)
 // Softmax: find max for numerical stability
 %max_vec = pto.vcmax %logits, %mask : !pto.vreg<64xf32>, !pto.mask<G> -> !pto.vreg<64xf32>
 // max is in lane 0, broadcast it
-%max_broadcast = pto.vlds %ub_tmp[%c0] {dist = "BRC"} : !pto.ptr<f32, ub> -> !pto.vreg<64xf32>
+%max_broadcast = pto.vlds %ub_tmp[%c0] {dist = "BRC_B32"} : !pto.ptr<f32, ub> -> !pto.vreg<64xf32>
 
 // Row-wise sum using vcgadd (for 8-row tile)
 %row_sums = pto.vcgadd %tile, %mask : !pto.vreg<64xf32>, !pto.mask<G> -> !pto.vreg<64xf32>
@@ -4376,7 +4589,7 @@ for (int i = 1; i < N; i++)
 %cdf = pto.vcpadd %pdf, %mask : !pto.vreg<64xf32>, !pto.mask<G> -> !pto.vreg<64xf32>
 ```
 
-<a id="isa-11-compare-select"></a>
+<a id="micro-11-compare-select"></a>
 
 ### 11. Compare & Select
 
@@ -4561,7 +4774,7 @@ for (int i = 0; i < N; i++)
 %exp_result = pto.vexp %clamped, %all : !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
 ```
 
-<a id="isa-12-data-rearrangement"></a>
+<a id="micro-12-data-rearrangement"></a>
 
 ### 12. Data Rearrangement
 
@@ -4794,7 +5007,7 @@ for (int i = 0; i < N/2; i++)
 - **constraints and limitations:** This op exposes only one half of the V2
   result in SSA form.
 
-<a id="isa-13-dsa-sfu-ops"></a>
+<a id="micro-13-dsa-sfu-ops"></a>
 
 ### 13. DSA/SFU Ops
 
@@ -4838,7 +5051,7 @@ for (int i = 0; i < N; i++)
 
 ##### `pto.vprelu`
 
-- **syntax:** `%result = pto.vprelu %input, %alpha : !pto.vreg<NxT>, !pto.vreg<NxT> -> !pto.vreg<NxT>`
+- **syntax:** `%result = pto.vprelu %input, %alpha, %mask : !pto.vreg<NxT>, !pto.vreg<NxT>, !pto.mask<bW> -> !pto.vreg<NxT>`
 - **A5 types:** f16, f32
 - **semantics:** Parametric ReLU with per-element alpha vector.
 
@@ -4847,17 +5060,17 @@ for (int i = 0; i < N; i++)
     dst[i] = (src[i] >= 0) ? src[i] : alpha[i] * src[i];
 ```
 
-- **inputs:** `%input` is the activation vector and `%alpha` is the per-element
-  slope vector.
+- **inputs:** `%input` is the activation vector, `%alpha` is the per-element
+  slope vector, and `%mask` selects active lanes.
 - **outputs:** `%result` is the parametric-ReLU vector.
 - **constraints and limitations:** Floating-point element types only on the
   current A5 surface.
 
 ---
 
-##### `pto.vexpdiff`
+##### `pto.vexpdif`
 
-- **syntax:** `%result = pto.vexpdiff %input, %max, "EVEN|ODD" : !pto.vreg<NxT>, !pto.vreg<NxT> -> !pto.vreg<Mxf32>`
+- **syntax:** `%result = pto.vexpdif %input, %max, %mask, "EVEN|ODD" : !pto.vreg<NxT>, !pto.vreg<NxT>, !pto.mask<bW> -> !pto.vreg<Mxf32>`
 - **A5 types:** input `f16` or `f32`, output `f32`
 - **semantics:** Fused exp(x - max) for numerically stable softmax.
 
@@ -4868,13 +5081,14 @@ for (int i = 0; i < N; i++)
 
 **Use case:** Softmax numerator computation with numerical stability.
 
-- **inputs:** `%input` is the source vector and `%max` is the broadcasted
-  subtraction term. `%part` selects `EVEN` or `ODD` for the
-  underlying hardware contract.
+- **inputs:** `%input` is the source vector, `%max` is the broadcasted
+  subtraction term, `%mask` selects active source lanes, and `%part` selects
+  `EVEN` or `ODD` for the underlying hardware contract.
 - **outputs:** `%result` is the fused `exp(input - max)` vector with `f32`
   elements.
 - **constraints and limitations:** Source vectors must be `f16` or `f32`, the
-  result vector must be `f32`, and source/result storage width must match.
+  result vector must be `f32`, the mask granularity must match the input
+  vector element width, and source/result storage width must match.
 
 ---
 
@@ -4882,7 +5096,7 @@ for (int i = 0; i < N; i++)
 
 ##### `pto.vaxpy`
 
-- **syntax:** `%result = pto.vaxpy %src0, %src1, %alpha : !pto.vreg<NxT>, !pto.vreg<NxT>, T -> !pto.vreg<NxT>`
+- **syntax:** `%result = pto.vaxpy %src0, %src1, %alpha, %mask : !pto.vreg<NxT>, !pto.vreg<NxT>, T, !pto.mask<G> -> !pto.vreg<NxT>`
 - **A5 types:** f16, f32
 - **semantics:** AXPY — scalar-vector multiply-add.
 
@@ -4891,13 +5105,14 @@ for (int i = 0; i < N; i++)
     dst[i] = alpha * src0[i] + src1[i];
 ```
 
-- **inputs:** `%src0` is the scaled vector, `%src1` is the addend vector, and
-  `%alpha` is the scalar multiplier.
+- **inputs:** `%src0` is the scaled vector, `%src1` is the addend vector,
+  `%alpha` is the scalar multiplier, and `%mask` selects active lanes.
 - **outputs:** `%result` is the fused AXPY result.
 - **constraints and limitations:** Floating-point element types only on the
   current documented surface.
 
 ---
+
 
 #### Extended Arithmetic
 
@@ -4946,21 +5161,25 @@ for (int i = 0; i < N; i++)
 
 ##### `pto.vci`
 
-- **syntax:** `%result = pto.vci %index {order = "ORDER"} : integer -> !pto.vreg<NxT>`
-- **semantics:** Generate lane index vector.
+- **syntax:** `%result = pto.vci %index {order = "ASC|DESC"} : T -> !pto.vreg<NxT>`
+- **semantics:** Generate a lane index vector from a scalar base value.
 
 ```c
 for (int i = 0; i < N; i++)
-    dst[i] = base_index + i;
+    dst[i] = (order == ASC) ? (base_index + i) : (base_index - i);
 ```
 
 **Use case:** Generate indices for gather/scatter, argsort, etc.
 
-- **inputs:** `%index` is the scalar seed/base index.
+- **inputs:** `%index` is the scalar base value. Supported scalar types are
+  `i8/i16/i32`, `f16`, and `f32`.
 - **outputs:** `%result` is the generated index vector.
-- **constraints and limitations:** This page documents the arithmetic/indexing
-  use of the family; the conversion page also records the same opcode for
-  completeness.
+- **constraints and limitations:** `%result` element type determines both the
+  generated element type and the lane count. Supported result types are
+  `!pto.vreg<256xsi8>`, `!pto.vreg<128xsi16>`, `!pto.vreg<64xsi32>`,
+  `!pto.vreg<128xf16>`, and `!pto.vreg<64xf32>`. `%index` must use the
+  matching scalar type for `f16`/`f32`; for integer results, `%index` must use
+  the same bit width and may be signless or signed.
 
 ---
 
@@ -5005,7 +5224,7 @@ for (int i = 0; i < N; i++)
 
 - `pto.vmull %lhs, %rhs, %mask : !pto.vreg<NxT>, !pto.vreg<NxT>, !pto.mask<G> -> !pto.vreg<NxT>, !pto.vreg<NxT>`
 - `pto.vmula %acc, %lhs, %rhs, %mask : !pto.vreg<NxT>, !pto.vreg<NxT>, !pto.vreg<NxT>, !pto.mask<G> -> !pto.vreg<NxT>`
-- `pto.vci %index {order = "ORDER"} : integer -> !pto.vreg<NxT>`
+- `pto.vci %index {order = "ASC|DESC"} : T -> !pto.vreg<NxT>`
 - `pto.vbitsort %dest, %src, %indices, %repeat_times : !pto.ptr<...>, !pto.ptr<...>, !pto.ptr<...>, index`
 - `pto.vmrgsort4 %dest, %src0, %src1, %src2, %src3, %count, %config : !pto.ptr<...>, !pto.ptr<...>, !pto.ptr<...>, !pto.ptr<...>, !pto.ptr<...>, i64, i64`
 
@@ -5015,17 +5234,17 @@ for (int i = 0; i < N; i++)
 
 ```mlir
 // Softmax with fused expdiff
-%max_broadcast = pto.vlds %ub_max[%c0] {dist = "BRC"} : !pto.ptr<f32, ub> -> !pto.vreg<64xf32>
-%exp_stable = pto.vexpdiff %logits, %max_broadcast : !pto.vreg<64xf32>, !pto.vreg<64xf32> -> !pto.vreg<64xf32>
+%max_broadcast = pto.vlds %ub_max[%c0] {dist = "BRC_B32"} : !pto.ptr<f32, ub> -> !pto.vreg<64xf32>
+%exp_stable = pto.vexpdif %logits, %max_broadcast, %mask, "ODD" : !pto.vreg<64xf32>, !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
 
 // Leaky ReLU activation
 %activated = pto.vlrelu %linear_out, %alpha_scalar, %mask : !pto.vreg<64xf32>, f32, !pto.mask<G> -> !pto.vreg<64xf32>
 
-// Generate indices for argsort
-%indices = pto.vci %c0 {order = "ASC"} : i32 -> !pto.vreg<64xi32>
+// Generate ascending si32 indices for argsort
+%indices = pto.vci %c0 {order = "ASC"} : i32 -> !pto.vreg<64xsi32>
 ```
 
-<a id="isa-14-shared-arith"></a>
+<a id="micro-14-shared-arith"></a>
 
 ### 14. Arith (Shared MLIR Dialect)
 
@@ -5127,7 +5346,7 @@ This section therefore uses representative categories and examples instead of pr
 - use `arith.cmpi` / `arith.cmpf` plus `scf.if` / `scf.while` for control flow, not ad hoc control intrinsics
 - prefer `arith.index_cast` / `arith.index_castui` at ABI or shape boundaries where `index` is required, but do not read that as a restriction on the rest of scalar `arith`
 
-<a id="isa-15-shared-scf"></a>
+<a id="micro-15-shared-scf"></a>
 
 ### 15. SCF (Shared MLIR Dialect)
 
@@ -5227,6 +5446,113 @@ scf.if %is_mode_a {
 - use `scf.while` only when a counted loop cannot express the control cleanly; `scf.for` remains the more common and better-exercised form in the current repository
 - build branch predicates and loop conditions with `arith` ops, not PTO vector masks, unless the control decision truly comes from a scalarized value
 
+<a id="micro-16-cube-matmul"></a>
+
+### 16. Cube Matrix Multiply (MAT)
+
+> **Category:** Cube unit — GM/L1 staging, L0A/L0B loads, L0C accumulate, and matrix-side side-buffer moves  
+> **Pipelines:** MTE2 (GM→L1 / cbuf), Cube (L0A/L0B→L0C), MTE3/FIX (L0C→{GM,L1,UB}, L1→{BT,FB})
+
+This group documents **buffer-pointer** PTO ops used to express a minimal **cube matmul data path** on A5: data is moved from GM into L1-aligned buffers (`cbuf`), loaded into L0A/L0B, multiplied into L0C (`cc`), then written back or redistributed to GM/L1/UB and related matrix-side buffers. These ops are distinct from the vector `!pto.vreg<…>` surface in groups 3–13.
+
+Typical usage keeps the body inside `pto.vecscope { … }` (or another enclosing region required by the PTO verifier) so cube-side effects remain ordered with respect to other PTO work.
+
+---
+
+#### `pto.copy_gm_to_cbuf`
+
+- **syntax:** `pto.copy_gm_to_cbuf %src, %dst, %n_burst, %len_burst, %src_stride, %dst_stride : !pto.ptr<…, gm>, !pto.ptr<…, ub>, i64, i64, i64, i64`
+- **semantics:** GM→L1 (`cbuf`) aligned copy. `%src` is GM; `%dst` is UB-backed L1 (`cbuf`) staging.
+
+Operands `%n_burst`, `%len_burst`, `%src_stride`, and `%dst_stride` configure the transfer shape; they are lowered to packed `i64` configuration tokens for the target `llvm.hivm` MOV family intrinsic.
+
+---
+
+#### `pto.load_cbuf_to_ca`
+
+- **syntax:** `pto.load_cbuf_to_ca %src, %dst, %m, %k : !pto.ptr<…, ub>, !pto.ptr<…, ub>, i64, i64`
+- **semantics:** L1 (`cbuf`) → L0A load. `%src` is `cbuf`; `%dst` is UB-backed L0A staging.
+
+---
+
+#### `pto.load_cbuf_to_cb`
+
+- **syntax:** `pto.load_cbuf_to_cb %src, %dst, %k, %n : !pto.ptr<…, ub>, !pto.ptr<…, ub>, i64, i64`
+- **semantics:** L1 (`cbuf`) → L0B load. `%src` is `cbuf`; `%dst` is UB-backed L0B staging.
+
+---
+
+#### `pto.mad`
+
+- **syntax:** `pto.mad %lhs, %rhs, %dst, %m, %n, %k : !pto.ptr<…, ub>, !pto.ptr<…, ub>, !pto.ptr<…, ub>, i64, i64, i64`
+- **semantics:** Cube **multiply** on L0A (`%lhs`) and L0B (`%rhs`) into L0C (`%dst`). All three pointers must be UB-backed **buffer** pointers (`!pto.ptr<…, ub>`) classified as left / right / accumulator roles in lowering.
+
+Supported element-type combinations follow the HIVM intrinsic selection in the compiler (for example `f16` × `f16` → `f32` accumulation, and MX-dtyped paths where applicable).
+
+---
+
+#### `pto.copy_matrix_cc_to_gm`
+
+- **syntax:** `pto.copy_matrix_cc_to_gm %src, %dst, %m, %n : !pto.ptr<…, ub>, !pto.ptr<…, gm>, i64, i64`
+- **semantics:** L0C (`cc`) → GM matrix writeback. `%src` is UB-backed `cc`; `%dst` is GM.
+
+---
+
+#### `pto.copy_gm_to_cbuf_multi_nd2nz` / `pto.copy_gm_to_cbuf_multi_dn2nz`
+
+- **syntax:** `pto.copy_gm_to_cbuf_multi_* %src, %dst, ... : !pto.ptr<…, gm>, !pto.ptr<…, ub>, ...`
+- **semantics:** GM→L1 (`cbuf`) multi-fractal staging paths for cube data layout conversion variants (`ND2NZ` / `DN2NZ`), lowered to `llvm.hivm.MOV.OUT.TO.L1.MULTI.*` families.
+
+---
+
+#### `pto.copy_matrix_cc_to_cbuf` / `pto.copy_matrix_cc_to_ub`
+
+- **syntax:** `pto.copy_matrix_cc_to_* %src, %dst, %config0, %config1 : !pto.ptr<…, ub>, !pto.ptr<…, ub>, i64, i64`
+- **semantics:** L0C (`cc`) redistribution to L1 (`cbuf`) or UB destinations. These are post-matmul movement ops typically used before follow-up fusion or output formatting.
+
+---
+
+#### `pto.copy_cbuf_to_bt` / `pto.copy_cbuf_to_fbuf`
+
+- **syntax:** `pto.copy_cbuf_to_bt ...` and `pto.copy_cbuf_to_fbuf ...`
+- **semantics:** L1 (`cbuf`) to bias/scaling-side buffers for matrix post-processing setup. Lowered to `llvm.hivm.MOV.L1.TO.BT.f16` and `llvm.hivm.MOV.L1.TO.FB.V2`.
+
+---
+
+#### Verified A5 Op Set (Current Batch)
+
+The following PTO ops have been verified in the current A5 VPTO→LLVM/HIVM and Bisheng cube-flow validation batch:
+
+- `pto.copy_cbuf_to_bt`
+- `pto.copy_cbuf_to_fbuf`
+- `pto.copy_gm_to_cbuf_multi_dn2nz`
+- `pto.copy_gm_to_cbuf_multi_nd2nz`
+- `pto.copy_matrix_cc_to_cbuf`
+- `pto.copy_matrix_cc_to_ub`
+- `pto.load_cbuf_to_ca_mx`
+- `pto.load_cbuf_to_ca_s4`
+- `pto.load_cbuf_to_cb_mx`
+- `pto.load_cbuf_to_cb_s4`
+- `pto.set_atomic_s32`
+- `pto.set_atomic_s8`
+- `pto.set_channel_para`
+- `pto.set_fpc`
+- `pto.set_loop1_stride_outtol1`
+- `pto.set_loop2_stride_outtol1`
+- `pto.set_loop3_para`
+- `pto.set_loop_size_outtol1`
+- `pto.set_mte2_nz_para`
+- `pto.set_pad_val_outtol1`
+- `pto.set_quant_pre`
+
+---
+
+#### Current PTOAS Coverage
+
+- VPTO → LLVM (`--vpto-emit-hivm-llvm`) lowers the ops in this group to target-specific `llvm.hivm.*` intrinsics with explicit address spaces for GM / cbuf / L0A / L0B / L0C and matrix-side side buffers.
+- FileCheck coverage lives under `test/basic/vpto_mad_*.pto` and `test/basic/vpto_cube_dma_matmul_*.pto`.
+- TileLang ST builds a cube-linked host testcase via `pto_tilelang_cube_st(tmatmul)` in `test/tilelang_st/npu/a5/src/st/testcase/tmatmul/`.
+
 ## Supported Data Types
 
 | Type | Bits | vreg Lanes | Description |
@@ -5239,8 +5565,6 @@ scf.if %is_mode_a {
 | `f32` | 32 | 64 | IEEE 754 single precision |
 | `i64` / `si64` / `ui64` | 64 | 32 | Signless/signed/unsigned 64-bit integer |
 
----
-
 ## Common Patterns
 
 ### Softmax (Numerically Stable)
@@ -5249,15 +5573,15 @@ scf.if %is_mode_a {
 // 1. Find max
 %max_vec = pto.vcmax %logits, %mask : !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
 pto.vsts %max_vec, %ub_tmp[%c0], %mask : !pto.vreg<64xf32>, !pto.ptr<f32, ub>, !pto.mask<b32>
-%max_bc = pto.vlds %ub_tmp[%c0] {dist = "BRC"} : !pto.ptr<f32, ub> -> !pto.vreg<64xf32>
+%max_bc = pto.vlds %ub_tmp[%c0] {dist = "BRC_B32"} : !pto.ptr<f32, ub> -> !pto.vreg<64xf32>
 
 // 2. exp(x - max) using fused op
-%exp = pto.vexpdiff %logits, %max_bc, "ODD" : !pto.vreg<64xf32>, !pto.vreg<64xf32> -> !pto.vreg<64xf32>
+%exp = pto.vexpdif %logits, %max_bc, %mask, "ODD" : !pto.vreg<64xf32>, !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
 
 // 3. Sum
 %sum = pto.vcadd %exp, %mask : !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
 pto.vsts %sum, %ub_tmp[%c0], %mask : !pto.vreg<64xf32>, !pto.ptr<f32, ub>, !pto.mask<b32>
-%sum_bc = pto.vlds %ub_tmp[%c0] {dist = "BRC"} : !pto.ptr<f32, ub> -> !pto.vreg<64xf32>
+%sum_bc = pto.vlds %ub_tmp[%c0] {dist = "BRC_B32"} : !pto.ptr<f32, ub> -> !pto.vreg<64xf32>
 
 // 4. Divide
 %softmax = pto.vdiv %exp, %sum_bc, %mask : !pto.vreg<64xf32>, !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
@@ -5273,7 +5597,7 @@ pto.vsts %sum, %ub_tmp[%c0], %mask : !pto.vreg<64xf32>, !pto.ptr<f32, ub>, !pto.
 %lrelu = pto.vlrelu %input, %alpha, %mask : !pto.vreg<64xf32>, f32, !pto.mask<b32> -> !pto.vreg<64xf32>
 
 // Parametric ReLU (per-element alpha)
-%prelu = pto.vprelu %input, %alpha_vec : !pto.vreg<64xf32>, !pto.vreg<64xf32> -> !pto.vreg<64xf32>
+%prelu = pto.vprelu %input, %alpha_vec, %mask : !pto.vreg<64xf32>, !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
 
 ```
 
@@ -5281,13 +5605,11 @@ pto.vsts %sum, %ub_tmp[%c0], %mask : !pto.vreg<64xf32>, !pto.ptr<f32, ub>, !pto.
 
 ```mlir
 // AoS → SoA (deinterleave)
-%x, %y = pto.vldsx2 %ub_xy[%offset], "DINTLV" : !pto.ptr<f32, ub>, index -> !pto.vreg<64xf32>, !pto.vreg<64xf32>
+%x, %y = pto.vldsx2 %ub_xy[%offset], "DINTLV_B32" : !pto.ptr<f32, ub>, index -> !pto.vreg<64xf32>, !pto.vreg<64xf32>
 
 // SoA → AoS (interleave)
-pto.vstsx2 %x, %y, %ub_xy[%offset], "INTLV", %all_mask : !pto.vreg<64xf32>, !pto.vreg<64xf32>, !pto.ptr<f32, ub>, index, !pto.mask<b32>
+pto.vstsx2 %x, %y, %ub_xy[%offset], "INTLV_B32", %all_mask : !pto.vreg<64xf32>, !pto.vreg<64xf32>, !pto.ptr<f32, ub>, index, !pto.mask<b32>
 ```
-
----
 
 ---
 
@@ -5297,13 +5619,18 @@ pto.vstsx2 %x, %y, %ub_xy[%offset], "INTLV", %all_mask : !pto.vreg<64xf32>, !pto
 
 | Operation | Group | Description |
 |-----------|-------|-------------|
-| GM→UB DMA | 2 | `pto.copy_gm_to_ubuf` |
-| UB→GM DMA | 2 | `pto.copy_ubuf_to_gm` |
-| UB→UB Copy | 2 | `pto.copy_ubuf_to_ubuf` |
+| GM→UB DMA | 2 | `pto.dma_load` |
+| UB→GM DMA | 2 | `pto.dma_store` |
+| GM→L1 (cube staging) | 16 | `pto.copy_gm_to_cbuf` |
+| GM→L1 (multi layout staging) | 16 | `pto.copy_gm_to_cbuf_multi_nd2nz`, `pto.copy_gm_to_cbuf_multi_dn2nz` |
+| L1→L0A / L1→L0B | 16 | `pto.load_cbuf_to_ca`, `pto.load_cbuf_to_cb` |
+| L0C→GM (cube writeback) | 16 | `pto.copy_matrix_cc_to_gm` |
+| L0C→L1 / L0C→UB | 16 | `pto.copy_matrix_cc_to_cbuf`, `pto.copy_matrix_cc_to_ub` |
+| L1→BT / L1→FB | 16 | `pto.copy_cbuf_to_bt`, `pto.copy_cbuf_to_fbuf` |
 | Contiguous Load | 3 | `pto.vlds` with `NORM` dist |
 | Broadcast Load | 3 | `pto.vlds` with `BRC` family dist |
 | Gather | 3 | `pto.vgather2`, `pto.vgatherb` |
-| Contiguous Store | 3 | `pto.vsts` with `NORM` dist |
+| Contiguous Store | 3 | `pto.vsts` with `NORM_B8` / `NORM_B16` / `NORM_B32` dist |
 | Scatter | 3 | `pto.vscatter` |
 
 ### Compute Operations
@@ -5314,6 +5641,7 @@ pto.vstsx2 %x, %y, %ub_xy[%offset], "INTLV", %all_mask : !pto.vreg<64xf32>, !pto
 | Scalar Operations | 8 | `pto.vadds`, `pto.vmuls`, etc. |
 | Transcendental | 6 | `pto.vexp`, `pto.vln`, `pto.vsqrt`, etc. |
 | Reduction | 10 | `pto.vcadd`, `pto.vcmax`, `pto.vcmin` |
+| Cube matmul (L0A×L0B→L0C) | 16 | `pto.mad` |
 | Comparison | 11 | `pto.vcmp`, `pto.vcmps` |
 | Selection | 11 | `pto.vsel`, `pto.vselr` |
 
@@ -5321,7 +5649,7 @@ pto.vstsx2 %x, %y, %ub_xy[%offset], "INTLV", %all_mask : !pto.vreg<64xf32>, !pto
 
 | Operation | Group | Description |
 |-----------|-------|-------------|
-| Type Conversion | 9 | `pto.vcvt` |
+| Type Conversion | 9 | `pto.vcvt`, `pto.vbitcast`, `pto.pbitcast` |
 | Interleave/Deinterleave | 12 | `pto.vintlv`, `pto.vdintlv` |
 | Interleave/Deinterleave (not A5) | 12 | `pto.vintlvv2`, `pto.vdintlvv2` |
 
@@ -5347,3 +5675,54 @@ Group 14 covers the full scalar `arith` surface. The rows below list common PTO 
 | Counted Loops | 15 | `scf.for` |
 | Conditional Regions | 15 | `scf.if`, `scf.yield` |
 | Break-like Structured Loops | 15 | `scf.while`, `scf.condition`, `scf.yield` |
+
+### Recent A5 Additions (Implemented)
+
+- `pto.set_quant_pre` (lowered to `llvm.hivm.SET.QUANT.PRE.v300`)
+- `pto.set_atomic_s32`, `pto.set_atomic_s8` (A5-selectable atomic mode controls)
+- Cube-side movement additions:
+  - `pto.copy_gm_to_cbuf_multi_nd2nz`
+  - `pto.copy_gm_to_cbuf_multi_dn2nz`
+  - `pto.copy_matrix_cc_to_cbuf`
+  - `pto.copy_matrix_cc_to_ub`
+  - `pto.copy_cbuf_to_bt`
+  - `pto.copy_cbuf_to_fbuf`
+
+### Verified Op List (Current Batch)
+
+- `pto.copy_cbuf_to_bt`
+- `pto.copy_cbuf_to_fbuf`
+- `pto.copy_gm_to_cbuf_multi_dn2nz`
+- `pto.copy_gm_to_cbuf_multi_nd2nz`
+- `pto.copy_matrix_cc_to_cbuf`
+- `pto.copy_matrix_cc_to_ub`
+- `pto.load_cbuf_to_ca_mx`
+- `pto.load_cbuf_to_ca_s4`
+- `pto.load_cbuf_to_cb_mx`
+- `pto.load_cbuf_to_cb_s4`
+- `pto.set_atomic_s32`
+- `pto.set_atomic_s8`
+- `pto.set_channel_para`
+- `pto.set_fpc`
+- `pto.set_loop1_stride_outtol1`
+- `pto.set_loop2_stride_outtol1`
+- `pto.set_loop3_para`
+- `pto.set_loop_size_outtol1`
+- `pto.set_mte2_nz_para`
+- `pto.set_pad_val_outtol1`
+- `pto.set_quant_pre`
+
+## Part IV: PTO Tile Instruction
+
+PTO Tile Instruction is a high-performance instruction surface built on top of PTO micro Instruction. Each tile instruction encapsulates a tile-granular pattern — DMA between GM and on-chip buffers, vector arithmetic over a whole tile, reductions, broadcast / expansion, selection, padding — and internally expands to a sequence of micro-instruction primitives (`pto.vlds`, `pto.vsts`, `pto.vadd`, mask ops, sync flags, …).
+
+The full PTO Tile Instruction reference starts from [Tile and PTO Tile Instruction overview](PTO-tile-Instruction-SPEC.md#tile-01-tile-overview). It covers:
+
+- [Tile and PTO Tile Instruction overview](PTO-tile-Instruction-SPEC.md#tile-01-tile-overview) — tile concept, on-chip placement, physical shape vs valid region, conventions
+- [Types & Attributes](PTO-tile-Instruction-SPEC.md#tile-02-types-and-attributes) — `!pto.tile_buf`, `!pto.tensor_view`, address spaces, layout, pad
+- [Pointer & View](PTO-tile-Instruction-SPEC.md#tile-03-pointer-and-view) — tensor views, partitions, tile allocation, valid-shape updates
+- [DMA Data Movement](PTO-tile-Instruction-SPEC.md#tile-04-dma-data-movement) — `pto.tload` / `pto.tstore`
+- [Vector Arithmetic](PTO-tile-Instruction-SPEC.md#tile-05-vector-arithmetic) — `pto.tadd / tsub / tmul / tdiv / tmax / tmin`, tile-scalar forms, unary math, activations
+- [Reductions](PTO-tile-Instruction-SPEC.md#tile-06-reduction-ops), [Partial Elementwise](PTO-tile-Instruction-SPEC.md#tile-07-partial-elementwise), [Bitwise & Shift](PTO-tile-Instruction-SPEC.md#tile-08-bitwise-shift-ops), [Type Conversion](PTO-tile-Instruction-SPEC.md#tile-09-type-conversion), [Broadcast & Expansion](PTO-tile-Instruction-SPEC.md#tile-10-broadcast-and-expansion-ops), [Selection](PTO-tile-Instruction-SPEC.md#tile-11-selection-ops), [Fill & Padding](PTO-tile-Instruction-SPEC.md#tile-12-fill-and-padding-ops)
+
+For the boundary between Tile Instruction and the micro instruction surface (when to drop into `pto.vecscope` and how `pto.tile_buf_addr` bridges the two), see [Tile and PTO Tile Instruction overview §1.10](PTO-tile-Instruction-SPEC.md#110-mixing-pto-tile-instruction-and-pto-micro-instruction).
