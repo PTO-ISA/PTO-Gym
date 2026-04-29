@@ -1,0 +1,654 @@
+// Copyright (c) 2026 Huawei Technologies Co., Ltd.
+// This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+// CANN Open Software License Agreement Version 2.0 (the "License").
+// Please refer to the License for details. You may not use this file except in compliance with the License.
+// THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+// INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+// See LICENSE in the root of the software repository for the full text of the License.
+
+// TileLang ST kernels for pto.tsels: tload(mask) + tload(src) + tsels(mask,src,tmp,scalar)->dst + tstore(dst)
+// 22 cases from pto-isa tests.
+
+module {
+  func.func @TSELS_uint8_uint8_2x32_2x32_2x32_2x32(%mask_ptr: !pto.ptr<i8>, %src_ptr: !pto.ptr<i8>, %dst_ptr: !pto.ptr<i8>, %scalar: i32) {
+    %c0 = arith.constant 0 : index
+    %c1 = arith.constant 1 : index
+    %c2 = arith.constant 2 : index
+    %c32 = arith.constant 32 : index
+    %c64 = arith.constant 64 : index
+
+    %mask_view = pto.make_tensor_view %mask_ptr, shape = [%c1, %c1, %c1, %c2, %c32], strides = [%c64, %c64, %c64, %c32, %c1] : !pto.tensor_view<1x1x1x2x32xi8>
+    %src_view = pto.make_tensor_view %src_ptr, shape = [%c1, %c1, %c1, %c2, %c32], strides = [%c64, %c64, %c64, %c32, %c1] : !pto.tensor_view<1x1x1x2x32xi8>
+    %dst_view = pto.make_tensor_view %dst_ptr, shape = [%c1, %c1, %c1, %c2, %c32], strides = [%c64, %c64, %c64, %c32, %c1] : !pto.tensor_view<1x1x1x2x32xi8>
+
+    %mask_part = pto.partition_view %mask_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c2, %c32] : !pto.tensor_view<1x1x1x2x32xi8> -> !pto.partition_tensor_view<1x1x1x2x32xi8>
+    %src_part = pto.partition_view %src_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c2, %c32] : !pto.tensor_view<1x1x1x2x32xi8> -> !pto.partition_tensor_view<1x1x1x2x32xi8>
+    %dst_part = pto.partition_view %dst_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c2, %c32] : !pto.tensor_view<1x1x1x2x32xi8> -> !pto.partition_tensor_view<1x1x1x2x32xi8>
+
+    %mask_tile = pto.alloc_tile : !pto.tile_buf<vec, 2x32xi8>
+    %src_tile = pto.alloc_tile : !pto.tile_buf<vec, 2x32xi8>
+    %tmp_tile = pto.alloc_tile : !pto.tile_buf<vec, 1x32xi8>
+    %dst_tile = pto.alloc_tile : !pto.tile_buf<vec, 2x32xi8>
+
+    pto.tload ins(%mask_part : !pto.partition_tensor_view<1x1x1x2x32xi8>) outs(%mask_tile : !pto.tile_buf<vec, 2x32xi8>)
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x2x32xi8>) outs(%src_tile : !pto.tile_buf<vec, 2x32xi8>)
+    %scalar_i8 = arith.trunci %scalar : i32 to i8
+    pto.tsels ins(%mask_tile, %src_tile, %tmp_tile, %scalar_i8 : !pto.tile_buf<vec, 2x32xi8>, !pto.tile_buf<vec, 2x32xi8>, !pto.tile_buf<vec, 1x32xi8>, i8) outs(%dst_tile : !pto.tile_buf<vec, 2x32xi8>)
+    pto.tstore ins(%dst_tile : !pto.tile_buf<vec, 2x32xi8>) outs(%dst_part : !pto.partition_tensor_view<1x1x1x2x32xi8>)
+    return
+  }
+
+  func.func @TSELS_uint8_uint16_2x32_2x16_2x32_2x32(%mask_ptr: !pto.ptr<i16>, %src_ptr: !pto.ptr<i8>, %dst_ptr: !pto.ptr<i8>, %scalar: i32) {
+    %c0 = arith.constant 0 : index
+    %c1 = arith.constant 1 : index
+    %c2 = arith.constant 2 : index
+    %c16 = arith.constant 16 : index
+    %c32 = arith.constant 32 : index
+    %c64 = arith.constant 64 : index
+
+    %mask_view = pto.make_tensor_view %mask_ptr, shape = [%c1, %c1, %c1, %c2, %c16], strides = [%c32, %c32, %c32, %c16, %c1] : !pto.tensor_view<1x1x1x2x16xi16>
+    %src_view = pto.make_tensor_view %src_ptr, shape = [%c1, %c1, %c1, %c2, %c32], strides = [%c64, %c64, %c64, %c32, %c1] : !pto.tensor_view<1x1x1x2x32xi8>
+    %dst_view = pto.make_tensor_view %dst_ptr, shape = [%c1, %c1, %c1, %c2, %c32], strides = [%c64, %c64, %c64, %c32, %c1] : !pto.tensor_view<1x1x1x2x32xi8>
+
+    %mask_part = pto.partition_view %mask_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c2, %c16] : !pto.tensor_view<1x1x1x2x16xi16> -> !pto.partition_tensor_view<1x1x1x2x16xi16>
+    %src_part = pto.partition_view %src_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c2, %c32] : !pto.tensor_view<1x1x1x2x32xi8> -> !pto.partition_tensor_view<1x1x1x2x32xi8>
+    %dst_part = pto.partition_view %dst_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c2, %c32] : !pto.tensor_view<1x1x1x2x32xi8> -> !pto.partition_tensor_view<1x1x1x2x32xi8>
+
+    %mask_tile = pto.alloc_tile : !pto.tile_buf<vec, 2x16xi16>
+    %src_tile = pto.alloc_tile : !pto.tile_buf<vec, 2x32xi8>
+    %tmp_tile = pto.alloc_tile : !pto.tile_buf<vec, 1x32xi8>
+    %dst_tile = pto.alloc_tile : !pto.tile_buf<vec, 2x32xi8>
+
+    pto.tload ins(%mask_part : !pto.partition_tensor_view<1x1x1x2x16xi16>) outs(%mask_tile : !pto.tile_buf<vec, 2x16xi16>)
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x2x32xi8>) outs(%src_tile : !pto.tile_buf<vec, 2x32xi8>)
+    %scalar_i8 = arith.trunci %scalar : i32 to i8
+    pto.tsels ins(%mask_tile, %src_tile, %tmp_tile, %scalar_i8 : !pto.tile_buf<vec, 2x16xi16>, !pto.tile_buf<vec, 2x32xi8>, !pto.tile_buf<vec, 1x32xi8>, i8) outs(%dst_tile : !pto.tile_buf<vec, 2x32xi8>)
+    pto.tstore ins(%dst_tile : !pto.tile_buf<vec, 2x32xi8>) outs(%dst_part : !pto.partition_tensor_view<1x1x1x2x32xi8>)
+    return
+  }
+
+  func.func @TSELS_uint8_uint32_2x32_2x8_2x32_2x32(%mask_ptr: !pto.ptr<i32>, %src_ptr: !pto.ptr<i8>, %dst_ptr: !pto.ptr<i8>, %scalar: i32) {
+    %c0 = arith.constant 0 : index
+    %c1 = arith.constant 1 : index
+    %c2 = arith.constant 2 : index
+    %c8 = arith.constant 8 : index
+    %c16 = arith.constant 16 : index
+    %c32 = arith.constant 32 : index
+    %c64 = arith.constant 64 : index
+
+    %mask_view = pto.make_tensor_view %mask_ptr, shape = [%c1, %c1, %c1, %c2, %c8], strides = [%c16, %c16, %c16, %c8, %c1] : !pto.tensor_view<1x1x1x2x8xi32>
+    %src_view = pto.make_tensor_view %src_ptr, shape = [%c1, %c1, %c1, %c2, %c32], strides = [%c64, %c64, %c64, %c32, %c1] : !pto.tensor_view<1x1x1x2x32xi8>
+    %dst_view = pto.make_tensor_view %dst_ptr, shape = [%c1, %c1, %c1, %c2, %c32], strides = [%c64, %c64, %c64, %c32, %c1] : !pto.tensor_view<1x1x1x2x32xi8>
+
+    %mask_part = pto.partition_view %mask_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c2, %c8] : !pto.tensor_view<1x1x1x2x8xi32> -> !pto.partition_tensor_view<1x1x1x2x8xi32>
+    %src_part = pto.partition_view %src_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c2, %c32] : !pto.tensor_view<1x1x1x2x32xi8> -> !pto.partition_tensor_view<1x1x1x2x32xi8>
+    %dst_part = pto.partition_view %dst_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c2, %c32] : !pto.tensor_view<1x1x1x2x32xi8> -> !pto.partition_tensor_view<1x1x1x2x32xi8>
+
+    %mask_tile = pto.alloc_tile : !pto.tile_buf<vec, 2x8xi32>
+    %src_tile = pto.alloc_tile : !pto.tile_buf<vec, 2x32xi8>
+    %tmp_tile = pto.alloc_tile : !pto.tile_buf<vec, 1x32xi8>
+    %dst_tile = pto.alloc_tile : !pto.tile_buf<vec, 2x32xi8>
+
+    pto.tload ins(%mask_part : !pto.partition_tensor_view<1x1x1x2x8xi32>) outs(%mask_tile : !pto.tile_buf<vec, 2x8xi32>)
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x2x32xi8>) outs(%src_tile : !pto.tile_buf<vec, 2x32xi8>)
+    %scalar_i8 = arith.trunci %scalar : i32 to i8
+    pto.tsels ins(%mask_tile, %src_tile, %tmp_tile, %scalar_i8 : !pto.tile_buf<vec, 2x8xi32>, !pto.tile_buf<vec, 2x32xi8>, !pto.tile_buf<vec, 1x32xi8>, i8) outs(%dst_tile : !pto.tile_buf<vec, 2x32xi8>)
+    pto.tstore ins(%dst_tile : !pto.tile_buf<vec, 2x32xi8>) outs(%dst_part : !pto.partition_tensor_view<1x1x1x2x32xi8>)
+    return
+  }
+
+  func.func @TSELS_uint16_uint8_2x16_2x32_2x16_2x16(%mask_ptr: !pto.ptr<i8>, %src_ptr: !pto.ptr<i16>, %dst_ptr: !pto.ptr<i16>, %scalar: i32) {
+    %c0 = arith.constant 0 : index
+    %c1 = arith.constant 1 : index
+    %c2 = arith.constant 2 : index
+    %c16 = arith.constant 16 : index
+    %c32 = arith.constant 32 : index
+    %c64 = arith.constant 64 : index
+
+    %mask_view = pto.make_tensor_view %mask_ptr, shape = [%c1, %c1, %c1, %c2, %c32], strides = [%c64, %c64, %c64, %c32, %c1] : !pto.tensor_view<1x1x1x2x32xi8>
+    %src_view = pto.make_tensor_view %src_ptr, shape = [%c1, %c1, %c1, %c2, %c16], strides = [%c32, %c32, %c32, %c16, %c1] : !pto.tensor_view<1x1x1x2x16xi16>
+    %dst_view = pto.make_tensor_view %dst_ptr, shape = [%c1, %c1, %c1, %c2, %c16], strides = [%c32, %c32, %c32, %c16, %c1] : !pto.tensor_view<1x1x1x2x16xi16>
+
+    %mask_part = pto.partition_view %mask_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c2, %c32] : !pto.tensor_view<1x1x1x2x32xi8> -> !pto.partition_tensor_view<1x1x1x2x32xi8>
+    %src_part = pto.partition_view %src_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c2, %c16] : !pto.tensor_view<1x1x1x2x16xi16> -> !pto.partition_tensor_view<1x1x1x2x16xi16>
+    %dst_part = pto.partition_view %dst_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c2, %c16] : !pto.tensor_view<1x1x1x2x16xi16> -> !pto.partition_tensor_view<1x1x1x2x16xi16>
+
+    %mask_tile = pto.alloc_tile : !pto.tile_buf<vec, 2x32xi8>
+    %src_tile = pto.alloc_tile : !pto.tile_buf<vec, 2x16xi16>
+    %tmp_tile = pto.alloc_tile : !pto.tile_buf<vec, 1x32xi16>
+    %dst_tile = pto.alloc_tile : !pto.tile_buf<vec, 2x16xi16>
+
+    pto.tload ins(%mask_part : !pto.partition_tensor_view<1x1x1x2x32xi8>) outs(%mask_tile : !pto.tile_buf<vec, 2x32xi8>)
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x2x16xi16>) outs(%src_tile : !pto.tile_buf<vec, 2x16xi16>)
+    %scalar_i16 = arith.trunci %scalar : i32 to i16
+    pto.tsels ins(%mask_tile, %src_tile, %tmp_tile, %scalar_i16 : !pto.tile_buf<vec, 2x32xi8>, !pto.tile_buf<vec, 2x16xi16>, !pto.tile_buf<vec, 1x32xi16>, i16) outs(%dst_tile : !pto.tile_buf<vec, 2x16xi16>)
+    pto.tstore ins(%dst_tile : !pto.tile_buf<vec, 2x16xi16>) outs(%dst_part : !pto.partition_tensor_view<1x1x1x2x16xi16>)
+    return
+  }
+
+  func.func @TSELS_uint16_uint16_2x16_2x16_2x16_2x16(%mask_ptr: !pto.ptr<i16>, %src_ptr: !pto.ptr<i16>, %dst_ptr: !pto.ptr<i16>, %scalar: i32) {
+    %c0 = arith.constant 0 : index
+    %c1 = arith.constant 1 : index
+    %c2 = arith.constant 2 : index
+    %c16 = arith.constant 16 : index
+    %c32 = arith.constant 32 : index
+
+    %mask_view = pto.make_tensor_view %mask_ptr, shape = [%c1, %c1, %c1, %c2, %c16], strides = [%c32, %c32, %c32, %c16, %c1] : !pto.tensor_view<1x1x1x2x16xi16>
+    %src_view = pto.make_tensor_view %src_ptr, shape = [%c1, %c1, %c1, %c2, %c16], strides = [%c32, %c32, %c32, %c16, %c1] : !pto.tensor_view<1x1x1x2x16xi16>
+    %dst_view = pto.make_tensor_view %dst_ptr, shape = [%c1, %c1, %c1, %c2, %c16], strides = [%c32, %c32, %c32, %c16, %c1] : !pto.tensor_view<1x1x1x2x16xi16>
+
+    %mask_part = pto.partition_view %mask_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c2, %c16] : !pto.tensor_view<1x1x1x2x16xi16> -> !pto.partition_tensor_view<1x1x1x2x16xi16>
+    %src_part = pto.partition_view %src_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c2, %c16] : !pto.tensor_view<1x1x1x2x16xi16> -> !pto.partition_tensor_view<1x1x1x2x16xi16>
+    %dst_part = pto.partition_view %dst_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c2, %c16] : !pto.tensor_view<1x1x1x2x16xi16> -> !pto.partition_tensor_view<1x1x1x2x16xi16>
+
+    %mask_tile = pto.alloc_tile : !pto.tile_buf<vec, 2x16xi16>
+    %src_tile = pto.alloc_tile : !pto.tile_buf<vec, 2x16xi16>
+    %tmp_tile = pto.alloc_tile : !pto.tile_buf<vec, 1x32xi16>
+    %dst_tile = pto.alloc_tile : !pto.tile_buf<vec, 2x16xi16>
+
+    pto.tload ins(%mask_part : !pto.partition_tensor_view<1x1x1x2x16xi16>) outs(%mask_tile : !pto.tile_buf<vec, 2x16xi16>)
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x2x16xi16>) outs(%src_tile : !pto.tile_buf<vec, 2x16xi16>)
+    %scalar_i16 = arith.trunci %scalar : i32 to i16
+    pto.tsels ins(%mask_tile, %src_tile, %tmp_tile, %scalar_i16 : !pto.tile_buf<vec, 2x16xi16>, !pto.tile_buf<vec, 2x16xi16>, !pto.tile_buf<vec, 1x32xi16>, i16) outs(%dst_tile : !pto.tile_buf<vec, 2x16xi16>)
+    pto.tstore ins(%dst_tile : !pto.tile_buf<vec, 2x16xi16>) outs(%dst_part : !pto.partition_tensor_view<1x1x1x2x16xi16>)
+    return
+  }
+
+  func.func @TSELS_uint16_uint32_2x16_2x8_2x16_2x16(%mask_ptr: !pto.ptr<i32>, %src_ptr: !pto.ptr<i16>, %dst_ptr: !pto.ptr<i16>, %scalar: i32) {
+    %c0 = arith.constant 0 : index
+    %c1 = arith.constant 1 : index
+    %c2 = arith.constant 2 : index
+    %c8 = arith.constant 8 : index
+    %c16 = arith.constant 16 : index
+    %c32 = arith.constant 32 : index
+
+    %mask_view = pto.make_tensor_view %mask_ptr, shape = [%c1, %c1, %c1, %c2, %c8], strides = [%c16, %c16, %c16, %c8, %c1] : !pto.tensor_view<1x1x1x2x8xi32>
+    %src_view = pto.make_tensor_view %src_ptr, shape = [%c1, %c1, %c1, %c2, %c16], strides = [%c32, %c32, %c32, %c16, %c1] : !pto.tensor_view<1x1x1x2x16xi16>
+    %dst_view = pto.make_tensor_view %dst_ptr, shape = [%c1, %c1, %c1, %c2, %c16], strides = [%c32, %c32, %c32, %c16, %c1] : !pto.tensor_view<1x1x1x2x16xi16>
+
+    %mask_part = pto.partition_view %mask_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c2, %c8] : !pto.tensor_view<1x1x1x2x8xi32> -> !pto.partition_tensor_view<1x1x1x2x8xi32>
+    %src_part = pto.partition_view %src_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c2, %c16] : !pto.tensor_view<1x1x1x2x16xi16> -> !pto.partition_tensor_view<1x1x1x2x16xi16>
+    %dst_part = pto.partition_view %dst_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c2, %c16] : !pto.tensor_view<1x1x1x2x16xi16> -> !pto.partition_tensor_view<1x1x1x2x16xi16>
+
+    %mask_tile = pto.alloc_tile : !pto.tile_buf<vec, 2x8xi32>
+    %src_tile = pto.alloc_tile : !pto.tile_buf<vec, 2x16xi16>
+    %tmp_tile = pto.alloc_tile : !pto.tile_buf<vec, 1x32xi16>
+    %dst_tile = pto.alloc_tile : !pto.tile_buf<vec, 2x16xi16>
+
+    pto.tload ins(%mask_part : !pto.partition_tensor_view<1x1x1x2x8xi32>) outs(%mask_tile : !pto.tile_buf<vec, 2x8xi32>)
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x2x16xi16>) outs(%src_tile : !pto.tile_buf<vec, 2x16xi16>)
+    %scalar_i16 = arith.trunci %scalar : i32 to i16
+    pto.tsels ins(%mask_tile, %src_tile, %tmp_tile, %scalar_i16 : !pto.tile_buf<vec, 2x8xi32>, !pto.tile_buf<vec, 2x16xi16>, !pto.tile_buf<vec, 1x32xi16>, i16) outs(%dst_tile : !pto.tile_buf<vec, 2x16xi16>)
+    pto.tstore ins(%dst_tile : !pto.tile_buf<vec, 2x16xi16>) outs(%dst_part : !pto.partition_tensor_view<1x1x1x2x16xi16>)
+    return
+  }
+
+  func.func @TSELS_uint32_uint8_2x8_2x32_2x8_2x8(%mask_ptr: !pto.ptr<i8>, %src_ptr: !pto.ptr<i32>, %dst_ptr: !pto.ptr<i32>, %scalar: i32) {
+    %c0 = arith.constant 0 : index
+    %c1 = arith.constant 1 : index
+    %c2 = arith.constant 2 : index
+    %c8 = arith.constant 8 : index
+    %c16 = arith.constant 16 : index
+    %c32 = arith.constant 32 : index
+    %c64 = arith.constant 64 : index
+
+    %mask_view = pto.make_tensor_view %mask_ptr, shape = [%c1, %c1, %c1, %c2, %c32], strides = [%c64, %c64, %c64, %c32, %c1] : !pto.tensor_view<1x1x1x2x32xi8>
+    %src_view = pto.make_tensor_view %src_ptr, shape = [%c1, %c1, %c1, %c2, %c8], strides = [%c16, %c16, %c16, %c8, %c1] : !pto.tensor_view<1x1x1x2x8xi32>
+    %dst_view = pto.make_tensor_view %dst_ptr, shape = [%c1, %c1, %c1, %c2, %c8], strides = [%c16, %c16, %c16, %c8, %c1] : !pto.tensor_view<1x1x1x2x8xi32>
+
+    %mask_part = pto.partition_view %mask_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c2, %c32] : !pto.tensor_view<1x1x1x2x32xi8> -> !pto.partition_tensor_view<1x1x1x2x32xi8>
+    %src_part = pto.partition_view %src_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c2, %c8] : !pto.tensor_view<1x1x1x2x8xi32> -> !pto.partition_tensor_view<1x1x1x2x8xi32>
+    %dst_part = pto.partition_view %dst_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c2, %c8] : !pto.tensor_view<1x1x1x2x8xi32> -> !pto.partition_tensor_view<1x1x1x2x8xi32>
+
+    %mask_tile = pto.alloc_tile : !pto.tile_buf<vec, 2x32xi8>
+    %src_tile = pto.alloc_tile : !pto.tile_buf<vec, 2x8xi32>
+    %tmp_tile = pto.alloc_tile : !pto.tile_buf<vec, 1x32xi32>
+    %dst_tile = pto.alloc_tile : !pto.tile_buf<vec, 2x8xi32>
+
+    pto.tload ins(%mask_part : !pto.partition_tensor_view<1x1x1x2x32xi8>) outs(%mask_tile : !pto.tile_buf<vec, 2x32xi8>)
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x2x8xi32>) outs(%src_tile : !pto.tile_buf<vec, 2x8xi32>)
+    pto.tsels ins(%mask_tile, %src_tile, %tmp_tile, %scalar : !pto.tile_buf<vec, 2x32xi8>, !pto.tile_buf<vec, 2x8xi32>, !pto.tile_buf<vec, 1x32xi32>, i32) outs(%dst_tile : !pto.tile_buf<vec, 2x8xi32>)
+    pto.tstore ins(%dst_tile : !pto.tile_buf<vec, 2x8xi32>) outs(%dst_part : !pto.partition_tensor_view<1x1x1x2x8xi32>)
+    return
+  }
+
+  func.func @TSELS_uint32_uint16_2x8_2x16_2x8_2x8(%mask_ptr: !pto.ptr<i16>, %src_ptr: !pto.ptr<i32>, %dst_ptr: !pto.ptr<i32>, %scalar: i32) {
+    %c0 = arith.constant 0 : index
+    %c1 = arith.constant 1 : index
+    %c2 = arith.constant 2 : index
+    %c8 = arith.constant 8 : index
+    %c16 = arith.constant 16 : index
+    %c32 = arith.constant 32 : index
+
+    %mask_view = pto.make_tensor_view %mask_ptr, shape = [%c1, %c1, %c1, %c2, %c16], strides = [%c32, %c32, %c32, %c16, %c1] : !pto.tensor_view<1x1x1x2x16xi16>
+    %src_view = pto.make_tensor_view %src_ptr, shape = [%c1, %c1, %c1, %c2, %c8], strides = [%c16, %c16, %c16, %c8, %c1] : !pto.tensor_view<1x1x1x2x8xi32>
+    %dst_view = pto.make_tensor_view %dst_ptr, shape = [%c1, %c1, %c1, %c2, %c8], strides = [%c16, %c16, %c16, %c8, %c1] : !pto.tensor_view<1x1x1x2x8xi32>
+
+    %mask_part = pto.partition_view %mask_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c2, %c16] : !pto.tensor_view<1x1x1x2x16xi16> -> !pto.partition_tensor_view<1x1x1x2x16xi16>
+    %src_part = pto.partition_view %src_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c2, %c8] : !pto.tensor_view<1x1x1x2x8xi32> -> !pto.partition_tensor_view<1x1x1x2x8xi32>
+    %dst_part = pto.partition_view %dst_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c2, %c8] : !pto.tensor_view<1x1x1x2x8xi32> -> !pto.partition_tensor_view<1x1x1x2x8xi32>
+
+    %mask_tile = pto.alloc_tile : !pto.tile_buf<vec, 2x16xi16>
+    %src_tile = pto.alloc_tile : !pto.tile_buf<vec, 2x8xi32>
+    %tmp_tile = pto.alloc_tile : !pto.tile_buf<vec, 1x32xi32>
+    %dst_tile = pto.alloc_tile : !pto.tile_buf<vec, 2x8xi32>
+
+    pto.tload ins(%mask_part : !pto.partition_tensor_view<1x1x1x2x16xi16>) outs(%mask_tile : !pto.tile_buf<vec, 2x16xi16>)
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x2x8xi32>) outs(%src_tile : !pto.tile_buf<vec, 2x8xi32>)
+    pto.tsels ins(%mask_tile, %src_tile, %tmp_tile, %scalar : !pto.tile_buf<vec, 2x16xi16>, !pto.tile_buf<vec, 2x8xi32>, !pto.tile_buf<vec, 1x32xi32>, i32) outs(%dst_tile : !pto.tile_buf<vec, 2x8xi32>)
+    pto.tstore ins(%dst_tile : !pto.tile_buf<vec, 2x8xi32>) outs(%dst_part : !pto.partition_tensor_view<1x1x1x2x8xi32>)
+    return
+  }
+
+  func.func @TSELS_uint32_uint32_2x8_2x8_2x8_2x8(%mask_ptr: !pto.ptr<i32>, %src_ptr: !pto.ptr<i32>, %dst_ptr: !pto.ptr<i32>, %scalar: i32) {
+    %c0 = arith.constant 0 : index
+    %c1 = arith.constant 1 : index
+    %c2 = arith.constant 2 : index
+    %c8 = arith.constant 8 : index
+    %c16 = arith.constant 16 : index
+
+    %mask_view = pto.make_tensor_view %mask_ptr, shape = [%c1, %c1, %c1, %c2, %c8], strides = [%c16, %c16, %c16, %c8, %c1] : !pto.tensor_view<1x1x1x2x8xi32>
+    %src_view = pto.make_tensor_view %src_ptr, shape = [%c1, %c1, %c1, %c2, %c8], strides = [%c16, %c16, %c16, %c8, %c1] : !pto.tensor_view<1x1x1x2x8xi32>
+    %dst_view = pto.make_tensor_view %dst_ptr, shape = [%c1, %c1, %c1, %c2, %c8], strides = [%c16, %c16, %c16, %c8, %c1] : !pto.tensor_view<1x1x1x2x8xi32>
+
+    %mask_part = pto.partition_view %mask_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c2, %c8] : !pto.tensor_view<1x1x1x2x8xi32> -> !pto.partition_tensor_view<1x1x1x2x8xi32>
+    %src_part = pto.partition_view %src_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c2, %c8] : !pto.tensor_view<1x1x1x2x8xi32> -> !pto.partition_tensor_view<1x1x1x2x8xi32>
+    %dst_part = pto.partition_view %dst_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c2, %c8] : !pto.tensor_view<1x1x1x2x8xi32> -> !pto.partition_tensor_view<1x1x1x2x8xi32>
+
+    %mask_tile = pto.alloc_tile : !pto.tile_buf<vec, 2x8xi32>
+    %src_tile = pto.alloc_tile : !pto.tile_buf<vec, 2x8xi32>
+    %tmp_tile = pto.alloc_tile : !pto.tile_buf<vec, 1x32xi32>
+    %dst_tile = pto.alloc_tile : !pto.tile_buf<vec, 2x8xi32>
+
+    pto.tload ins(%mask_part : !pto.partition_tensor_view<1x1x1x2x8xi32>) outs(%mask_tile : !pto.tile_buf<vec, 2x8xi32>)
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x2x8xi32>) outs(%src_tile : !pto.tile_buf<vec, 2x8xi32>)
+    pto.tsels ins(%mask_tile, %src_tile, %tmp_tile, %scalar : !pto.tile_buf<vec, 2x8xi32>, !pto.tile_buf<vec, 2x8xi32>, !pto.tile_buf<vec, 1x32xi32>, i32) outs(%dst_tile : !pto.tile_buf<vec, 2x8xi32>)
+    pto.tstore ins(%dst_tile : !pto.tile_buf<vec, 2x8xi32>) outs(%dst_part : !pto.partition_tensor_view<1x1x1x2x8xi32>)
+    return
+  }
+
+  func.func @TSELS_f16_uint8_2x16_2x32_2x16_2x16(%mask_ptr: !pto.ptr<i8>, %src_ptr: !pto.ptr<i16>, %dst_ptr: !pto.ptr<i16>, %scalar: i32) {
+    %c0 = arith.constant 0 : index
+    %c1 = arith.constant 1 : index
+    %c2 = arith.constant 2 : index
+    %c16 = arith.constant 16 : index
+    %c32 = arith.constant 32 : index
+    %c64 = arith.constant 64 : index
+
+    %mask_view = pto.make_tensor_view %mask_ptr, shape = [%c1, %c1, %c1, %c2, %c32], strides = [%c64, %c64, %c64, %c32, %c1] : !pto.tensor_view<1x1x1x2x32xi8>
+    %src_view = pto.make_tensor_view %src_ptr, shape = [%c1, %c1, %c1, %c2, %c16], strides = [%c32, %c32, %c32, %c16, %c1] : !pto.tensor_view<1x1x1x2x16xi16>
+    %dst_view = pto.make_tensor_view %dst_ptr, shape = [%c1, %c1, %c1, %c2, %c16], strides = [%c32, %c32, %c32, %c16, %c1] : !pto.tensor_view<1x1x1x2x16xi16>
+
+    %mask_part = pto.partition_view %mask_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c2, %c32] : !pto.tensor_view<1x1x1x2x32xi8> -> !pto.partition_tensor_view<1x1x1x2x32xi8>
+    %src_part = pto.partition_view %src_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c2, %c16] : !pto.tensor_view<1x1x1x2x16xi16> -> !pto.partition_tensor_view<1x1x1x2x16xi16>
+    %dst_part = pto.partition_view %dst_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c2, %c16] : !pto.tensor_view<1x1x1x2x16xi16> -> !pto.partition_tensor_view<1x1x1x2x16xi16>
+
+    %mask_tile = pto.alloc_tile : !pto.tile_buf<vec, 2x32xi8>
+    %src_tile = pto.alloc_tile : !pto.tile_buf<vec, 2x16xi16>
+    %tmp_tile = pto.alloc_tile : !pto.tile_buf<vec, 1x32xi16>
+    %dst_tile = pto.alloc_tile : !pto.tile_buf<vec, 2x16xi16>
+
+    pto.tload ins(%mask_part : !pto.partition_tensor_view<1x1x1x2x32xi8>) outs(%mask_tile : !pto.tile_buf<vec, 2x32xi8>)
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x2x16xi16>) outs(%src_tile : !pto.tile_buf<vec, 2x16xi16>)
+    %scalar_i16 = arith.trunci %scalar : i32 to i16
+    pto.tsels ins(%mask_tile, %src_tile, %tmp_tile, %scalar_i16 : !pto.tile_buf<vec, 2x32xi8>, !pto.tile_buf<vec, 2x16xi16>, !pto.tile_buf<vec, 1x32xi16>, i16) outs(%dst_tile : !pto.tile_buf<vec, 2x16xi16>)
+    pto.tstore ins(%dst_tile : !pto.tile_buf<vec, 2x16xi16>) outs(%dst_part : !pto.partition_tensor_view<1x1x1x2x16xi16>)
+    return
+  }
+
+  func.func @TSELS_f16_uint16_2x16_2x16_2x16_2x16(%mask_ptr: !pto.ptr<i16>, %src_ptr: !pto.ptr<i16>, %dst_ptr: !pto.ptr<i16>, %scalar: i32) {
+    %c0 = arith.constant 0 : index
+    %c1 = arith.constant 1 : index
+    %c2 = arith.constant 2 : index
+    %c16 = arith.constant 16 : index
+    %c32 = arith.constant 32 : index
+
+    %mask_view = pto.make_tensor_view %mask_ptr, shape = [%c1, %c1, %c1, %c2, %c16], strides = [%c32, %c32, %c32, %c16, %c1] : !pto.tensor_view<1x1x1x2x16xi16>
+    %src_view = pto.make_tensor_view %src_ptr, shape = [%c1, %c1, %c1, %c2, %c16], strides = [%c32, %c32, %c32, %c16, %c1] : !pto.tensor_view<1x1x1x2x16xi16>
+    %dst_view = pto.make_tensor_view %dst_ptr, shape = [%c1, %c1, %c1, %c2, %c16], strides = [%c32, %c32, %c32, %c16, %c1] : !pto.tensor_view<1x1x1x2x16xi16>
+
+    %mask_part = pto.partition_view %mask_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c2, %c16] : !pto.tensor_view<1x1x1x2x16xi16> -> !pto.partition_tensor_view<1x1x1x2x16xi16>
+    %src_part = pto.partition_view %src_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c2, %c16] : !pto.tensor_view<1x1x1x2x16xi16> -> !pto.partition_tensor_view<1x1x1x2x16xi16>
+    %dst_part = pto.partition_view %dst_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c2, %c16] : !pto.tensor_view<1x1x1x2x16xi16> -> !pto.partition_tensor_view<1x1x1x2x16xi16>
+
+    %mask_tile = pto.alloc_tile : !pto.tile_buf<vec, 2x16xi16>
+    %src_tile = pto.alloc_tile : !pto.tile_buf<vec, 2x16xi16>
+    %tmp_tile = pto.alloc_tile : !pto.tile_buf<vec, 1x32xi16>
+    %dst_tile = pto.alloc_tile : !pto.tile_buf<vec, 2x16xi16>
+
+    pto.tload ins(%mask_part : !pto.partition_tensor_view<1x1x1x2x16xi16>) outs(%mask_tile : !pto.tile_buf<vec, 2x16xi16>)
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x2x16xi16>) outs(%src_tile : !pto.tile_buf<vec, 2x16xi16>)
+    %scalar_i16 = arith.trunci %scalar : i32 to i16
+    pto.tsels ins(%mask_tile, %src_tile, %tmp_tile, %scalar_i16 : !pto.tile_buf<vec, 2x16xi16>, !pto.tile_buf<vec, 2x16xi16>, !pto.tile_buf<vec, 1x32xi16>, i16) outs(%dst_tile : !pto.tile_buf<vec, 2x16xi16>)
+    pto.tstore ins(%dst_tile : !pto.tile_buf<vec, 2x16xi16>) outs(%dst_part : !pto.partition_tensor_view<1x1x1x2x16xi16>)
+    return
+  }
+
+  func.func @TSELS_f16_uint32_2x16_2x8_2x16_2x16(%mask_ptr: !pto.ptr<i32>, %src_ptr: !pto.ptr<i16>, %dst_ptr: !pto.ptr<i16>, %scalar: i32) {
+    %c0 = arith.constant 0 : index
+    %c1 = arith.constant 1 : index
+    %c2 = arith.constant 2 : index
+    %c8 = arith.constant 8 : index
+    %c16 = arith.constant 16 : index
+    %c32 = arith.constant 32 : index
+
+    %mask_view = pto.make_tensor_view %mask_ptr, shape = [%c1, %c1, %c1, %c2, %c8], strides = [%c16, %c16, %c16, %c8, %c1] : !pto.tensor_view<1x1x1x2x8xi32>
+    %src_view = pto.make_tensor_view %src_ptr, shape = [%c1, %c1, %c1, %c2, %c16], strides = [%c32, %c32, %c32, %c16, %c1] : !pto.tensor_view<1x1x1x2x16xi16>
+    %dst_view = pto.make_tensor_view %dst_ptr, shape = [%c1, %c1, %c1, %c2, %c16], strides = [%c32, %c32, %c32, %c16, %c1] : !pto.tensor_view<1x1x1x2x16xi16>
+
+    %mask_part = pto.partition_view %mask_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c2, %c8] : !pto.tensor_view<1x1x1x2x8xi32> -> !pto.partition_tensor_view<1x1x1x2x8xi32>
+    %src_part = pto.partition_view %src_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c2, %c16] : !pto.tensor_view<1x1x1x2x16xi16> -> !pto.partition_tensor_view<1x1x1x2x16xi16>
+    %dst_part = pto.partition_view %dst_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c2, %c16] : !pto.tensor_view<1x1x1x2x16xi16> -> !pto.partition_tensor_view<1x1x1x2x16xi16>
+
+    %mask_tile = pto.alloc_tile : !pto.tile_buf<vec, 2x8xi32>
+    %src_tile = pto.alloc_tile : !pto.tile_buf<vec, 2x16xi16>
+    %tmp_tile = pto.alloc_tile : !pto.tile_buf<vec, 1x32xi16>
+    %dst_tile = pto.alloc_tile : !pto.tile_buf<vec, 2x16xi16>
+
+    pto.tload ins(%mask_part : !pto.partition_tensor_view<1x1x1x2x8xi32>) outs(%mask_tile : !pto.tile_buf<vec, 2x8xi32>)
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x2x16xi16>) outs(%src_tile : !pto.tile_buf<vec, 2x16xi16>)
+    %scalar_i16 = arith.trunci %scalar : i32 to i16
+    pto.tsels ins(%mask_tile, %src_tile, %tmp_tile, %scalar_i16 : !pto.tile_buf<vec, 2x8xi32>, !pto.tile_buf<vec, 2x16xi16>, !pto.tile_buf<vec, 1x32xi16>, i16) outs(%dst_tile : !pto.tile_buf<vec, 2x16xi16>)
+    pto.tstore ins(%dst_tile : !pto.tile_buf<vec, 2x16xi16>) outs(%dst_part : !pto.partition_tensor_view<1x1x1x2x16xi16>)
+    return
+  }
+
+  func.func @TSELS_f32_uint8_2x8_2x32_2x8_2x8(%mask_ptr: !pto.ptr<i8>, %src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>, %scalar: i32) {
+    %c0 = arith.constant 0 : index
+    %c1 = arith.constant 1 : index
+    %c2 = arith.constant 2 : index
+    %c8 = arith.constant 8 : index
+    %c16 = arith.constant 16 : index
+    %c32 = arith.constant 32 : index
+    %c64 = arith.constant 64 : index
+
+    %mask_view = pto.make_tensor_view %mask_ptr, shape = [%c1, %c1, %c1, %c2, %c32], strides = [%c64, %c64, %c64, %c32, %c1] : !pto.tensor_view<1x1x1x2x32xi8>
+    %src_view = pto.make_tensor_view %src_ptr, shape = [%c1, %c1, %c1, %c2, %c8], strides = [%c16, %c16, %c16, %c8, %c1] : !pto.tensor_view<1x1x1x2x8xf32>
+    %dst_view = pto.make_tensor_view %dst_ptr, shape = [%c1, %c1, %c1, %c2, %c8], strides = [%c16, %c16, %c16, %c8, %c1] : !pto.tensor_view<1x1x1x2x8xf32>
+
+    %mask_part = pto.partition_view %mask_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c2, %c32] : !pto.tensor_view<1x1x1x2x32xi8> -> !pto.partition_tensor_view<1x1x1x2x32xi8>
+    %src_part = pto.partition_view %src_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c2, %c8] : !pto.tensor_view<1x1x1x2x8xf32> -> !pto.partition_tensor_view<1x1x1x2x8xf32>
+    %dst_part = pto.partition_view %dst_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c2, %c8] : !pto.tensor_view<1x1x1x2x8xf32> -> !pto.partition_tensor_view<1x1x1x2x8xf32>
+
+    %mask_tile = pto.alloc_tile : !pto.tile_buf<vec, 2x32xi8>
+    %src_tile = pto.alloc_tile : !pto.tile_buf<vec, 2x8xf32>
+    %tmp_tile = pto.alloc_tile : !pto.tile_buf<vec, 1x32xf32>
+    %dst_tile = pto.alloc_tile : !pto.tile_buf<vec, 2x8xf32>
+
+    pto.tload ins(%mask_part : !pto.partition_tensor_view<1x1x1x2x32xi8>) outs(%mask_tile : !pto.tile_buf<vec, 2x32xi8>)
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x2x8xf32>) outs(%src_tile : !pto.tile_buf<vec, 2x8xf32>)
+    %scalar_f32 = arith.bitcast %scalar : i32 to f32
+    pto.tsels ins(%mask_tile, %src_tile, %tmp_tile, %scalar_f32 : !pto.tile_buf<vec, 2x32xi8>, !pto.tile_buf<vec, 2x8xf32>, !pto.tile_buf<vec, 1x32xf32>, f32) outs(%dst_tile : !pto.tile_buf<vec, 2x8xf32>)
+    pto.tstore ins(%dst_tile : !pto.tile_buf<vec, 2x8xf32>) outs(%dst_part : !pto.partition_tensor_view<1x1x1x2x8xf32>)
+    return
+  }
+
+  func.func @TSELS_f32_uint16_2x8_2x16_2x8_2x8(%mask_ptr: !pto.ptr<i16>, %src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>, %scalar: i32) {
+    %c0 = arith.constant 0 : index
+    %c1 = arith.constant 1 : index
+    %c2 = arith.constant 2 : index
+    %c8 = arith.constant 8 : index
+    %c16 = arith.constant 16 : index
+    %c32 = arith.constant 32 : index
+
+    %mask_view = pto.make_tensor_view %mask_ptr, shape = [%c1, %c1, %c1, %c2, %c16], strides = [%c32, %c32, %c32, %c16, %c1] : !pto.tensor_view<1x1x1x2x16xi16>
+    %src_view = pto.make_tensor_view %src_ptr, shape = [%c1, %c1, %c1, %c2, %c8], strides = [%c16, %c16, %c16, %c8, %c1] : !pto.tensor_view<1x1x1x2x8xf32>
+    %dst_view = pto.make_tensor_view %dst_ptr, shape = [%c1, %c1, %c1, %c2, %c8], strides = [%c16, %c16, %c16, %c8, %c1] : !pto.tensor_view<1x1x1x2x8xf32>
+
+    %mask_part = pto.partition_view %mask_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c2, %c16] : !pto.tensor_view<1x1x1x2x16xi16> -> !pto.partition_tensor_view<1x1x1x2x16xi16>
+    %src_part = pto.partition_view %src_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c2, %c8] : !pto.tensor_view<1x1x1x2x8xf32> -> !pto.partition_tensor_view<1x1x1x2x8xf32>
+    %dst_part = pto.partition_view %dst_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c2, %c8] : !pto.tensor_view<1x1x1x2x8xf32> -> !pto.partition_tensor_view<1x1x1x2x8xf32>
+
+    %mask_tile = pto.alloc_tile : !pto.tile_buf<vec, 2x16xi16>
+    %src_tile = pto.alloc_tile : !pto.tile_buf<vec, 2x8xf32>
+    %tmp_tile = pto.alloc_tile : !pto.tile_buf<vec, 1x32xf32>
+    %dst_tile = pto.alloc_tile : !pto.tile_buf<vec, 2x8xf32>
+
+    pto.tload ins(%mask_part : !pto.partition_tensor_view<1x1x1x2x16xi16>) outs(%mask_tile : !pto.tile_buf<vec, 2x16xi16>)
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x2x8xf32>) outs(%src_tile : !pto.tile_buf<vec, 2x8xf32>)
+    %scalar_f32 = arith.bitcast %scalar : i32 to f32
+    pto.tsels ins(%mask_tile, %src_tile, %tmp_tile, %scalar_f32 : !pto.tile_buf<vec, 2x16xi16>, !pto.tile_buf<vec, 2x8xf32>, !pto.tile_buf<vec, 1x32xf32>, f32) outs(%dst_tile : !pto.tile_buf<vec, 2x8xf32>)
+    pto.tstore ins(%dst_tile : !pto.tile_buf<vec, 2x8xf32>) outs(%dst_part : !pto.partition_tensor_view<1x1x1x2x8xf32>)
+    return
+  }
+
+  func.func @TSELS_f32_uint32_2x8_2x8_2x8_2x8(%mask_ptr: !pto.ptr<i32>, %src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>, %scalar: i32) {
+    %c0 = arith.constant 0 : index
+    %c1 = arith.constant 1 : index
+    %c2 = arith.constant 2 : index
+    %c8 = arith.constant 8 : index
+    %c16 = arith.constant 16 : index
+
+    %mask_view = pto.make_tensor_view %mask_ptr, shape = [%c1, %c1, %c1, %c2, %c8], strides = [%c16, %c16, %c16, %c8, %c1] : !pto.tensor_view<1x1x1x2x8xi32>
+    %src_view = pto.make_tensor_view %src_ptr, shape = [%c1, %c1, %c1, %c2, %c8], strides = [%c16, %c16, %c16, %c8, %c1] : !pto.tensor_view<1x1x1x2x8xf32>
+    %dst_view = pto.make_tensor_view %dst_ptr, shape = [%c1, %c1, %c1, %c2, %c8], strides = [%c16, %c16, %c16, %c8, %c1] : !pto.tensor_view<1x1x1x2x8xf32>
+
+    %mask_part = pto.partition_view %mask_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c2, %c8] : !pto.tensor_view<1x1x1x2x8xi32> -> !pto.partition_tensor_view<1x1x1x2x8xi32>
+    %src_part = pto.partition_view %src_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c2, %c8] : !pto.tensor_view<1x1x1x2x8xf32> -> !pto.partition_tensor_view<1x1x1x2x8xf32>
+    %dst_part = pto.partition_view %dst_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c2, %c8] : !pto.tensor_view<1x1x1x2x8xf32> -> !pto.partition_tensor_view<1x1x1x2x8xf32>
+
+    %mask_tile = pto.alloc_tile : !pto.tile_buf<vec, 2x8xi32>
+    %src_tile = pto.alloc_tile : !pto.tile_buf<vec, 2x8xf32>
+    %tmp_tile = pto.alloc_tile : !pto.tile_buf<vec, 1x32xf32>
+    %dst_tile = pto.alloc_tile : !pto.tile_buf<vec, 2x8xf32>
+
+    pto.tload ins(%mask_part : !pto.partition_tensor_view<1x1x1x2x8xi32>) outs(%mask_tile : !pto.tile_buf<vec, 2x8xi32>)
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x2x8xf32>) outs(%src_tile : !pto.tile_buf<vec, 2x8xf32>)
+    %scalar_f32 = arith.bitcast %scalar : i32 to f32
+    pto.tsels ins(%mask_tile, %src_tile, %tmp_tile, %scalar_f32 : !pto.tile_buf<vec, 2x8xi32>, !pto.tile_buf<vec, 2x8xf32>, !pto.tile_buf<vec, 1x32xf32>, f32) outs(%dst_tile : !pto.tile_buf<vec, 2x8xf32>)
+    pto.tstore ins(%dst_tile : !pto.tile_buf<vec, 2x8xf32>) outs(%dst_part : !pto.partition_tensor_view<1x1x1x2x8xf32>)
+    return
+  }
+
+  func.func @TSELS_uint8_uint8_2x32_2x64_2x128_2x31(%mask_ptr: !pto.ptr<i8>, %src_ptr: !pto.ptr<i8>, %dst_ptr: !pto.ptr<i8>, %scalar: i32) {
+    %c0 = arith.constant 0 : index
+    %c1 = arith.constant 1 : index
+    %c2 = arith.constant 2 : index
+    %c31 = arith.constant 31 : index
+    %c32 = arith.constant 32 : index
+    %c64 = arith.constant 64 : index
+    %c128 = arith.constant 128 : index
+
+    %mask_view = pto.make_tensor_view %mask_ptr, shape = [%c1, %c1, %c1, %c2, %c64], strides = [%c64, %c64, %c64, %c64, %c1] : !pto.tensor_view<1x1x1x2x64xi8>
+    %src_view = pto.make_tensor_view %src_ptr, shape = [%c1, %c1, %c1, %c2, %c128], strides = [%c128, %c128, %c128, %c128, %c1] : !pto.tensor_view<1x1x1x2x128xi8>
+    %dst_view = pto.make_tensor_view %dst_ptr, shape = [%c1, %c1, %c1, %c2, %c32], strides = [%c32, %c32, %c32, %c32, %c1] : !pto.tensor_view<1x1x1x2x32xi8>
+
+    %mask_part = pto.partition_view %mask_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c2, %c64] : !pto.tensor_view<1x1x1x2x64xi8> -> !pto.partition_tensor_view<1x1x1x2x64xi8>
+    %src_part = pto.partition_view %src_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c2, %c128] : !pto.tensor_view<1x1x1x2x128xi8> -> !pto.partition_tensor_view<1x1x1x2x128xi8>
+    %dst_part = pto.partition_view %dst_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c2, %c31] : !pto.tensor_view<1x1x1x2x32xi8> -> !pto.partition_tensor_view<1x1x1x2x31xi8>
+
+    %mask_tile = pto.alloc_tile : !pto.tile_buf<vec, 2x64xi8>
+    %src_tile = pto.alloc_tile : !pto.tile_buf<vec, 2x128xi8, valid=2x31>
+    %tmp_tile = pto.alloc_tile : !pto.tile_buf<vec, 1x32xi8, valid=1x31>
+    %dst_tile = pto.alloc_tile : !pto.tile_buf<vec, 2x32xi8, valid=2x31>
+
+    pto.tload ins(%mask_part : !pto.partition_tensor_view<1x1x1x2x64xi8>) outs(%mask_tile : !pto.tile_buf<vec, 2x64xi8>)
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x2x128xi8>) outs(%src_tile : !pto.tile_buf<vec, 2x128xi8, valid=2x31>)
+    %scalar_i8 = arith.trunci %scalar : i32 to i8
+    pto.tsels ins(%mask_tile, %src_tile, %tmp_tile, %scalar_i8 : !pto.tile_buf<vec, 2x64xi8>, !pto.tile_buf<vec, 2x128xi8, valid=2x31>, !pto.tile_buf<vec, 1x32xi8, valid=1x31>, i8) outs(%dst_tile : !pto.tile_buf<vec, 2x32xi8, valid=2x31>)
+    pto.tstore ins(%dst_tile : !pto.tile_buf<vec, 2x32xi8, valid=2x31>) outs(%dst_part : !pto.partition_tensor_view<1x1x1x2x31xi8>)
+    return
+  }
+
+  func.func @TSELS_uint16_uint8_2x32_2x64_2x128_2x31(%mask_ptr: !pto.ptr<i8>, %src_ptr: !pto.ptr<i16>, %dst_ptr: !pto.ptr<i16>, %scalar: i32) {
+    %c0 = arith.constant 0 : index
+    %c1 = arith.constant 1 : index
+    %c2 = arith.constant 2 : index
+    %c31 = arith.constant 31 : index
+    %c32 = arith.constant 32 : index
+    %c64 = arith.constant 64 : index
+    %c128 = arith.constant 128 : index
+    %c256 = arith.constant 256 : index
+
+    %mask_view = pto.make_tensor_view %mask_ptr, shape = [%c1, %c1, %c1, %c2, %c64], strides = [%c64, %c64, %c64, %c64, %c1] : !pto.tensor_view<1x1x1x2x64xi8>
+    %src_view = pto.make_tensor_view %src_ptr, shape = [%c1, %c1, %c1, %c2, %c128], strides = [%c256, %c256, %c256, %c128, %c1] : !pto.tensor_view<1x1x1x2x128xi16>
+    %dst_view = pto.make_tensor_view %dst_ptr, shape = [%c1, %c1, %c1, %c2, %c32], strides = [%c64, %c64, %c64, %c32, %c1] : !pto.tensor_view<1x1x1x2x32xi16>
+
+    %mask_part = pto.partition_view %mask_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c2, %c64] : !pto.tensor_view<1x1x1x2x64xi8> -> !pto.partition_tensor_view<1x1x1x2x64xi8>
+    %src_part = pto.partition_view %src_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c2, %c128] : !pto.tensor_view<1x1x1x2x128xi16> -> !pto.partition_tensor_view<1x1x1x2x128xi16>
+    %dst_part = pto.partition_view %dst_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c2, %c31] : !pto.tensor_view<1x1x1x2x32xi16> -> !pto.partition_tensor_view<1x1x1x2x31xi16>
+
+    %mask_tile = pto.alloc_tile : !pto.tile_buf<vec, 2x64xi8>
+    %src_tile = pto.alloc_tile : !pto.tile_buf<vec, 2x128xi16, valid=2x31>
+    %tmp_tile = pto.alloc_tile : !pto.tile_buf<vec, 1x32xi16, valid=1x31>
+    %dst_tile = pto.alloc_tile : !pto.tile_buf<vec, 2x32xi16, valid=2x31>
+
+    pto.tload ins(%mask_part : !pto.partition_tensor_view<1x1x1x2x64xi8>) outs(%mask_tile : !pto.tile_buf<vec, 2x64xi8>)
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x2x128xi16>) outs(%src_tile : !pto.tile_buf<vec, 2x128xi16, valid=2x31>)
+    %scalar_i16 = arith.trunci %scalar : i32 to i16
+    pto.tsels ins(%mask_tile, %src_tile, %tmp_tile, %scalar_i16 : !pto.tile_buf<vec, 2x64xi8>, !pto.tile_buf<vec, 2x128xi16, valid=2x31>, !pto.tile_buf<vec, 1x32xi16, valid=1x31>, i16) outs(%dst_tile : !pto.tile_buf<vec, 2x32xi16, valid=2x31>)
+    pto.tstore ins(%dst_tile : !pto.tile_buf<vec, 2x32xi16, valid=2x31>) outs(%dst_part : !pto.partition_tensor_view<1x1x1x2x31xi16>)
+    return
+  }
+
+  func.func @TSELS_f32_uint8_2x32_2x64_2x128_2x31(%mask_ptr: !pto.ptr<i8>, %src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>, %scalar: i32) {
+    %c0 = arith.constant 0 : index
+    %c1 = arith.constant 1 : index
+    %c2 = arith.constant 2 : index
+    %c4 = arith.constant 4 : index
+    %c31 = arith.constant 31 : index
+    %c32 = arith.constant 32 : index
+    %c64 = arith.constant 64 : index
+    %c128 = arith.constant 128 : index
+    %c512 = arith.constant 512 : index
+
+    %mask_view = pto.make_tensor_view %mask_ptr, shape = [%c1, %c1, %c1, %c2, %c64], strides = [%c64, %c64, %c64, %c64, %c1] : !pto.tensor_view<1x1x1x2x64xi8>
+    %src_view = pto.make_tensor_view %src_ptr, shape = [%c1, %c1, %c1, %c2, %c128], strides = [%c512, %c512, %c512, %c128, %c1] : !pto.tensor_view<1x1x1x2x128xf32>
+    %dst_view = pto.make_tensor_view %dst_ptr, shape = [%c1, %c1, %c1, %c2, %c32], strides = [%c128, %c128, %c128, %c32, %c1] : !pto.tensor_view<1x1x1x2x32xf32>
+
+    %mask_part = pto.partition_view %mask_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c2, %c64] : !pto.tensor_view<1x1x1x2x64xi8> -> !pto.partition_tensor_view<1x1x1x2x64xi8>
+    %src_part = pto.partition_view %src_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c2, %c128] : !pto.tensor_view<1x1x1x2x128xf32> -> !pto.partition_tensor_view<1x1x1x2x128xf32>
+    %dst_part = pto.partition_view %dst_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c2, %c31] : !pto.tensor_view<1x1x1x2x32xf32> -> !pto.partition_tensor_view<1x1x1x2x31xf32>
+
+    %mask_tile = pto.alloc_tile : !pto.tile_buf<vec, 2x64xi8>
+    %src_tile = pto.alloc_tile : !pto.tile_buf<vec, 2x128xf32, valid=2x31>
+    %tmp_tile = pto.alloc_tile : !pto.tile_buf<vec, 1x32xf32, valid=1x31>
+    %dst_tile = pto.alloc_tile : !pto.tile_buf<vec, 2x32xf32, valid=2x31>
+
+    pto.tload ins(%mask_part : !pto.partition_tensor_view<1x1x1x2x64xi8>) outs(%mask_tile : !pto.tile_buf<vec, 2x64xi8>)
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x2x128xf32>) outs(%src_tile : !pto.tile_buf<vec, 2x128xf32, valid=2x31>)
+    %scalar_f32 = arith.bitcast %scalar : i32 to f32
+    pto.tsels ins(%mask_tile, %src_tile, %tmp_tile, %scalar_f32 : !pto.tile_buf<vec, 2x64xi8>, !pto.tile_buf<vec, 2x128xf32, valid=2x31>, !pto.tile_buf<vec, 1x32xf32, valid=1x31>, f32) outs(%dst_tile : !pto.tile_buf<vec, 2x32xf32, valid=2x31>)
+    pto.tstore ins(%dst_tile : !pto.tile_buf<vec, 2x32xf32, valid=2x31>) outs(%dst_part : !pto.partition_tensor_view<1x1x1x2x31xf32>)
+    return
+  }
+
+  func.func @TSELS_uint8_uint8_32x672_32x96_32x672_32x666(%mask_ptr: !pto.ptr<i8>, %src_ptr: !pto.ptr<i8>, %dst_ptr: !pto.ptr<i8>, %scalar: i32) {
+    %c0 = arith.constant 0 : index
+    %c1 = arith.constant 1 : index
+    %c32 = arith.constant 32 : index
+    %c96 = arith.constant 96 : index
+    %c672 = arith.constant 672 : index
+    %c666 = arith.constant 666 : index
+
+    %mask_view = pto.make_tensor_view %mask_ptr, shape = [%c1, %c1, %c1, %c32, %c96], strides = [%c96, %c96, %c96, %c96, %c1] : !pto.tensor_view<1x1x1x32x96xi8>
+    %src_view = pto.make_tensor_view %src_ptr, shape = [%c1, %c1, %c1, %c32, %c672], strides = [%c672, %c672, %c672, %c672, %c1] : !pto.tensor_view<1x1x1x32x672xi8>
+    %dst_view = pto.make_tensor_view %dst_ptr, shape = [%c1, %c1, %c1, %c32, %c672], strides = [%c672, %c672, %c672, %c672, %c1] : !pto.tensor_view<1x1x1x32x672xi8>
+
+    %mask_part = pto.partition_view %mask_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c32, %c96] : !pto.tensor_view<1x1x1x32x96xi8> -> !pto.partition_tensor_view<1x1x1x32x96xi8>
+    %src_part = pto.partition_view %src_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c32, %c672] : !pto.tensor_view<1x1x1x32x672xi8> -> !pto.partition_tensor_view<1x1x1x32x672xi8>
+    %dst_part = pto.partition_view %dst_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c32, %c666] : !pto.tensor_view<1x1x1x32x672xi8> -> !pto.partition_tensor_view<1x1x1x32x666xi8>
+
+    %mask_tile = pto.alloc_tile : !pto.tile_buf<vec, 32x96xi8>
+    %src_tile = pto.alloc_tile : !pto.tile_buf<vec, 32x672xi8, valid=32x666>
+    %tmp_tile = pto.alloc_tile : !pto.tile_buf<vec, 1x32xi8>
+    %dst_tile = pto.alloc_tile : !pto.tile_buf<vec, 32x672xi8, valid=32x666>
+
+    pto.tload ins(%mask_part : !pto.partition_tensor_view<1x1x1x32x96xi8>) outs(%mask_tile : !pto.tile_buf<vec, 32x96xi8>)
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x32x672xi8>) outs(%src_tile : !pto.tile_buf<vec, 32x672xi8, valid=32x666>)
+    %scalar_i8 = arith.trunci %scalar : i32 to i8
+    pto.tsels ins(%mask_tile, %src_tile, %tmp_tile, %scalar_i8 : !pto.tile_buf<vec, 32x96xi8>, !pto.tile_buf<vec, 32x672xi8, valid=32x666>, !pto.tile_buf<vec, 1x32xi8>, i8) outs(%dst_tile : !pto.tile_buf<vec, 32x672xi8, valid=32x666>)
+    pto.tstore ins(%dst_tile : !pto.tile_buf<vec, 32x672xi8, valid=32x666>) outs(%dst_part : !pto.partition_tensor_view<1x1x1x32x666xi8>)
+    return
+  }
+
+  func.func @TSELS_f16_uint8_32x672_32x96_32x672_32x666(%mask_ptr: !pto.ptr<i8>, %src_ptr: !pto.ptr<i16>, %dst_ptr: !pto.ptr<i16>, %scalar: i32) {
+    %c0 = arith.constant 0 : index
+    %c1 = arith.constant 1 : index
+    %c2 = arith.constant 2 : index
+    %c32 = arith.constant 32 : index
+    %c96 = arith.constant 96 : index
+    %c672 = arith.constant 672 : index
+    %c666 = arith.constant 666 : index
+    %c1344 = arith.constant 1344 : index
+
+    %mask_view = pto.make_tensor_view %mask_ptr, shape = [%c1, %c1, %c1, %c32, %c96], strides = [%c96, %c96, %c96, %c96, %c1] : !pto.tensor_view<1x1x1x32x96xi8>
+    %src_view = pto.make_tensor_view %src_ptr, shape = [%c1, %c1, %c1, %c32, %c672], strides = [%c1344, %c1344, %c1344, %c672, %c1] : !pto.tensor_view<1x1x1x32x672xi16>
+    %dst_view = pto.make_tensor_view %dst_ptr, shape = [%c1, %c1, %c1, %c32, %c672], strides = [%c1344, %c1344, %c1344, %c672, %c1] : !pto.tensor_view<1x1x1x32x672xi16>
+
+    %mask_part = pto.partition_view %mask_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c32, %c96] : !pto.tensor_view<1x1x1x32x96xi8> -> !pto.partition_tensor_view<1x1x1x32x96xi8>
+    %src_part = pto.partition_view %src_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c32, %c672] : !pto.tensor_view<1x1x1x32x672xi16> -> !pto.partition_tensor_view<1x1x1x32x672xi16>
+    %dst_part = pto.partition_view %dst_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c32, %c666] : !pto.tensor_view<1x1x1x32x672xi16> -> !pto.partition_tensor_view<1x1x1x32x666xi16>
+
+    %mask_tile = pto.alloc_tile : !pto.tile_buf<vec, 32x96xi8>
+    %src_tile = pto.alloc_tile : !pto.tile_buf<vec, 32x672xi16, valid=32x666>
+    %tmp_tile = pto.alloc_tile : !pto.tile_buf<vec, 1x32xi16>
+    %dst_tile = pto.alloc_tile : !pto.tile_buf<vec, 32x672xi16, valid=32x666>
+
+    pto.tload ins(%mask_part : !pto.partition_tensor_view<1x1x1x32x96xi8>) outs(%mask_tile : !pto.tile_buf<vec, 32x96xi8>)
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x32x672xi16>) outs(%src_tile : !pto.tile_buf<vec, 32x672xi16, valid=32x666>)
+    %scalar_i16 = arith.trunci %scalar : i32 to i16
+    pto.tsels ins(%mask_tile, %src_tile, %tmp_tile, %scalar_i16 : !pto.tile_buf<vec, 32x96xi8>, !pto.tile_buf<vec, 32x672xi16, valid=32x666>, !pto.tile_buf<vec, 1x32xi16>, i16) outs(%dst_tile : !pto.tile_buf<vec, 32x672xi16, valid=32x666>)
+    pto.tstore ins(%dst_tile : !pto.tile_buf<vec, 32x672xi16, valid=32x666>) outs(%dst_part : !pto.partition_tensor_view<1x1x1x32x666xi16>)
+    return
+  }
+
+  func.func @TSELS_f32_uint8_32x672_32x96_32x672_32x666(%mask_ptr: !pto.ptr<i8>, %src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>, %scalar: i32) {
+    %c0 = arith.constant 0 : index
+    %c1 = arith.constant 1 : index
+    %c4 = arith.constant 4 : index
+    %c32 = arith.constant 32 : index
+    %c96 = arith.constant 96 : index
+    %c672 = arith.constant 672 : index
+    %c666 = arith.constant 666 : index
+    %c2688 = arith.constant 2688 : index
+
+    %mask_view = pto.make_tensor_view %mask_ptr, shape = [%c1, %c1, %c1, %c32, %c96], strides = [%c96, %c96, %c96, %c96, %c1] : !pto.tensor_view<1x1x1x32x96xi8>
+    %src_view = pto.make_tensor_view %src_ptr, shape = [%c1, %c1, %c1, %c32, %c672], strides = [%c2688, %c2688, %c2688, %c672, %c1] : !pto.tensor_view<1x1x1x32x672xf32>
+    %dst_view = pto.make_tensor_view %dst_ptr, shape = [%c1, %c1, %c1, %c32, %c672], strides = [%c2688, %c2688, %c2688, %c672, %c1] : !pto.tensor_view<1x1x1x32x672xf32>
+
+    %mask_part = pto.partition_view %mask_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c32, %c96] : !pto.tensor_view<1x1x1x32x96xi8> -> !pto.partition_tensor_view<1x1x1x32x96xi8>
+    %src_part = pto.partition_view %src_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c32, %c672] : !pto.tensor_view<1x1x1x32x672xf32> -> !pto.partition_tensor_view<1x1x1x32x672xf32>
+    %dst_part = pto.partition_view %dst_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c32, %c666] : !pto.tensor_view<1x1x1x32x672xf32> -> !pto.partition_tensor_view<1x1x1x32x666xf32>
+
+    %mask_tile = pto.alloc_tile : !pto.tile_buf<vec, 32x96xi8>
+    %src_tile = pto.alloc_tile : !pto.tile_buf<vec, 32x672xf32, valid=32x666>
+    %tmp_tile = pto.alloc_tile : !pto.tile_buf<vec, 1x32xf32>
+    %dst_tile = pto.alloc_tile : !pto.tile_buf<vec, 32x672xf32, valid=32x666>
+
+    pto.tload ins(%mask_part : !pto.partition_tensor_view<1x1x1x32x96xi8>) outs(%mask_tile : !pto.tile_buf<vec, 32x96xi8>)
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x32x672xf32>) outs(%src_tile : !pto.tile_buf<vec, 32x672xf32, valid=32x666>)
+    %scalar_f32 = arith.bitcast %scalar : i32 to f32
+    pto.tsels ins(%mask_tile, %src_tile, %tmp_tile, %scalar_f32 : !pto.tile_buf<vec, 32x96xi8>, !pto.tile_buf<vec, 32x672xf32, valid=32x666>, !pto.tile_buf<vec, 1x32xf32>, f32) outs(%dst_tile : !pto.tile_buf<vec, 32x672xf32, valid=32x666>)
+    pto.tstore ins(%dst_tile : !pto.tile_buf<vec, 32x672xf32, valid=32x666>) outs(%dst_part : !pto.partition_tensor_view<1x1x1x32x666xf32>)
+    return
+  }
+
+  func.func @TSELS_f32_uint8_1x8192_1x4096_1x8192_1x8192(%mask_ptr: !pto.ptr<i8>, %src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>, %scalar: i32) {
+    %c0 = arith.constant 0 : index
+    %c1 = arith.constant 1 : index
+    %c4 = arith.constant 4 : index
+    %c4096 = arith.constant 4096 : index
+    %c8192 = arith.constant 8192 : index
+
+    %mask_view = pto.make_tensor_view %mask_ptr, shape = [%c1, %c1, %c1, %c1, %c4096], strides = [%c4096, %c4096, %c4096, %c4096, %c1] : !pto.tensor_view<1x1x1x1x4096xi8>
+    %src_view = pto.make_tensor_view %src_ptr, shape = [%c1, %c1, %c1, %c1, %c8192], strides = [%c8192, %c8192, %c8192, %c8192, %c1] : !pto.tensor_view<1x1x1x1x8192xf32>
+    %dst_view = pto.make_tensor_view %dst_ptr, shape = [%c1, %c1, %c1, %c1, %c8192], strides = [%c8192, %c8192, %c8192, %c8192, %c1] : !pto.tensor_view<1x1x1x1x8192xf32>
+
+    %mask_part = pto.partition_view %mask_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c1, %c4096] : !pto.tensor_view<1x1x1x1x4096xi8> -> !pto.partition_tensor_view<1x1x1x1x4096xi8>
+    %src_part = pto.partition_view %src_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c1, %c8192] : !pto.tensor_view<1x1x1x1x8192xf32> -> !pto.partition_tensor_view<1x1x1x1x8192xf32>
+    %dst_part = pto.partition_view %dst_view, offsets = [%c0, %c0, %c0, %c0, %c0], sizes = [%c1, %c1, %c1, %c1, %c8192] : !pto.tensor_view<1x1x1x1x8192xf32> -> !pto.partition_tensor_view<1x1x1x1x8192xf32>
+
+    %mask_tile = pto.alloc_tile : !pto.tile_buf<vec, 1x4096xi8>
+    %src_tile = pto.alloc_tile : !pto.tile_buf<vec, 1x8192xf32>
+    %tmp_tile = pto.alloc_tile : !pto.tile_buf<vec, 1x32xf32>
+    %dst_tile = pto.alloc_tile : !pto.tile_buf<vec, 1x8192xf32>
+
+    pto.tload ins(%mask_part : !pto.partition_tensor_view<1x1x1x1x4096xi8>) outs(%mask_tile : !pto.tile_buf<vec, 1x4096xi8>)
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x1x8192xf32>) outs(%src_tile : !pto.tile_buf<vec, 1x8192xf32>)
+    %scalar_f32 = arith.bitcast %scalar : i32 to f32
+    pto.tsels ins(%mask_tile, %src_tile, %tmp_tile, %scalar_f32 : !pto.tile_buf<vec, 1x4096xi8>, !pto.tile_buf<vec, 1x8192xf32>, !pto.tile_buf<vec, 1x32xf32>, f32) outs(%dst_tile : !pto.tile_buf<vec, 1x8192xf32>)
+    pto.tstore ins(%dst_tile : !pto.tile_buf<vec, 1x8192xf32>) outs(%dst_part : !pto.partition_tensor_view<1x1x1x1x8192xf32>)
+    return
+  }
+}

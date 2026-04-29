@@ -1,0 +1,71 @@
+// Copyright (c) 2026 Huawei Technologies Co., Ltd.
+// This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+// CANN Open Software License Agreement Version 2.0 (the "License").
+// Please refer to the License for details. You can not use this file in compliance with the License.
+// THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+// INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+// See LICENSE in the root of the software repository for the full text of the License.
+
+// TileLang ST kernels for pto.tfillpad (inplace mode).
+// Matches C++ reference test case: Case 5
+// Compiled by ptoas --enable-insert-sync --enable-tile-op-expand --vpto-emit-hivm-llvm
+//
+// PadValue encoding: 0=Null, 1=Zero, 2=Max, 3=Min
+// Case 5: float, 260x16, valid=260x7, FillPad=Max (pad=2)
+//
+// Note: PTOAS tstore requires dst size to match src valid_shape.
+// For outputting full buffer after inplace fill, we use two tiles:
+// - src tile: holds input data (valid=260x7)
+// - dst tile: receives filled data (valid=260x16 for output)
+
+module {
+  // ========== No expansion: float, 260x16 physical, src_valid == dst_valid ==========
+
+  func.func @TFILLPAD_INPLACE_f32_260x16_noexpand(%tile_ptr: !pto.ptr<f32>) {
+    %c0    = arith.constant 0    : index
+    %c0_i64 = arith.constant 0   : i64
+    %c1    = arith.constant 1    : index
+    %c16   = arith.constant 16   : index
+    %c260  = arith.constant 260  : index
+    %c4160 = arith.constant 4160 : index  // 260*16 (full tile size)
+
+    // Input tensor_view: 260x16
+    %src_view = pto.make_tensor_view %tile_ptr,
+      shape = [%c1, %c1, %c1, %c260, %c16],
+      strides = [%c4160, %c4160, %c4160, %c16, %c1]
+      : !pto.tensor_view<1x1x1x260x16xf32>
+
+    // Output tensor_view: 260x16 (same as input)
+    %dst_view = pto.make_tensor_view %tile_ptr,
+      shape = [%c1, %c1, %c1, %c260, %c16],
+      strides = [%c4160, %c4160, %c4160, %c16, %c1]
+      : !pto.tensor_view<1x1x1x260x16xf32>
+
+    %src_part = pto.partition_view %src_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c260, %c16]
+      : !pto.tensor_view<1x1x1x260x16xf32> -> !pto.partition_tensor_view<1x1x1x260x16xf32>
+    %dst_part = pto.partition_view %dst_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c260, %c16]
+      : !pto.tensor_view<1x1x1x260x16xf32> -> !pto.partition_tensor_view<1x1x1x260x16xf32>
+
+    // Single tile buffer in UB space at address 0
+    // src_valid = dst_valid = 260x16, so no expansion needed
+    %tile_buf = pto.alloc_tile addr = %c0_i64
+      : !pto.tile_buf<vec, 260x16xf32, pad=2>
+
+    // Load full tile (260x16)
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x260x16xf32>)
+              outs(%tile_buf : !pto.tile_buf<vec, 260x16xf32, pad=2>)
+
+    // tfillpad_inplace: src_valid == dst_valid, no expansion
+    pto.tfillpad_inplace ins(%tile_buf : !pto.tile_buf<vec, 260x16xf32, pad=2>)
+                        outs(%tile_buf : !pto.tile_buf<vec, 260x16xf32, pad=2>)
+
+    // Store full tile
+    pto.tstore ins(%tile_buf : !pto.tile_buf<vec, 260x16xf32, pad=2>)
+               outs(%dst_part : !pto.partition_tensor_view<1x1x1x260x16xf32>)
+    return
+  }
+}

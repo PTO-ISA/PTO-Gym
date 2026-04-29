@@ -1,0 +1,932 @@
+// Copyright (c) 2026 Huawei Technologies Co., Ltd.
+// This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+// CANN Open Software License Agreement Version 2.0 (the "License").
+// Please refer to the License for details. You may not use this file except in compliance with the License.
+// THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+// INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+// See LICENSE in the root of the software repository for the full text of the License.
+
+// TileLang ST kernels for pto.trowsum: tload(src) + trowsum(src, tmp)->dst + tstore(dst).
+// Aligned with pto-isa tests/npu/a5/src/st/testcase/trowsum (20 cases).
+
+module {
+
+  // ========================================================================
+  // f32 cases (case1-case10)
+  // ========================================================================
+
+  // case1: f32 127x64 valid=127x63
+  func.func @TROWSUM_case1(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+    %c0    = arith.constant 0    : index
+    %c1    = arith.constant 1    : index
+    %c63   = arith.constant 63   : index
+    %c64   = arith.constant 64   : index
+    %c127  = arith.constant 127  : index
+    %c8128 = arith.constant 8128 : index
+
+    %src_view = pto.make_tensor_view %src_ptr,
+      shape = [%c1, %c1, %c1, %c127, %c64],
+      strides = [%c8128, %c8128, %c8128, %c64, %c1]
+      : !pto.tensor_view<1x1x1x127x64xf32>
+    %dst_view = pto.make_tensor_view %dst_ptr,
+      shape = [%c1, %c1, %c1, %c127, %c1],
+      strides = [%c127, %c127, %c127, %c1, %c1]
+      : !pto.tensor_view<1x1x1x127x1xf32>
+
+    %src_part = pto.partition_view %src_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c127, %c63]
+      : !pto.tensor_view<1x1x1x127x64xf32> -> !pto.partition_tensor_view<1x1x1x127x63xf32>
+    %dst_part = pto.partition_view %dst_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c127, %c1]
+      : !pto.tensor_view<1x1x1x127x1xf32> -> !pto.partition_tensor_view<1x1x1x127x1xf32>
+
+    %src = pto.alloc_tile
+      : !pto.tile_buf<vec, 127x64xf32, valid=127x63>
+    %tmp = pto.alloc_tile
+      : !pto.tile_buf<vec, 127x64xf32, valid=127x63>
+    %dst = pto.alloc_tile
+      : !pto.tile_buf<vec, 127x8xf32, valid=127x1>
+
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x127x63xf32>)
+              outs(%src : !pto.tile_buf<vec, 127x64xf32, valid=127x63>)
+
+    pto.trowsum ins(%src, %tmp : !pto.tile_buf<vec, 127x64xf32, valid=127x63>,
+                                !pto.tile_buf<vec, 127x64xf32, valid=127x63>)
+                outs(%dst : !pto.tile_buf<vec, 127x8xf32, valid=127x1>)
+
+    pto.tstore ins(%dst : !pto.tile_buf<vec, 127x8xf32, valid=127x1>)
+               outs(%dst_part : !pto.partition_tensor_view<1x1x1x127x1xf32>)
+    return
+  }
+
+  // case2: f32 63x64 valid=63x64
+  func.func @TROWSUM_case2(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+    %c0    = arith.constant 0    : index
+    %c1    = arith.constant 1    : index
+    %c63   = arith.constant 63   : index
+    %c64   = arith.constant 64   : index
+    %c4032 = arith.constant 4032 : index
+
+    %src_view = pto.make_tensor_view %src_ptr,
+      shape = [%c1, %c1, %c1, %c63, %c64],
+      strides = [%c4032, %c4032, %c4032, %c64, %c1]
+      : !pto.tensor_view<1x1x1x63x64xf32>
+    %dst_view = pto.make_tensor_view %dst_ptr,
+      shape = [%c1, %c1, %c1, %c63, %c1],
+      strides = [%c63, %c63, %c63, %c1, %c1]
+      : !pto.tensor_view<1x1x1x63x1xf32>
+
+    %src_part = pto.partition_view %src_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c63, %c64]
+      : !pto.tensor_view<1x1x1x63x64xf32> -> !pto.partition_tensor_view<1x1x1x63x64xf32>
+    %dst_part = pto.partition_view %dst_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c63, %c1]
+      : !pto.tensor_view<1x1x1x63x1xf32> -> !pto.partition_tensor_view<1x1x1x63x1xf32>
+
+    %src = pto.alloc_tile
+      : !pto.tile_buf<vec, 63x64xf32>
+    %tmp = pto.alloc_tile
+      : !pto.tile_buf<vec, 63x64xf32>
+    %dst = pto.alloc_tile
+      : !pto.tile_buf<vec, 63x8xf32, valid=63x1>
+
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x63x64xf32>)
+              outs(%src : !pto.tile_buf<vec, 63x64xf32>)
+
+    pto.trowsum ins(%src, %tmp : !pto.tile_buf<vec, 63x64xf32>,
+                                !pto.tile_buf<vec, 63x64xf32>)
+                outs(%dst : !pto.tile_buf<vec, 63x8xf32, valid=63x1>)
+
+    pto.tstore ins(%dst : !pto.tile_buf<vec, 63x8xf32, valid=63x1>)
+               outs(%dst_part : !pto.partition_tensor_view<1x1x1x63x1xf32>)
+    return
+  }
+
+  // case3: f32 31x128 valid=31x127
+  func.func @TROWSUM_case3(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+    %c0    = arith.constant 0     : index
+    %c1    = arith.constant 1     : index
+    %c31   = arith.constant 31    : index
+    %c127  = arith.constant 127   : index
+    %c128  = arith.constant 128   : index
+    %c3968 = arith.constant 3968  : index
+
+    %src_view = pto.make_tensor_view %src_ptr,
+      shape = [%c1, %c1, %c1, %c31, %c128],
+      strides = [%c3968, %c3968, %c3968, %c128, %c1]
+      : !pto.tensor_view<1x1x1x31x128xf32>
+    %dst_view = pto.make_tensor_view %dst_ptr,
+      shape = [%c1, %c1, %c1, %c31, %c1],
+      strides = [%c31, %c31, %c31, %c1, %c1]
+      : !pto.tensor_view<1x1x1x31x1xf32>
+
+    %src_part = pto.partition_view %src_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c31, %c127]
+      : !pto.tensor_view<1x1x1x31x128xf32> -> !pto.partition_tensor_view<1x1x1x31x127xf32>
+    %dst_part = pto.partition_view %dst_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c31, %c1]
+      : !pto.tensor_view<1x1x1x31x1xf32> -> !pto.partition_tensor_view<1x1x1x31x1xf32>
+
+    %src = pto.alloc_tile
+      : !pto.tile_buf<vec, 31x128xf32, valid=31x127>
+    %tmp = pto.alloc_tile
+      : !pto.tile_buf<vec, 31x128xf32, valid=31x127>
+    %dst = pto.alloc_tile
+      : !pto.tile_buf<vec, 31x8xf32, valid=31x1>
+
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x31x127xf32>)
+              outs(%src : !pto.tile_buf<vec, 31x128xf32, valid=31x127>)
+
+    pto.trowsum ins(%src, %tmp : !pto.tile_buf<vec, 31x128xf32, valid=31x127>,
+                                !pto.tile_buf<vec, 31x128xf32, valid=31x127>)
+                outs(%dst : !pto.tile_buf<vec, 31x8xf32, valid=31x1>)
+
+    pto.tstore ins(%dst : !pto.tile_buf<vec, 31x8xf32, valid=31x1>)
+               outs(%dst_part : !pto.partition_tensor_view<1x1x1x31x1xf32>)
+    return
+  }
+
+  // case4: f32 15x192 valid=15x192
+  func.func @TROWSUM_case4(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+    %c0    = arith.constant 0     : index
+    %c1    = arith.constant 1     : index
+    %c15   = arith.constant 15    : index
+    %c192  = arith.constant 192   : index
+    %c2880 = arith.constant 2880  : index
+
+    %src_view = pto.make_tensor_view %src_ptr,
+      shape = [%c1, %c1, %c1, %c15, %c192],
+      strides = [%c2880, %c2880, %c2880, %c192, %c1]
+      : !pto.tensor_view<1x1x1x15x192xf32>
+    %dst_view = pto.make_tensor_view %dst_ptr,
+      shape = [%c1, %c1, %c1, %c15, %c1],
+      strides = [%c15, %c15, %c15, %c1, %c1]
+      : !pto.tensor_view<1x1x1x15x1xf32>
+
+    %src_part = pto.partition_view %src_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c15, %c192]
+      : !pto.tensor_view<1x1x1x15x192xf32> -> !pto.partition_tensor_view<1x1x1x15x192xf32>
+    %dst_part = pto.partition_view %dst_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c15, %c1]
+      : !pto.tensor_view<1x1x1x15x1xf32> -> !pto.partition_tensor_view<1x1x1x15x1xf32>
+
+    %src = pto.alloc_tile
+      : !pto.tile_buf<vec, 15x192xf32>
+    %tmp = pto.alloc_tile
+      : !pto.tile_buf<vec, 15x192xf32>
+    %dst = pto.alloc_tile
+      : !pto.tile_buf<vec, 15x8xf32, valid=15x1>
+
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x15x192xf32>)
+              outs(%src : !pto.tile_buf<vec, 15x192xf32>)
+
+    pto.trowsum ins(%src, %tmp : !pto.tile_buf<vec, 15x192xf32>,
+                                !pto.tile_buf<vec, 15x192xf32>)
+                outs(%dst : !pto.tile_buf<vec, 15x8xf32, valid=15x1>)
+
+    pto.tstore ins(%dst : !pto.tile_buf<vec, 15x8xf32, valid=15x1>)
+               outs(%dst_part : !pto.partition_tensor_view<1x1x1x15x1xf32>)
+    return
+  }
+
+  // case5: f32 7x448 valid=7x447
+  func.func @TROWSUM_case5(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+    %c0    = arith.constant 0     : index
+    %c1    = arith.constant 1     : index
+    %c7    = arith.constant 7     : index
+    %c447  = arith.constant 447   : index
+    %c448  = arith.constant 448   : index
+    %c3136 = arith.constant 3136  : index
+
+    %src_view = pto.make_tensor_view %src_ptr,
+      shape = [%c1, %c1, %c1, %c7, %c448],
+      strides = [%c3136, %c3136, %c3136, %c448, %c1]
+      : !pto.tensor_view<1x1x1x7x448xf32>
+    %dst_view = pto.make_tensor_view %dst_ptr,
+      shape = [%c1, %c1, %c1, %c7, %c1],
+      strides = [%c7, %c7, %c7, %c1, %c1]
+      : !pto.tensor_view<1x1x1x7x1xf32>
+
+    %src_part = pto.partition_view %src_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c7, %c447]
+      : !pto.tensor_view<1x1x1x7x448xf32> -> !pto.partition_tensor_view<1x1x1x7x447xf32>
+    %dst_part = pto.partition_view %dst_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c7, %c1]
+      : !pto.tensor_view<1x1x1x7x1xf32> -> !pto.partition_tensor_view<1x1x1x7x1xf32>
+
+    %src = pto.alloc_tile
+      : !pto.tile_buf<vec, 7x448xf32, valid=7x447>
+    %tmp = pto.alloc_tile
+      : !pto.tile_buf<vec, 7x448xf32, valid=7x447>
+    %dst = pto.alloc_tile
+      : !pto.tile_buf<vec, 7x8xf32, valid=7x1>
+
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x7x447xf32>)
+              outs(%src : !pto.tile_buf<vec, 7x448xf32, valid=7x447>)
+
+    pto.trowsum ins(%src, %tmp : !pto.tile_buf<vec, 7x448xf32, valid=7x447>,
+                                !pto.tile_buf<vec, 7x448xf32, valid=7x447>)
+                outs(%dst : !pto.tile_buf<vec, 7x8xf32, valid=7x1>)
+
+    pto.tstore ins(%dst : !pto.tile_buf<vec, 7x8xf32, valid=7x1>)
+               outs(%dst_part : !pto.partition_tensor_view<1x1x1x7x1xf32>)
+    return
+  }
+
+  // case6: f16 256x16 valid=256x15
+  func.func @TROWSUM_case6(%src_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) {
+    %c0    = arith.constant 0     : index
+    %c1    = arith.constant 1     : index
+    %c15   = arith.constant 15    : index
+    %c16   = arith.constant 16    : index
+    %c256  = arith.constant 256   : index
+    %c4096 = arith.constant 4096  : index
+
+    %src_view = pto.make_tensor_view %src_ptr,
+      shape = [%c1, %c1, %c1, %c256, %c16],
+      strides = [%c4096, %c4096, %c4096, %c16, %c1]
+      : !pto.tensor_view<1x1x1x256x16xf16>
+    %dst_view = pto.make_tensor_view %dst_ptr,
+      shape = [%c1, %c1, %c1, %c256, %c1],
+      strides = [%c256, %c256, %c256, %c1, %c1]
+      : !pto.tensor_view<1x1x1x256x1xf16>
+
+    %src_part = pto.partition_view %src_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c256, %c15]
+      : !pto.tensor_view<1x1x1x256x16xf16> -> !pto.partition_tensor_view<1x1x1x256x15xf16>
+    %dst_part = pto.partition_view %dst_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c256, %c1]
+      : !pto.tensor_view<1x1x1x256x1xf16> -> !pto.partition_tensor_view<1x1x1x256x1xf16>
+
+    %src = pto.alloc_tile
+      : !pto.tile_buf<vec, 256x16xf16, valid=256x15>
+    %tmp = pto.alloc_tile
+      : !pto.tile_buf<vec, 256x16xf16, valid=256x15>
+    %dst = pto.alloc_tile
+      : !pto.tile_buf<vec, 256x16xf16, valid=256x1>
+
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x256x15xf16>)
+              outs(%src : !pto.tile_buf<vec, 256x16xf16, valid=256x15>)
+
+    pto.trowsum ins(%src, %tmp : !pto.tile_buf<vec, 256x16xf16, valid=256x15>,
+                                !pto.tile_buf<vec, 256x16xf16, valid=256x15>)
+                outs(%dst : !pto.tile_buf<vec, 256x16xf16, valid=256x1>)
+
+    pto.tstore ins(%dst : !pto.tile_buf<vec, 256x16xf16, valid=256x1>)
+               outs(%dst_part : !pto.partition_tensor_view<1x1x1x256x1xf16>)
+    return
+  }
+
+  // case7: f32 64x128 valid=64x128 (DN dst)
+  func.func @TROWSUM_case7(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+    %c0    = arith.constant 0     : index
+    %c1    = arith.constant 1     : index
+    %c64   = arith.constant 64    : index
+    %c128  = arith.constant 128   : index
+    %c8192 = arith.constant 8192  : index
+
+    %src_view = pto.make_tensor_view %src_ptr,
+      shape = [%c1, %c1, %c1, %c64, %c128],
+      strides = [%c8192, %c8192, %c8192, %c128, %c1]
+      : !pto.tensor_view<1x1x1x64x128xf32>
+    %dst_view = pto.make_tensor_view %dst_ptr,
+      shape = [%c1, %c1, %c1, %c64, %c1],
+      strides = [%c64, %c64, %c64, %c1, %c1]
+      : !pto.tensor_view<1x1x1x64x1xf32>
+
+    %src_part = pto.partition_view %src_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c64, %c128]
+      : !pto.tensor_view<1x1x1x64x128xf32> -> !pto.partition_tensor_view<1x1x1x64x128xf32>
+    %dst_part = pto.partition_view %dst_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c64, %c1]
+      : !pto.tensor_view<1x1x1x64x1xf32> -> !pto.partition_tensor_view<1x1x1x64x1xf32>
+
+    %src = pto.alloc_tile
+      : !pto.tile_buf<vec, 64x128xf32>
+    %tmp = pto.alloc_tile
+      : !pto.tile_buf<vec, 64x128xf32>
+    %dst = pto.alloc_tile
+      : !pto.tile_buf<vec, 64x8xf32, valid=64x1>
+
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x64x128xf32>)
+              outs(%src : !pto.tile_buf<vec, 64x128xf32>)
+
+    pto.trowsum ins(%src, %tmp : !pto.tile_buf<vec, 64x128xf32>,
+                                !pto.tile_buf<vec, 64x128xf32>)
+                outs(%dst : !pto.tile_buf<vec, 64x8xf32, valid=64x1>)
+
+    pto.tstore ins(%dst : !pto.tile_buf<vec, 64x8xf32, valid=64x1>)
+                outs(%dst_part : !pto.partition_tensor_view<1x1x1x64x1xf32>)
+    return
+  }
+
+  // case8: f32 32x256 valid=32x256 (DN dst)
+  func.func @TROWSUM_case8(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+    %c0    = arith.constant 0     : index
+    %c1    = arith.constant 1     : index
+    %c32   = arith.constant 32    : index
+    %c256  = arith.constant 256   : index
+    %c8192 = arith.constant 8192  : index
+
+    %src_view = pto.make_tensor_view %src_ptr,
+      shape = [%c1, %c1, %c1, %c32, %c256],
+      strides = [%c8192, %c8192, %c8192, %c256, %c1]
+      : !pto.tensor_view<1x1x1x32x256xf32>
+    %dst_view = pto.make_tensor_view %dst_ptr,
+      shape = [%c1, %c1, %c1, %c32, %c1],
+      strides = [%c32, %c32, %c32, %c1, %c1]
+      : !pto.tensor_view<1x1x1x32x1xf32>
+
+    %src_part = pto.partition_view %src_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c32, %c256]
+      : !pto.tensor_view<1x1x1x32x256xf32> -> !pto.partition_tensor_view<1x1x1x32x256xf32>
+    %dst_part = pto.partition_view %dst_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c32, %c1]
+      : !pto.tensor_view<1x1x1x32x1xf32> -> !pto.partition_tensor_view<1x1x1x32x1xf32>
+
+    %src = pto.alloc_tile
+      : !pto.tile_buf<vec, 32x256xf32>
+    %tmp = pto.alloc_tile
+      : !pto.tile_buf<vec, 32x256xf32>
+    %dst = pto.alloc_tile
+      : !pto.tile_buf<vec, 32x8xf32, valid=32x1>
+
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x32x256xf32>)
+              outs(%src : !pto.tile_buf<vec, 32x256xf32>)
+
+    pto.trowsum ins(%src, %tmp : !pto.tile_buf<vec, 32x256xf32>,
+                                !pto.tile_buf<vec, 32x256xf32>)
+                outs(%dst : !pto.tile_buf<vec, 32x8xf32, valid=32x1>)
+
+    pto.tstore ins(%dst : !pto.tile_buf<vec, 32x8xf32, valid=32x1>)
+                outs(%dst_part : !pto.partition_tensor_view<1x1x1x32x1xf32>)
+    return
+  }
+
+  // case9: f32 16x512 valid=16x512 (DN dst)
+  func.func @TROWSUM_case9(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+    %c0    = arith.constant 0     : index
+    %c1    = arith.constant 1     : index
+    %c16   = arith.constant 16    : index
+    %c512  = arith.constant 512   : index
+    %c8192 = arith.constant 8192  : index
+
+    %src_view = pto.make_tensor_view %src_ptr,
+      shape = [%c1, %c1, %c1, %c16, %c512],
+      strides = [%c8192, %c8192, %c8192, %c512, %c1]
+      : !pto.tensor_view<1x1x1x16x512xf32>
+    %dst_view = pto.make_tensor_view %dst_ptr,
+      shape = [%c1, %c1, %c1, %c16, %c1],
+      strides = [%c16, %c16, %c16, %c1, %c1]
+      : !pto.tensor_view<1x1x1x16x1xf32>
+
+    %src_part = pto.partition_view %src_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c16, %c512]
+      : !pto.tensor_view<1x1x1x16x512xf32> -> !pto.partition_tensor_view<1x1x1x16x512xf32>
+    %dst_part = pto.partition_view %dst_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c16, %c1]
+      : !pto.tensor_view<1x1x1x16x1xf32> -> !pto.partition_tensor_view<1x1x1x16x1xf32>
+
+    %src = pto.alloc_tile
+      : !pto.tile_buf<vec, 16x512xf32>
+    %tmp = pto.alloc_tile
+      : !pto.tile_buf<vec, 16x512xf32>
+    %dst = pto.alloc_tile
+      : !pto.tile_buf<vec, 16x8xf32, valid=16x1>
+
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x16x512xf32>)
+              outs(%src : !pto.tile_buf<vec, 16x512xf32>)
+
+    pto.trowsum ins(%src, %tmp : !pto.tile_buf<vec, 16x512xf32>,
+                                !pto.tile_buf<vec, 16x512xf32>)
+                outs(%dst : !pto.tile_buf<vec, 16x8xf32, valid=16x1>)
+
+    pto.tstore ins(%dst : !pto.tile_buf<vec, 16x8xf32, valid=16x1>)
+                outs(%dst_part : !pto.partition_tensor_view<1x1x1x16x1xf32>)
+    return
+  }
+
+  // case10: f32 8x1024 valid=8x1024 (DN dst)
+  func.func @TROWSUM_case10(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+    %c0     = arith.constant 0      : index
+    %c1     = arith.constant 1      : index
+    %c8     = arith.constant 8      : index
+    %c1024  = arith.constant 1024   : index
+    %c8192  = arith.constant 8192   : index
+
+    %src_view = pto.make_tensor_view %src_ptr,
+      shape = [%c1, %c1, %c1, %c8, %c1024],
+      strides = [%c8192, %c8192, %c8192, %c1024, %c1]
+      : !pto.tensor_view<1x1x1x8x1024xf32>
+    %dst_view = pto.make_tensor_view %dst_ptr,
+      shape = [%c1, %c1, %c1, %c8, %c1],
+      strides = [%c8, %c8, %c8, %c1, %c1]
+      : !pto.tensor_view<1x1x1x8x1xf32>
+
+    %src_part = pto.partition_view %src_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c8, %c1024]
+      : !pto.tensor_view<1x1x1x8x1024xf32> -> !pto.partition_tensor_view<1x1x1x8x1024xf32>
+    %dst_part = pto.partition_view %dst_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c8, %c1]
+      : !pto.tensor_view<1x1x1x8x1xf32> -> !pto.partition_tensor_view<1x1x1x8x1xf32>
+
+    %src = pto.alloc_tile
+      : !pto.tile_buf<vec, 8x1024xf32>
+    %tmp = pto.alloc_tile
+      : !pto.tile_buf<vec, 8x1024xf32>
+    %dst = pto.alloc_tile
+      : !pto.tile_buf<vec, 8x8xf32, valid=8x1>
+
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x8x1024xf32>)
+              outs(%src : !pto.tile_buf<vec, 8x1024xf32>)
+
+    pto.trowsum ins(%src, %tmp : !pto.tile_buf<vec, 8x1024xf32>,
+                                !pto.tile_buf<vec, 8x1024xf32>)
+                outs(%dst : !pto.tile_buf<vec, 8x8xf32, valid=8x1>)
+
+    pto.tstore ins(%dst : !pto.tile_buf<vec, 8x8xf32, valid=8x1>)
+                outs(%dst_part : !pto.partition_tensor_view<1x1x1x8x1xf32>)
+    return
+  }
+
+  // ========================================================================
+  // i32 cases (case11-case15)
+  // ========================================================================
+
+  // case11: i32 127x64 valid=127x63
+  func.func @TROWSUM_case11(%src_ptr: !pto.ptr<i32>, %dst_ptr: !pto.ptr<i32>) {
+    %c0    = arith.constant 0    : index
+    %c1    = arith.constant 1    : index
+    %c63   = arith.constant 63   : index
+    %c64   = arith.constant 64   : index
+    %c127  = arith.constant 127  : index
+    %c8128 = arith.constant 8128 : index
+
+    %src_view = pto.make_tensor_view %src_ptr,
+      shape = [%c1, %c1, %c1, %c127, %c64],
+      strides = [%c8128, %c8128, %c8128, %c64, %c1]
+      : !pto.tensor_view<1x1x1x127x64xi32>
+    %dst_view = pto.make_tensor_view %dst_ptr,
+      shape = [%c1, %c1, %c1, %c127, %c1],
+      strides = [%c127, %c127, %c127, %c1, %c1]
+      : !pto.tensor_view<1x1x1x127x1xi32>
+
+    %src_part = pto.partition_view %src_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c127, %c63]
+      : !pto.tensor_view<1x1x1x127x64xi32> -> !pto.partition_tensor_view<1x1x1x127x63xi32>
+    %dst_part = pto.partition_view %dst_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c127, %c1]
+      : !pto.tensor_view<1x1x1x127x1xi32> -> !pto.partition_tensor_view<1x1x1x127x1xi32>
+
+    %src = pto.alloc_tile
+      : !pto.tile_buf<vec, 127x64xi32, valid=127x63>
+    %tmp = pto.alloc_tile
+      : !pto.tile_buf<vec, 127x64xi32, valid=127x63>
+    %dst = pto.alloc_tile
+      : !pto.tile_buf<vec, 127x8xi32, valid=127x1>
+
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x127x63xi32>)
+              outs(%src : !pto.tile_buf<vec, 127x64xi32, valid=127x63>)
+
+    pto.trowsum ins(%src, %tmp : !pto.tile_buf<vec, 127x64xi32, valid=127x63>,
+                                !pto.tile_buf<vec, 127x64xi32, valid=127x63>)
+                outs(%dst : !pto.tile_buf<vec, 127x8xi32, valid=127x1>)
+
+    pto.tstore ins(%dst : !pto.tile_buf<vec, 127x8xi32, valid=127x1>)
+               outs(%dst_part : !pto.partition_tensor_view<1x1x1x127x1xi32>)
+    return
+  }
+
+  // case12: i32 63x64 valid=63x64
+  func.func @TROWSUM_case12(%src_ptr: !pto.ptr<i32>, %dst_ptr: !pto.ptr<i32>) {
+    %c0    = arith.constant 0    : index
+    %c1    = arith.constant 1    : index
+    %c63   = arith.constant 63   : index
+    %c64   = arith.constant 64   : index
+    %c4032 = arith.constant 4032 : index
+
+    %src_view = pto.make_tensor_view %src_ptr,
+      shape = [%c1, %c1, %c1, %c63, %c64],
+      strides = [%c4032, %c4032, %c4032, %c64, %c1]
+      : !pto.tensor_view<1x1x1x63x64xi32>
+    %dst_view = pto.make_tensor_view %dst_ptr,
+      shape = [%c1, %c1, %c1, %c63, %c1],
+      strides = [%c63, %c63, %c63, %c1, %c1]
+      : !pto.tensor_view<1x1x1x63x1xi32>
+
+    %src_part = pto.partition_view %src_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c63, %c64]
+      : !pto.tensor_view<1x1x1x63x64xi32> -> !pto.partition_tensor_view<1x1x1x63x64xi32>
+    %dst_part = pto.partition_view %dst_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c63, %c1]
+      : !pto.tensor_view<1x1x1x63x1xi32> -> !pto.partition_tensor_view<1x1x1x63x1xi32>
+
+    %src = pto.alloc_tile
+      : !pto.tile_buf<vec, 63x64xi32>
+    %tmp = pto.alloc_tile
+      : !pto.tile_buf<vec, 63x64xi32>
+    %dst = pto.alloc_tile
+      : !pto.tile_buf<vec, 63x8xi32, valid=63x1>
+
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x63x64xi32>)
+              outs(%src : !pto.tile_buf<vec, 63x64xi32>)
+
+    pto.trowsum ins(%src, %tmp : !pto.tile_buf<vec, 63x64xi32>,
+                                !pto.tile_buf<vec, 63x64xi32>)
+                outs(%dst : !pto.tile_buf<vec, 63x8xi32, valid=63x1>)
+
+    pto.tstore ins(%dst : !pto.tile_buf<vec, 63x8xi32, valid=63x1>)
+               outs(%dst_part : !pto.partition_tensor_view<1x1x1x63x1xi32>)
+    return
+  }
+
+  // case13: i32 31x128 valid=31x127
+  func.func @TROWSUM_case13(%src_ptr: !pto.ptr<i32>, %dst_ptr: !pto.ptr<i32>) {
+    %c0    = arith.constant 0     : index
+    %c1    = arith.constant 1     : index
+    %c31   = arith.constant 31    : index
+    %c127  = arith.constant 127   : index
+    %c128  = arith.constant 128   : index
+    %c3968 = arith.constant 3968  : index
+
+    %src_view = pto.make_tensor_view %src_ptr,
+      shape = [%c1, %c1, %c1, %c31, %c128],
+      strides = [%c3968, %c3968, %c3968, %c128, %c1]
+      : !pto.tensor_view<1x1x1x31x128xi32>
+    %dst_view = pto.make_tensor_view %dst_ptr,
+      shape = [%c1, %c1, %c1, %c31, %c1],
+      strides = [%c31, %c31, %c31, %c1, %c1]
+      : !pto.tensor_view<1x1x1x31x1xi32>
+
+    %src_part = pto.partition_view %src_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c31, %c127]
+      : !pto.tensor_view<1x1x1x31x128xi32> -> !pto.partition_tensor_view<1x1x1x31x127xi32>
+    %dst_part = pto.partition_view %dst_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c31, %c1]
+      : !pto.tensor_view<1x1x1x31x1xi32> -> !pto.partition_tensor_view<1x1x1x31x1xi32>
+
+    %src = pto.alloc_tile
+      : !pto.tile_buf<vec, 31x128xi32, valid=31x127>
+    %tmp = pto.alloc_tile
+      : !pto.tile_buf<vec, 31x128xi32, valid=31x127>
+    %dst = pto.alloc_tile
+      : !pto.tile_buf<vec, 31x8xi32, valid=31x1>
+
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x31x127xi32>)
+              outs(%src : !pto.tile_buf<vec, 31x128xi32, valid=31x127>)
+
+    pto.trowsum ins(%src, %tmp : !pto.tile_buf<vec, 31x128xi32, valid=31x127>,
+                                !pto.tile_buf<vec, 31x128xi32, valid=31x127>)
+                outs(%dst : !pto.tile_buf<vec, 31x8xi32, valid=31x1>)
+
+    pto.tstore ins(%dst : !pto.tile_buf<vec, 31x8xi32, valid=31x1>)
+               outs(%dst_part : !pto.partition_tensor_view<1x1x1x31x1xi32>)
+    return
+  }
+
+  // case14: i32 15x192 valid=15x192
+  func.func @TROWSUM_case14(%src_ptr: !pto.ptr<i32>, %dst_ptr: !pto.ptr<i32>) {
+    %c0    = arith.constant 0     : index
+    %c1    = arith.constant 1     : index
+    %c15   = arith.constant 15    : index
+    %c192  = arith.constant 192   : index
+    %c2880 = arith.constant 2880  : index
+
+    %src_view = pto.make_tensor_view %src_ptr,
+      shape = [%c1, %c1, %c1, %c15, %c192],
+      strides = [%c2880, %c2880, %c2880, %c192, %c1]
+      : !pto.tensor_view<1x1x1x15x192xi32>
+    %dst_view = pto.make_tensor_view %dst_ptr,
+      shape = [%c1, %c1, %c1, %c15, %c1],
+      strides = [%c15, %c15, %c15, %c1, %c1]
+      : !pto.tensor_view<1x1x1x15x1xi32>
+
+    %src_part = pto.partition_view %src_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c15, %c192]
+      : !pto.tensor_view<1x1x1x15x192xi32> -> !pto.partition_tensor_view<1x1x1x15x192xi32>
+    %dst_part = pto.partition_view %dst_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c15, %c1]
+      : !pto.tensor_view<1x1x1x15x1xi32> -> !pto.partition_tensor_view<1x1x1x15x1xi32>
+
+    %src = pto.alloc_tile
+      : !pto.tile_buf<vec, 15x192xi32>
+    %tmp = pto.alloc_tile
+      : !pto.tile_buf<vec, 15x192xi32>
+    %dst = pto.alloc_tile
+      : !pto.tile_buf<vec, 15x8xi32, valid=15x1>
+
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x15x192xi32>)
+              outs(%src : !pto.tile_buf<vec, 15x192xi32>)
+
+    pto.trowsum ins(%src, %tmp : !pto.tile_buf<vec, 15x192xi32>,
+                                !pto.tile_buf<vec, 15x192xi32>)
+                outs(%dst : !pto.tile_buf<vec, 15x8xi32, valid=15x1>)
+
+    pto.tstore ins(%dst : !pto.tile_buf<vec, 15x8xi32, valid=15x1>)
+               outs(%dst_part : !pto.partition_tensor_view<1x1x1x15x1xi32>)
+    return
+  }
+
+  // case15: i32 7x448 valid=7x447
+  func.func @TROWSUM_case15(%src_ptr: !pto.ptr<i32>, %dst_ptr: !pto.ptr<i32>) {
+    %c0    = arith.constant 0     : index
+    %c1    = arith.constant 1     : index
+    %c7    = arith.constant 7     : index
+    %c447  = arith.constant 447   : index
+    %c448  = arith.constant 448   : index
+    %c3136 = arith.constant 3136  : index
+
+    %src_view = pto.make_tensor_view %src_ptr,
+      shape = [%c1, %c1, %c1, %c7, %c448],
+      strides = [%c3136, %c3136, %c3136, %c448, %c1]
+      : !pto.tensor_view<1x1x1x7x448xi32>
+    %dst_view = pto.make_tensor_view %dst_ptr,
+      shape = [%c1, %c1, %c1, %c7, %c1],
+      strides = [%c7, %c7, %c7, %c1, %c1]
+      : !pto.tensor_view<1x1x1x7x1xi32>
+
+    %src_part = pto.partition_view %src_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c7, %c447]
+      : !pto.tensor_view<1x1x1x7x448xi32> -> !pto.partition_tensor_view<1x1x1x7x447xi32>
+    %dst_part = pto.partition_view %dst_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c7, %c1]
+      : !pto.tensor_view<1x1x1x7x1xi32> -> !pto.partition_tensor_view<1x1x1x7x1xi32>
+
+    %src = pto.alloc_tile
+      : !pto.tile_buf<vec, 7x448xi32, valid=7x447>
+    %tmp = pto.alloc_tile
+      : !pto.tile_buf<vec, 7x448xi32, valid=7x447>
+    %dst = pto.alloc_tile
+      : !pto.tile_buf<vec, 7x8xi32, valid=7x1>
+
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x7x447xi32>)
+              outs(%src : !pto.tile_buf<vec, 7x448xi32, valid=7x447>)
+
+    pto.trowsum ins(%src, %tmp : !pto.tile_buf<vec, 7x448xi32, valid=7x447>,
+                                !pto.tile_buf<vec, 7x448xi32, valid=7x447>)
+                outs(%dst : !pto.tile_buf<vec, 7x8xi32, valid=7x1>)
+
+    pto.tstore ins(%dst : !pto.tile_buf<vec, 7x8xi32, valid=7x1>)
+               outs(%dst_part : !pto.partition_tensor_view<1x1x1x7x1xi32>)
+    return
+  }
+
+  // ========================================================================
+  // i16 cases (case16-case20)
+  // ========================================================================
+
+  // case16: i16 128x64 valid=128x64
+  func.func @TROWSUM_case16(%src_ptr: !pto.ptr<i16>, %dst_ptr: !pto.ptr<i16>) {
+    %c0    = arith.constant 0     : index
+    %c1    = arith.constant 1     : index
+    %c64   = arith.constant 64    : index
+    %c128  = arith.constant 128   : index
+    %c8192 = arith.constant 8192  : index
+
+    %src_view = pto.make_tensor_view %src_ptr,
+      shape = [%c1, %c1, %c1, %c128, %c64],
+      strides = [%c8192, %c8192, %c8192, %c64, %c1]
+      : !pto.tensor_view<1x1x1x128x64xi16>
+    %dst_view = pto.make_tensor_view %dst_ptr,
+      shape = [%c1, %c1, %c1, %c128, %c1],
+      strides = [%c128, %c128, %c128, %c1, %c1]
+      : !pto.tensor_view<1x1x1x128x1xi16>
+
+    %src_part = pto.partition_view %src_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c128, %c64]
+      : !pto.tensor_view<1x1x1x128x64xi16> -> !pto.partition_tensor_view<1x1x1x128x64xi16>
+    %dst_part = pto.partition_view %dst_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c128, %c1]
+      : !pto.tensor_view<1x1x1x128x1xi16> -> !pto.partition_tensor_view<1x1x1x128x1xi16>
+
+    %src = pto.alloc_tile
+      : !pto.tile_buf<vec, 128x64xi16>
+    %tmp = pto.alloc_tile
+      : !pto.tile_buf<vec, 128x64xi16>
+    %dst = pto.alloc_tile
+      : !pto.tile_buf<vec, 128x16xi16, valid=128x1>
+
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x128x64xi16>)
+              outs(%src : !pto.tile_buf<vec, 128x64xi16>)
+
+    pto.trowsum ins(%src, %tmp : !pto.tile_buf<vec, 128x64xi16>,
+                                !pto.tile_buf<vec, 128x64xi16>)
+                outs(%dst : !pto.tile_buf<vec, 128x16xi16, valid=128x1>)
+
+    pto.tstore ins(%dst : !pto.tile_buf<vec, 128x16xi16, valid=128x1>)
+                outs(%dst_part : !pto.partition_tensor_view<1x1x1x128x1xi16>)
+    return
+  }
+
+  // case17: i16 64x64 valid=64x64
+  func.func @TROWSUM_case17(%src_ptr: !pto.ptr<i16>, %dst_ptr: !pto.ptr<i16>) {
+    %c0    = arith.constant 0    : index
+    %c1    = arith.constant 1    : index
+    %c64   = arith.constant 64   : index
+    %c4096 = arith.constant 4096 : index
+
+    %src_view = pto.make_tensor_view %src_ptr,
+      shape = [%c1, %c1, %c1, %c64, %c64],
+      strides = [%c4096, %c4096, %c4096, %c64, %c1]
+      : !pto.tensor_view<1x1x1x64x64xi16>
+    %dst_view = pto.make_tensor_view %dst_ptr,
+      shape = [%c1, %c1, %c1, %c64, %c1],
+      strides = [%c64, %c64, %c64, %c1, %c1]
+      : !pto.tensor_view<1x1x1x64x1xi16>
+
+    %src_part = pto.partition_view %src_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c64, %c64]
+      : !pto.tensor_view<1x1x1x64x64xi16> -> !pto.partition_tensor_view<1x1x1x64x64xi16>
+    %dst_part = pto.partition_view %dst_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c64, %c1]
+      : !pto.tensor_view<1x1x1x64x1xi16> -> !pto.partition_tensor_view<1x1x1x64x1xi16>
+
+    %src = pto.alloc_tile
+      : !pto.tile_buf<vec, 64x64xi16>
+    %tmp = pto.alloc_tile
+      : !pto.tile_buf<vec, 64x64xi16>
+    %dst = pto.alloc_tile
+      : !pto.tile_buf<vec, 64x16xi16, valid=64x1>
+
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x64x64xi16>)
+              outs(%src : !pto.tile_buf<vec, 64x64xi16>)
+
+    pto.trowsum ins(%src, %tmp : !pto.tile_buf<vec, 64x64xi16>,
+                                !pto.tile_buf<vec, 64x64xi16>)
+                outs(%dst : !pto.tile_buf<vec, 64x16xi16, valid=64x1>)
+
+    pto.tstore ins(%dst : !pto.tile_buf<vec, 64x16xi16, valid=64x1>)
+                outs(%dst_part : !pto.partition_tensor_view<1x1x1x64x1xi16>)
+    return
+  }
+
+  // case18: i16 32x128 valid=32x128
+  func.func @TROWSUM_case18(%src_ptr: !pto.ptr<i16>, %dst_ptr: !pto.ptr<i16>) {
+    %c0    = arith.constant 0     : index
+    %c1    = arith.constant 1     : index
+    %c32   = arith.constant 32    : index
+    %c128  = arith.constant 128   : index
+    %c4096 = arith.constant 4096  : index
+
+    %src_view = pto.make_tensor_view %src_ptr,
+      shape = [%c1, %c1, %c1, %c32, %c128],
+      strides = [%c4096, %c4096, %c4096, %c128, %c1]
+      : !pto.tensor_view<1x1x1x32x128xi16>
+    %dst_view = pto.make_tensor_view %dst_ptr,
+      shape = [%c1, %c1, %c1, %c32, %c1],
+      strides = [%c32, %c32, %c32, %c1, %c1]
+      : !pto.tensor_view<1x1x1x32x1xi16>
+
+    %src_part = pto.partition_view %src_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c32, %c128]
+      : !pto.tensor_view<1x1x1x32x128xi16> -> !pto.partition_tensor_view<1x1x1x32x128xi16>
+    %dst_part = pto.partition_view %dst_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c32, %c1]
+      : !pto.tensor_view<1x1x1x32x1xi16> -> !pto.partition_tensor_view<1x1x1x32x1xi16>
+
+    %src = pto.alloc_tile
+      : !pto.tile_buf<vec, 32x128xi16>
+    %tmp = pto.alloc_tile
+      : !pto.tile_buf<vec, 32x128xi16>
+    %dst = pto.alloc_tile
+      : !pto.tile_buf<vec, 32x16xi16, valid=32x1>
+
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x32x128xi16>)
+              outs(%src : !pto.tile_buf<vec, 32x128xi16>)
+
+    pto.trowsum ins(%src, %tmp : !pto.tile_buf<vec, 32x128xi16>,
+                                !pto.tile_buf<vec, 32x128xi16>)
+                outs(%dst : !pto.tile_buf<vec, 32x16xi16, valid=32x1>)
+
+    pto.tstore ins(%dst : !pto.tile_buf<vec, 32x16xi16, valid=32x1>)
+                outs(%dst_part : !pto.partition_tensor_view<1x1x1x32x1xi16>)
+    return
+  }
+
+  // case19: i16 16x192 valid=16x192
+  func.func @TROWSUM_case19(%src_ptr: !pto.ptr<i16>, %dst_ptr: !pto.ptr<i16>) {
+    %c0    = arith.constant 0     : index
+    %c1    = arith.constant 1     : index
+    %c16   = arith.constant 16    : index
+    %c192  = arith.constant 192   : index
+    %c3072 = arith.constant 3072  : index
+
+    %src_view = pto.make_tensor_view %src_ptr,
+      shape = [%c1, %c1, %c1, %c16, %c192],
+      strides = [%c3072, %c3072, %c3072, %c192, %c1]
+      : !pto.tensor_view<1x1x1x16x192xi16>
+    %dst_view = pto.make_tensor_view %dst_ptr,
+      shape = [%c1, %c1, %c1, %c16, %c1],
+      strides = [%c16, %c16, %c16, %c1, %c1]
+      : !pto.tensor_view<1x1x1x16x1xi16>
+
+    %src_part = pto.partition_view %src_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c16, %c192]
+      : !pto.tensor_view<1x1x1x16x192xi16> -> !pto.partition_tensor_view<1x1x1x16x192xi16>
+    %dst_part = pto.partition_view %dst_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c16, %c1]
+      : !pto.tensor_view<1x1x1x16x1xi16> -> !pto.partition_tensor_view<1x1x1x16x1xi16>
+
+    %src = pto.alloc_tile
+      : !pto.tile_buf<vec, 16x192xi16>
+    %tmp = pto.alloc_tile
+      : !pto.tile_buf<vec, 16x192xi16>
+    %dst = pto.alloc_tile
+      : !pto.tile_buf<vec, 16x16xi16, valid=16x1>
+
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x16x192xi16>)
+              outs(%src : !pto.tile_buf<vec, 16x192xi16>)
+
+    pto.trowsum ins(%src, %tmp : !pto.tile_buf<vec, 16x192xi16>,
+                                !pto.tile_buf<vec, 16x192xi16>)
+                outs(%dst : !pto.tile_buf<vec, 16x16xi16, valid=16x1>)
+
+    pto.tstore ins(%dst : !pto.tile_buf<vec, 16x16xi16, valid=16x1>)
+                outs(%dst_part : !pto.partition_tensor_view<1x1x1x16x1xi16>)
+    return
+  }
+
+  // case20: i16 8x448 valid=8x448
+  func.func @TROWSUM_case20(%src_ptr: !pto.ptr<i16>, %dst_ptr: !pto.ptr<i16>) {
+    %c0    = arith.constant 0     : index
+    %c1    = arith.constant 1     : index
+    %c8    = arith.constant 8     : index
+    %c448  = arith.constant 448   : index
+    %c3584 = arith.constant 3584  : index
+
+    %src_view = pto.make_tensor_view %src_ptr,
+      shape = [%c1, %c1, %c1, %c8, %c448],
+      strides = [%c3584, %c3584, %c3584, %c448, %c1]
+      : !pto.tensor_view<1x1x1x8x448xi16>
+    %dst_view = pto.make_tensor_view %dst_ptr,
+      shape = [%c1, %c1, %c1, %c8, %c1],
+      strides = [%c8, %c8, %c8, %c1, %c1]
+      : !pto.tensor_view<1x1x1x8x1xi16>
+
+    %src_part = pto.partition_view %src_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c8, %c448]
+      : !pto.tensor_view<1x1x1x8x448xi16> -> !pto.partition_tensor_view<1x1x1x8x448xi16>
+    %dst_part = pto.partition_view %dst_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c8, %c1]
+      : !pto.tensor_view<1x1x1x8x1xi16> -> !pto.partition_tensor_view<1x1x1x8x1xi16>
+
+    %src = pto.alloc_tile
+      : !pto.tile_buf<vec, 8x448xi16>
+    %tmp = pto.alloc_tile
+      : !pto.tile_buf<vec, 8x448xi16>
+    %dst = pto.alloc_tile
+      : !pto.tile_buf<vec, 8x16xi16, valid=8x1>
+
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x8x448xi16>)
+              outs(%src : !pto.tile_buf<vec, 8x448xi16>)
+
+    pto.trowsum ins(%src, %tmp : !pto.tile_buf<vec, 8x448xi16>,
+                                !pto.tile_buf<vec, 8x448xi16>)
+                outs(%dst : !pto.tile_buf<vec, 8x16xi16, valid=8x1>)
+
+    pto.tstore ins(%dst : !pto.tile_buf<vec, 8x16xi16, valid=8x1>)
+                outs(%dst_part : !pto.partition_tensor_view<1x1x1x8x1xi16>)
+    return
+  }
+
+}

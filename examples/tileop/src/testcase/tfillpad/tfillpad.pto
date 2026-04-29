@@ -1,0 +1,516 @@
+// Copyright (c) 2026 Huawei Technologies Co., Ltd.
+// This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+// CANN Open Software License Agreement Version 2.0 (the "License").
+// Please refer to the License for details. You may not use this file except in compliance with the License.
+// THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+// INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+// See LICENSE in the root of the software repository for the full text of the License.
+
+// TileLang ST kernels for pto.tfillpad (non-inplace mode).
+// Matches C++ reference test cases: Cases 1, 2, 3, 4, 6, 7, 10, 11, 12, 13
+// Compiled by ptoas --enable-insert-sync --enable-tile-op-expand --vpto-emit-hivm-llvm
+//
+// PadValue encoding: 0=Null, 1=Zero, 2=Max, 3=Min
+// Cases 12/13 use Custom(-1.0f) which cannot be encoded in PTO IR,
+// template uses shape-based detection for these cases.
+//
+// C++ template params: shape3=src_rows, shape4=src_cols, kTRows_=dst_rows, kTCols_=dst_cols
+
+module {
+  // ========== Case 1: float, src=128x127, dst=128x128, LoadPad=Max, FillPad=Max ==========
+
+  func.func @TFILLPAD_f32_128x128_pad_128x127(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+    %c0     = arith.constant 0     : index
+    %c1     = arith.constant 1     : index
+    %c127   = arith.constant 127   : index
+    %c128   = arith.constant 128   : index
+    %c16256 = arith.constant 16256 : index  // 128*127 (src size)
+    %c16384 = arith.constant 16384 : index  // 128*128 (dst size)
+
+    // Src tensor_view: 128x127 (matching C++ shape4=127)
+    %src_view = pto.make_tensor_view %src_ptr,
+      shape = [%c1, %c1, %c1, %c128, %c127],
+      strides = [%c16256, %c16256, %c16256, %c127, %c1]
+      : !pto.tensor_view<1x1x1x128x127xf32>
+    // Dst tensor_view: 128x128
+    %dst_out_view = pto.make_tensor_view %dst_ptr,
+      shape = [%c1, %c1, %c1, %c128, %c128],
+      strides = [%c16384, %c16384, %c16384, %c128, %c1]
+      : !pto.tensor_view<1x1x1x128x128xf32>
+
+    %src_part = pto.partition_view %src_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c128, %c127]
+      : !pto.tensor_view<1x1x1x128x127xf32> -> !pto.partition_tensor_view<1x1x1x128x127xf32>
+    %dst_out_part = pto.partition_view %dst_out_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c128, %c128]
+      : !pto.tensor_view<1x1x1x128x128xf32> -> !pto.partition_tensor_view<1x1x1x128x128xf32>
+
+    // Src tile: LoadPadVal=Max (pad=2), src physical=128x127, v_col=127
+    // C++: shape4_aligned = align_to_32B(127, float) = 128, so tile cols=128 for alignment
+    %src = pto.alloc_tile
+      : !pto.tile_buf<vec, 128x128xf32, valid=128x127, pad=2>
+    // Dst tile: FillPadVal=Max (pad=2), dst physical=128x128, v_col=128 (full output)
+    %dst = pto.alloc_tile
+      : !pto.tile_buf<vec, 128x128xf32, pad=2>
+
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x128x127xf32>)
+              outs(%src : !pto.tile_buf<vec, 128x128xf32, valid=128x127, pad=2>)
+
+    pto.tfillpad ins(%src : !pto.tile_buf<vec, 128x128xf32, valid=128x127, pad=2>)
+                 outs(%dst : !pto.tile_buf<vec, 128x128xf32, pad=2>)
+
+    pto.tstore ins(%dst : !pto.tile_buf<vec, 128x128xf32, pad=2>)
+               outs(%dst_out_part : !pto.partition_tensor_view<1x1x1x128x128xf32>)
+    return
+  }
+
+  // ========== Case 2: float, src=128x127, dst=128x160, LoadPad=Max, FillPad=Max ==========
+
+  func.func @TFILLPAD_f32_128x160_pad_128x127(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+    %c0     = arith.constant 0     : index
+    %c1     = arith.constant 1     : index
+    %c127   = arith.constant 127   : index
+    %c128   = arith.constant 128   : index
+    %c160   = arith.constant 160   : index
+    %c16256 = arith.constant 16256 : index  // 128*127 (src size)
+    %c20480 = arith.constant 20480 : index  // 128*160 (dst size)
+
+    // Src tensor_view: 128x127
+    %src_view = pto.make_tensor_view %src_ptr,
+      shape = [%c1, %c1, %c1, %c128, %c127],
+      strides = [%c16256, %c16256, %c16256, %c127, %c1]
+      : !pto.tensor_view<1x1x1x128x127xf32>
+    // Dst tensor_view: 128x160
+    %dst_out_view = pto.make_tensor_view %dst_ptr,
+      shape = [%c1, %c1, %c1, %c128, %c160],
+      strides = [%c20480, %c20480, %c20480, %c160, %c1]
+      : !pto.tensor_view<1x1x1x128x160xf32>
+
+    %src_part = pto.partition_view %src_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c128, %c127]
+      : !pto.tensor_view<1x1x1x128x127xf32> -> !pto.partition_tensor_view<1x1x1x128x127xf32>
+    %dst_out_part = pto.partition_view %dst_out_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c128, %c160]
+      : !pto.tensor_view<1x1x1x128x160xf32> -> !pto.partition_tensor_view<1x1x1x128x160xf32>
+
+    // Src tile: LoadPadVal=Max (pad=2), shape4_aligned=128, v_col=127
+    %src = pto.alloc_tile
+      : !pto.tile_buf<vec, 128x160xf32, valid=128x127, pad=2>
+    // Dst tile: FillPadVal=Max (pad=2), dst physical=128x160, v_col=160 (full output)
+    %dst = pto.alloc_tile
+      : !pto.tile_buf<vec, 128x160xf32, pad=2>
+
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x128x127xf32>)
+              outs(%src : !pto.tile_buf<vec, 128x160xf32, valid=128x127, pad=2>)
+
+    pto.tfillpad ins(%src : !pto.tile_buf<vec, 128x160xf32, valid=128x127, pad=2>)
+                 outs(%dst : !pto.tile_buf<vec, 128x160xf32, pad=2>)
+
+    pto.tstore ins(%dst : !pto.tile_buf<vec, 128x160xf32, pad=2>)
+               outs(%dst_out_part : !pto.partition_tensor_view<1x1x1x128x160xf32>)
+    return
+  }
+
+  // ========== Case 3: float, src=128x127, dst=128x160, LoadPad=Min, FillPad=Max ==========
+
+  func.func @TFILLPAD_f32_128x160_pad_128x127_v2(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+    %c0     = arith.constant 0     : index
+    %c1     = arith.constant 1     : index
+    %c127   = arith.constant 127   : index
+    %c128   = arith.constant 128   : index
+    %c160   = arith.constant 160   : index
+    %c16256 = arith.constant 16256 : index  // 128*127 (src size)
+    %c20480 = arith.constant 20480 : index  // 128*160 (dst size)
+
+    // Src tensor_view: 128x127
+    %src_view = pto.make_tensor_view %src_ptr,
+      shape = [%c1, %c1, %c1, %c128, %c127],
+      strides = [%c16256, %c16256, %c16256, %c127, %c1]
+      : !pto.tensor_view<1x1x1x128x127xf32>
+    // Dst tensor_view: 128x160
+    %dst_out_view = pto.make_tensor_view %dst_ptr,
+      shape = [%c1, %c1, %c1, %c128, %c160],
+      strides = [%c20480, %c20480, %c20480, %c160, %c1]
+      : !pto.tensor_view<1x1x1x128x160xf32>
+
+    %src_part = pto.partition_view %src_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c128, %c127]
+      : !pto.tensor_view<1x1x1x128x127xf32> -> !pto.partition_tensor_view<1x1x1x128x127xf32>
+    %dst_out_part = pto.partition_view %dst_out_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c128, %c160]
+      : !pto.tensor_view<1x1x1x128x160xf32> -> !pto.partition_tensor_view<1x1x1x128x160xf32>
+
+    // Src tile: LoadPadVal=Min (pad=3), shape4_aligned=128, v_col=127
+    %src = pto.alloc_tile
+      : !pto.tile_buf<vec, 128x160xf32, valid=128x127, pad=3>
+    // Dst tile: FillPadVal=Max (pad=2), dst physical=128x160, v_col=160 (full output)
+    %dst = pto.alloc_tile
+      : !pto.tile_buf<vec, 128x160xf32, pad=2>
+
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x128x127xf32>)
+              outs(%src : !pto.tile_buf<vec, 128x160xf32, valid=128x127, pad=3>)
+
+    pto.tfillpad ins(%src : !pto.tile_buf<vec, 128x160xf32, valid=128x127, pad=3>)
+                 outs(%dst : !pto.tile_buf<vec, 128x160xf32, pad=2>)
+
+    pto.tstore ins(%dst : !pto.tile_buf<vec, 128x160xf32, pad=2>)
+               outs(%dst_out_part : !pto.partition_tensor_view<1x1x1x128x160xf32>)
+    return
+  }
+
+  // ========== Case 4: float, src=260x7, dst=260x16, LoadPad=Min, FillPad=Max ==========
+
+  func.func @TFILLPAD_f32_260x16_pad_260x7(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+    %c0     = arith.constant 0     : index
+    %c1     = arith.constant 1     : index
+    %c7     = arith.constant 7     : index
+    %c16    = arith.constant 16    : index
+    %c260   = arith.constant 260   : index
+    %c1820  = arith.constant 1820  : index  // 260*7 (src size)
+    %c4160  = arith.constant 4160  : index  // 260*16 (dst size)
+
+    // Src tensor_view: 260x7
+    %src_view = pto.make_tensor_view %src_ptr,
+      shape = [%c1, %c1, %c1, %c260, %c7],
+      strides = [%c1820, %c1820, %c1820, %c7, %c1]
+      : !pto.tensor_view<1x1x1x260x7xf32>
+    // Dst tensor_view: 260x16
+    %dst_out_view = pto.make_tensor_view %dst_ptr,
+      shape = [%c1, %c1, %c1, %c260, %c16],
+      strides = [%c4160, %c4160, %c4160, %c16, %c1]
+      : !pto.tensor_view<1x1x1x260x16xf32>
+
+    %src_part = pto.partition_view %src_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c260, %c7]
+      : !pto.tensor_view<1x1x1x260x7xf32> -> !pto.partition_tensor_view<1x1x1x260x7xf32>
+    %dst_out_part = pto.partition_view %dst_out_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c260, %c16]
+      : !pto.tensor_view<1x1x1x260x16xf32> -> !pto.partition_tensor_view<1x1x1x260x16xf32>
+
+    // Src tile: LoadPadVal=Min (pad=3), shape4_aligned=8 (align 7 to 8 for f32), v_col=7
+    %src = pto.alloc_tile
+      : !pto.tile_buf<vec, 260x16xf32, valid=260x7, pad=3>
+    // Dst tile: FillPadVal=Max (pad=2), dst physical=260x16, v_col=16 (full output)
+    %dst = pto.alloc_tile
+      : !pto.tile_buf<vec, 260x16xf32, pad=2>
+
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x260x7xf32>)
+              outs(%src : !pto.tile_buf<vec, 260x16xf32, valid=260x7, pad=3>)
+
+    pto.tfillpad ins(%src : !pto.tile_buf<vec, 260x16xf32, valid=260x7, pad=3>)
+                 outs(%dst : !pto.tile_buf<vec, 260x16xf32, pad=2>)
+
+    pto.tstore ins(%dst : !pto.tile_buf<vec, 260x16xf32, pad=2>)
+               outs(%dst_out_part : !pto.partition_tensor_view<1x1x1x260x16xf32>)
+    return
+  }
+
+  // ========== Case 6: uint16, src=260x7, dst=260x32, LoadPad=Min, FillPad=Max ==========
+
+  func.func @TFILLPAD_u16_260x32_pad_260x7(%src_ptr: !pto.ptr<ui16>, %dst_ptr: !pto.ptr<ui16>) {
+    %c0     = arith.constant 0     : index
+    %c1     = arith.constant 1     : index
+    %c7     = arith.constant 7     : index
+    %c32    = arith.constant 32    : index
+    %c260   = arith.constant 260   : index
+    %c1820  = arith.constant 1820  : index  // 260*7 (src size)
+    %c8320  = arith.constant 8320  : index  // 260*32 (dst size)
+
+    // Src tensor_view: 260x7
+    %src_view = pto.make_tensor_view %src_ptr,
+      shape = [%c1, %c1, %c1, %c260, %c7],
+      strides = [%c1820, %c1820, %c1820, %c7, %c1]
+      : !pto.tensor_view<1x1x1x260x7xui16>
+    // Dst tensor_view: 260x32
+    %dst_out_view = pto.make_tensor_view %dst_ptr,
+      shape = [%c1, %c1, %c1, %c260, %c32],
+      strides = [%c8320, %c8320, %c8320, %c32, %c1]
+      : !pto.tensor_view<1x1x1x260x32xui16>
+
+    %src_part = pto.partition_view %src_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c260, %c7]
+      : !pto.tensor_view<1x1x1x260x7xui16> -> !pto.partition_tensor_view<1x1x1x260x7xui16>
+    %dst_out_part = pto.partition_view %dst_out_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c260, %c32]
+      : !pto.tensor_view<1x1x1x260x32xui16> -> !pto.partition_tensor_view<1x1x1x260x32xui16>
+
+    // Src tile: LoadPadVal=Min (pad=3), shape4_aligned=16, v_col=7
+    %src = pto.alloc_tile
+      : !pto.tile_buf<vec, 260x32xui16, valid=260x7, pad=3>
+    // Dst tile: FillPadVal=Max (pad=2), dst physical=260x32, v_col=32 (full output)
+    %dst = pto.alloc_tile
+      : !pto.tile_buf<vec, 260x32xui16, pad=2>
+
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x260x7xui16>)
+              outs(%src : !pto.tile_buf<vec, 260x32xui16, valid=260x7, pad=3>)
+
+    pto.tfillpad ins(%src : !pto.tile_buf<vec, 260x32xui16, valid=260x7, pad=3>)
+                 outs(%dst : !pto.tile_buf<vec, 260x32xui16, pad=2>)
+
+    pto.tstore ins(%dst : !pto.tile_buf<vec, 260x32xui16, pad=2>)
+               outs(%dst_out_part : !pto.partition_tensor_view<1x1x1x260x32xui16>)
+    return
+  }
+
+  // ========== Case 7: int8, src=260x7, dst=260x64, LoadPad=Min, FillPad=Max ==========
+
+  func.func @TFILLPAD_s8_260x64_pad_260x7(%src_ptr: !pto.ptr<i8>, %dst_ptr: !pto.ptr<i8>) {
+    %c0     = arith.constant 0     : index
+    %c1     = arith.constant 1     : index
+    %c7     = arith.constant 7     : index
+    %c64    = arith.constant 64    : index
+    %c260   = arith.constant 260   : index
+    %c1820  = arith.constant 1820  : index  // 260*7 (src size)
+    %c16640 = arith.constant 16640 : index  // 260*64 (dst size)
+
+    // Src tensor_view: 260x7
+    %src_view = pto.make_tensor_view %src_ptr,
+      shape = [%c1, %c1, %c1, %c260, %c7],
+      strides = [%c1820, %c1820, %c1820, %c7, %c1]
+      : !pto.tensor_view<1x1x1x260x7xi8>
+    // Dst tensor_view: 260x64
+    %dst_out_view = pto.make_tensor_view %dst_ptr,
+      shape = [%c1, %c1, %c1, %c260, %c64],
+      strides = [%c16640, %c16640, %c16640, %c64, %c1]
+      : !pto.tensor_view<1x1x1x260x64xi8>
+
+    %src_part = pto.partition_view %src_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c260, %c7]
+      : !pto.tensor_view<1x1x1x260x7xi8> -> !pto.partition_tensor_view<1x1x1x260x7xi8>
+    %dst_out_part = pto.partition_view %dst_out_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c260, %c64]
+      : !pto.tensor_view<1x1x1x260x64xi8> -> !pto.partition_tensor_view<1x1x1x260x64xi8>
+
+    // Src tile: LoadPadVal=Min (pad=3), shape4_aligned=32 (align 7 to 32 for i8), v_col=7
+    %src = pto.alloc_tile
+      : !pto.tile_buf<vec, 260x64xi8, valid=260x7, pad=3>
+    // Dst tile: FillPadVal=Max (pad=2), dst physical=260x64, v_col=64 (full output)
+    %dst = pto.alloc_tile
+      : !pto.tile_buf<vec, 260x64xi8, pad=2>
+
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x260x7xi8>)
+              outs(%src : !pto.tile_buf<vec, 260x64xi8, valid=260x7, pad=3>)
+
+    pto.tfillpad ins(%src : !pto.tile_buf<vec, 260x64xi8, valid=260x7, pad=3>)
+                 outs(%dst : !pto.tile_buf<vec, 260x64xi8, pad=2>)
+
+    pto.tstore ins(%dst : !pto.tile_buf<vec, 260x64xi8, pad=2>)
+               outs(%dst_out_part : !pto.partition_tensor_view<1x1x1x260x64xi8>)
+    return
+  }
+
+  // ========== Case 10: int16, src=260x7, dst=260x32, LoadPad=Min, FillPad=Min ==========
+
+  func.func @TFILLPAD_s16_260x32_pad_260x7(%src_ptr: !pto.ptr<i16>, %dst_ptr: !pto.ptr<i16>) {
+    %c0     = arith.constant 0     : index
+    %c1     = arith.constant 1     : index
+    %c7     = arith.constant 7     : index
+    %c32    = arith.constant 32    : index
+    %c260   = arith.constant 260   : index
+    %c1820  = arith.constant 1820  : index  // 260*7 (src size)
+    %c8320  = arith.constant 8320  : index  // 260*32 (dst size)
+
+    // Src tensor_view: 260x7
+    %src_view = pto.make_tensor_view %src_ptr,
+      shape = [%c1, %c1, %c1, %c260, %c7],
+      strides = [%c1820, %c1820, %c1820, %c7, %c1]
+      : !pto.tensor_view<1x1x1x260x7xi16>
+    // Dst tensor_view: 260x32
+    %dst_out_view = pto.make_tensor_view %dst_ptr,
+      shape = [%c1, %c1, %c1, %c260, %c32],
+      strides = [%c8320, %c8320, %c8320, %c32, %c1]
+      : !pto.tensor_view<1x1x1x260x32xi16>
+
+    %src_part = pto.partition_view %src_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c260, %c7]
+      : !pto.tensor_view<1x1x1x260x7xi16> -> !pto.partition_tensor_view<1x1x1x260x7xi16>
+    %dst_out_part = pto.partition_view %dst_out_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c260, %c32]
+      : !pto.tensor_view<1x1x1x260x32xi16> -> !pto.partition_tensor_view<1x1x1x260x32xi16>
+
+    // Src tile: LoadPadVal=Min (pad=3), shape4_aligned=16, v_col=7
+    %src = pto.alloc_tile
+      : !pto.tile_buf<vec, 260x32xi16, valid=260x7, pad=3>
+    // Dst tile: FillPadVal=Min (pad=3), dst physical=260x32, v_col=32 (full output)
+    %dst = pto.alloc_tile
+      : !pto.tile_buf<vec, 260x32xi16, pad=3>
+
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x260x7xi16>)
+              outs(%src : !pto.tile_buf<vec, 260x32xi16, valid=260x7, pad=3>)
+
+    pto.tfillpad ins(%src : !pto.tile_buf<vec, 260x32xi16, valid=260x7, pad=3>)
+                 outs(%dst : !pto.tile_buf<vec, 260x32xi16, pad=3>)
+
+    pto.tstore ins(%dst : !pto.tile_buf<vec, 260x32xi16, pad=3>)
+               outs(%dst_out_part : !pto.partition_tensor_view<1x1x1x260x32xi16>)
+    return
+  }
+
+  // ========== Case 11: int32, src=260x7, dst=260x32, LoadPad=Min, FillPad=Min ==========
+
+  func.func @TFILLPAD_s32_260x32_pad_260x7(%src_ptr: !pto.ptr<i32>, %dst_ptr: !pto.ptr<i32>) {
+    %c0     = arith.constant 0     : index
+    %c1     = arith.constant 1     : index
+    %c7     = arith.constant 7     : index
+    %c32    = arith.constant 32    : index
+    %c260   = arith.constant 260   : index
+    %c1820  = arith.constant 1820  : index  // 260*7 (src size)
+    %c8320  = arith.constant 8320  : index  // 260*32 (dst size)
+
+    // Src tensor_view: 260x7
+    %src_view = pto.make_tensor_view %src_ptr,
+      shape = [%c1, %c1, %c1, %c260, %c7],
+      strides = [%c1820, %c1820, %c1820, %c7, %c1]
+      : !pto.tensor_view<1x1x1x260x7xi32>
+    // Dst tensor_view: 260x32
+    %dst_out_view = pto.make_tensor_view %dst_ptr,
+      shape = [%c1, %c1, %c1, %c260, %c32],
+      strides = [%c8320, %c8320, %c8320, %c32, %c1]
+      : !pto.tensor_view<1x1x1x260x32xi32>
+
+    %src_part = pto.partition_view %src_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c260, %c7]
+      : !pto.tensor_view<1x1x1x260x7xi32> -> !pto.partition_tensor_view<1x1x1x260x7xi32>
+    %dst_out_part = pto.partition_view %dst_out_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c260, %c32]
+      : !pto.tensor_view<1x1x1x260x32xi32> -> !pto.partition_tensor_view<1x1x1x260x32xi32>
+
+    // Src tile: LoadPadVal=Min (pad=3), shape4_aligned=8 (align 7 to 8 for i32), v_col=7
+    %src = pto.alloc_tile
+      : !pto.tile_buf<vec, 260x32xi32, valid=260x7, pad=3>
+    // Dst tile: FillPadVal=Min (pad=3), dst physical=260x32, v_col=32 (full output)
+    %dst = pto.alloc_tile
+      : !pto.tile_buf<vec, 260x32xi32, pad=3>
+
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x260x7xi32>)
+              outs(%src : !pto.tile_buf<vec, 260x32xi32, valid=260x7, pad=3>)
+
+    pto.tfillpad ins(%src : !pto.tile_buf<vec, 260x32xi32, valid=260x7, pad=3>)
+                 outs(%dst : !pto.tile_buf<vec, 260x32xi32, pad=3>)
+
+    pto.tstore ins(%dst : !pto.tile_buf<vec, 260x32xi32, pad=3>)
+               outs(%dst_out_part : !pto.partition_tensor_view<1x1x1x260x32xi32>)
+    return
+  }
+
+  // ========== Case 12: float, src=128x64, dst=128x128, LoadPad=Null, FillPad=Custom(-1.0f) ==========
+  // PTO IR cannot encode Custom PadValue, template uses shape-based detection:
+  // src.valid_cols < dst.valid_cols => fill expansion region with -1.0f
+
+  func.func @TFILLPAD_f32_128x128_pad_128x64_neg1(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+    %c0     = arith.constant 0     : index
+    %c1     = arith.constant 1     : index
+    %c64    = arith.constant 64    : index
+    %c128   = arith.constant 128   : index
+    %c8192  = arith.constant 8192  : index  // 128*64 (src size)
+    %c16384 = arith.constant 16384 : index  // 128*128 (dst size)
+
+    // Src tensor_view: 128x64 (C++ shape4=64)
+    %src_view = pto.make_tensor_view %src_ptr,
+      shape = [%c1, %c1, %c1, %c128, %c64],
+      strides = [%c8192, %c8192, %c8192, %c64, %c1]
+      : !pto.tensor_view<1x1x1x128x64xf32>
+
+    // Dst output tensor_view: 128x128 (full dst valid region)
+    %dst_out_view = pto.make_tensor_view %dst_ptr,
+      shape = [%c1, %c1, %c1, %c128, %c128],
+      strides = [%c16384, %c16384, %c16384, %c128, %c1]
+      : !pto.tensor_view<1x1x1x128x128xf32>
+
+    %src_part = pto.partition_view %src_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c128, %c64]
+      : !pto.tensor_view<1x1x1x128x64xf32> -> !pto.partition_tensor_view<1x1x1x128x64xf32>
+    %dst_out_part = pto.partition_view %dst_out_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c128, %c128]
+      : !pto.tensor_view<1x1x1x128x128xf32> -> !pto.partition_tensor_view<1x1x1x128x128xf32>
+
+    // Src tile: LoadPadVal=Null (pad=0), shape4_aligned=64 (already aligned), v_col=64
+    %src = pto.alloc_tile
+      : !pto.tile_buf<vec, 128x128xf32, valid=128x64>
+    // Dst tile: FillPadVal=Custom(-1.0f) - detected by template via src.v_col < dst.v_col
+    // Use pad=1 (Zero) as placeholder (PTO IR cannot encode Custom), template detects expansion and uses -1.0f
+    %dst = pto.alloc_tile
+      : !pto.tile_buf<vec, 128x128xf32, pad=1>
+
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x128x64xf32>)
+              outs(%src : !pto.tile_buf<vec, 128x128xf32, valid=128x64>)
+
+    pto.tfillpad ins(%src : !pto.tile_buf<vec, 128x128xf32, valid=128x64>)
+                 outs(%dst : !pto.tile_buf<vec, 128x128xf32, pad=1>)
+
+    pto.tstore ins(%dst : !pto.tile_buf<vec, 128x128xf32, pad=1>)
+               outs(%dst_out_part : !pto.partition_tensor_view<1x1x1x128x128xf32>)
+    return
+  }
+
+  // ========== Case 13: float, src=128x127, dst=128x160, LoadPad=Custom(-1.0f), FillPad=Custom(-1.0f) ==========
+  // PTO IR cannot encode Custom PadValue, template uses shape-based detection
+
+  func.func @TFILLPAD_f32_128x160_pad_128x127_neg1(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+    %c0     = arith.constant 0     : index
+    %c1     = arith.constant 1     : index
+    %c127   = arith.constant 127   : index
+    %c128   = arith.constant 128   : index
+    %c160   = arith.constant 160   : index
+    %c16256 = arith.constant 16256 : index  // 128*127 (src size)
+    %c20480 = arith.constant 20480 : index  // 128*160 (dst size)
+
+    // Src tensor_view: 128x127
+    %src_view = pto.make_tensor_view %src_ptr,
+      shape = [%c1, %c1, %c1, %c128, %c127],
+      strides = [%c16256, %c16256, %c16256, %c127, %c1]
+      : !pto.tensor_view<1x1x1x128x127xf32>
+
+    // Dst output tensor_view: 128x160 (full dst output)
+    %dst_out_view = pto.make_tensor_view %dst_ptr,
+      shape = [%c1, %c1, %c1, %c128, %c160],
+      strides = [%c20480, %c20480, %c20480, %c160, %c1]
+      : !pto.tensor_view<1x1x1x128x160xf32>
+
+    %src_part = pto.partition_view %src_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c128, %c127]
+      : !pto.tensor_view<1x1x1x128x127xf32> -> !pto.partition_tensor_view<1x1x1x128x127xf32>
+    %dst_out_part = pto.partition_view %dst_out_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c128, %c160]
+      : !pto.tensor_view<1x1x1x128x160xf32> -> !pto.partition_tensor_view<1x1x1x128x160xf32>
+
+    // Src tile: LoadPadVal=Custom(-1.0f), shape4_aligned=128, v_col=127
+    // Use pad=0, template will detect and fill src padding region with -1.0f
+    %src = pto.alloc_tile
+      : !pto.tile_buf<vec, 128x160xf32, valid=128x127>
+    // Dst tile: FillPadVal=Custom(-1.0f), dst physical=128x160, v_col=160
+    // Use pad=1 (Zero) as placeholder (PTO IR cannot encode Custom), template detects expansion and uses -1.0f
+    %dst = pto.alloc_tile
+      : !pto.tile_buf<vec, 128x160xf32, pad=1>
+
+    pto.tload ins(%src_part : !pto.partition_tensor_view<1x1x1x128x127xf32>)
+              outs(%src : !pto.tile_buf<vec, 128x160xf32, valid=128x127>)
+
+    pto.tfillpad ins(%src : !pto.tile_buf<vec, 128x160xf32, valid=128x127>)
+                 outs(%dst : !pto.tile_buf<vec, 128x160xf32, pad=1>)
+
+    pto.tstore ins(%dst : !pto.tile_buf<vec, 128x160xf32, pad=1>)
+               outs(%dst_out_part : !pto.partition_tensor_view<1x1x1x128x160xf32>)
+    return
+  }
+}

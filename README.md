@@ -33,6 +33,7 @@ You can obtain `ptoas` binaries and related release artifacts from the **Release
 This repository provides PTO instruction SPEC documentation here:
 
 - [docs/PTO-micro-Instruction-SPEC.md](docs/PTO-micro-Instruction-SPEC.md)
+- [docs/pto-tileop.md](docs/pto-tileop.md)
 
 ## Tests as Learning Material
 
@@ -47,9 +48,17 @@ Each runnable case follows a stable structure:
 - `golden.py`: generates test inputs and expected (golden) outputs for validation.
 - `compare.py`: compares runtime outputs against golden results and reports pass/fail.
 
-These cases currently focus on PTO micro-op scenarios and are useful for understanding instruction behavior through concrete examples. Tile-level cases may be added in future updates.
+These cases currently focus on PTO micro-op scenarios and are useful for understanding instruction behavior through concrete examples.
 
 For more detailed validation guidance, see [examples/pto/README.md](examples/pto/README.md).
+
+TileOp ST cases are provided under [examples/tileop/](examples/tileop/). They package the TileLang ST A5 examples together with runners that:
+
+- take `PTOAS_BIN` from `--ptoas-bin` or the environment
+- discover `bisheng` and related CANN tools from `ASCEND_HOME_PATH`
+- keep build and generated data under a separate workspace instead of writing into the source tree
+
+For usage details, see [examples/tileop/README.md](examples/tileop/README.md).
 
 ## Quick Start for Validation
 
@@ -82,11 +91,22 @@ JOBS=64 \
 bash examples/pto/scripts/run_host_vpto_validation_parallel.sh
 ```
 
+### Run one TileOp testcase
+
+```bash
+export ASCEND_HOME_PATH=/usr/local/Ascend/cann
+export PTOAS_BIN=/path/to/ptoas
+
+python3 examples/tileop/script/run_example.py -r sim -v a5 -t tadd
+```
+
 ## Repository Layout
 
 - [docs/](docs/) — PTO instruction SPEC documentation
 - [examples/pto/README.md](examples/pto/README.md) — VPTO validation usage guide
 - [examples/pto/](examples/pto/) — VPTO learning and validation cases
+- [examples/tileop/README.md](examples/tileop/README.md) — TileOp ST usage guide
+- [examples/tileop/](examples/tileop/) — TileOp learning and validation cases
 
 ## License
 
