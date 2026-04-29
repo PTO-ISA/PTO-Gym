@@ -290,156 +290,6 @@ pto.strict_vecscope(%ub_in, %ub_out, %lane, %remaining) {
 
 Use `pto.strict_vecscope` when the source form should make all vector-scope inputs explicit in the region signature instead of relying on surrounding SSA visibility. The scope op itself only defines the vector-interval boundary and region argument contract.
 
-### Cluster Programming Model
-
-#### Overview
-
-An A5 cluster contains one **Cube block** (AIC) and two **Vector blocks** (AIV0, AIV1). Each
-block runs an **independent program** under its own Scalar Unit (SU), with its own issue queues:
-
-| Block | Issue Queues |
-|---|---|
-| Cube (AIC) | MTE2, MTE1, CUBE, FIXP |
-| Vector (AIV) | MTE2, VEC, MTE3 |
-
-There is no implicit synchronization between blocks. All coordination between the Cube and Vector
-programs is **explicit**, via the primitives described below.
-
-```
-┌─────────────────────────────────────── A5 CLUSTER ───────────────────────────────────────┐
-│                                                                                           │
-│  ┌─────────────────────┐    ┌─────────────────────┐    ┌─────────────────────┐           │
-│  │   CUBE CORE (AIC)   │    │  VECTOR 0 (AIV0)    │    │  VECTOR 1 (AIV1)    │           │
-│  │                     │    │   subblock_id = 0   │    │   subblock_id = 1   │           │
-│  │  ┌───────────────┐  │    │  ┌───────────────┐  │    │  ┌───────────────┐  │           │
-│  │  │  Scalar Unit  │  │    │  │  Scalar Unit  │  │    │  │  Scalar Unit  │  │           │
-│  │  │  (SU)         │  │    │  │  (SU)         │  │    │  │  (SU)         │  │           │
-│  │  │  runs cube    │  │    │  │  runs vec     │  │    │  │  runs vec     │  │           │
-│  │  │  program      │  │    │  │  program      │  │    │  │  program      │  │           │
-│  │  └───────────────┘  │    │  └───────────────┘  │    │  └───────────────┘  │           │
-│  │   ── Issue Queues ─ │    │   ── Issue Queues ─ │    │   ── Issue Queues ─ │           │
-│  │  ┌───────────────┐  │    │  ┌───────────────┐  │    │  ┌───────────────┐  │           │
-│  │  │     MTE2      │  │    │  │     MTE2      │  │    │  │     MTE2      │  │           │
-│  │  │    GM → L1    │  │    │  │    GM → UB    │  │    │  │    GM → UB    │  │           │
-│  │  ├───────────────┤  │    │  ├───────────────┤  │    │  ├───────────────┤  │           │
-│  │  │     MTE1      │  │    │  │      VEC      │  │    │  │      VEC      │  │           │
-│  │  │   L1 → L0A/B  │  │    │  │  SIMD compute │  │    │  │  SIMD compute │  │           │
-│  │  ├───────────────┤  │    │  ├───────────────┤  │    │  ├───────────────┤  │           │
-│  │  │     CUBE      │  │    │  │     MTE3      │  │    │  │     MTE3      │  │           │
-│  │  │  MMAD (L0C)   │  │    │  │    UB → GM    │  │    │  │    UB → GM    │  │           │
-│  │  ├───────────────┤  │    │  └───────────────┘  │    │  └───────────────┘  │           │
-│  │  │     FIXP      │  │    │                     │    │                     │           │
-│  │  │  L0C → UB     │  │    │                     │    │                     │           │
-│  │  │  (fixpipe)    │  │    │                     │    │                     │           │
-│  │  └───────────────┘  │    │                     │    │                     │           │
-│  └─────────────────────┘    └─────────────────────┘    └─────────────────────┘           │
-│                                                                                           │
-│  ┌────────────────────── SC (System Controller) ──────────────────────────────────────┐  │
-│  │                                                                                     │  │
-│  │   32 semaphores · 4-bit counter each · shared for C→V and V→C directions           │  │
-│  │                                                                                     │  │
-│  │   ┌──────────────────────────────────────────────────────────────────────────────┐ │  │
-│  │   │  sema_id 0 –15  │ [ 0][ 1][ 2][ 3][ 4][ 5][ 6][ 7][ 8][ 9][10][11][12][13][14][15] │ │  │
-│  │   │                 │                    ↕  C→V / V→C  ↕                         │ │  │
-│  │   │                 │              communicate with AIV0 (subblock_id=0)          │ │  │
-│  │   ├──────────────────────────────────────────────────────────────────────────────┤ │  │
-│  │   │  sema_id 16–31  │ [16][17][18][19][20][21][22][23][24][25][26][27][28][29][30][31] │ │  │
-│  │   │                 │                    ↕  C→V / V→C  ↕                         │ │  │
-│  │   │                 │              communicate with AIV1 (subblock_id=1)          │ │  │
-│  │   └──────────────────────────────────────────────────────────────────────────────┘ │  │
-│  │                                                                                     │  │
-│  │   → 16 sema_id pairs (0–15) available for 1:2 C:V sync per slot                   │  │
-│  │                                                                                     │  │
-│  │   set_intra_block(trigger_pipe, sema_id)  ──►  increments semaphore                │  │
-│  │   wait_intra_core(wait_pipe,    sema_id)  ──►  stalls pipe until semaphore > 0     │  │
-│  │                                                                                     │  │
-│  └─────────────────────────────────────────────────────────────────────────────────────┘  │
-└───────────────────────────────────────────────────────────────────────────────────────────┘
-```
-
-#### Intra-Cluster Synchronization
-
-Within a cluster, the PTO micro ISA provides two levels of synchronization:
-
-**Intra-core pipeline sync** (`pto.set_flag` / `pto.wait_flag`): coordinates the asynchronous
-pipelines *within a single block* — for example, ensuring MTE2 completes a GM→UB load before
-the VEC pipeline begins computation. This does not cross block boundaries.
-
-**Inter-block sync** (`pto.set_intra_block` / `pto.wait_intra_core`): coordinates between the
-Cube block and a Vector block within the same cluster. The sender specifies which **local
-pipeline** commits the signal, ensuring the preceding operation on that pipeline has completed
-before the signal is issued. The receiver specifies which **local pipeline** should stall until
-the signal arrives. This is the fundamental IPC primitive for Cube–Vector cooperation on A5.
-
-> **Note:** `pto.set_cross_core` / `pto.wait_cross_core` operate at **multi-cluster** scope and
-> are not used for intra-cluster communication.
-
-#### Intra-Cluster Data Paths
-
-A5 provides dedicated on-chip data paths between the Cube and Vector blocks, bypassing Global
-Memory entirely. These are the **recommended high-performance paths** for intra-cluster tile
-exchange.
-
-##### C→V: Cube L0C → Vector UB (fixpipe)
-
-The **fixpipe** instruction transfers data directly from Cube's L0C buffer to a Vector block's UB.
-Because Cube natively produces results in **NZ fractal layout** and Vector operates on **ND
-(row-major) layout**, fixpipe performs the layout conversion in hardware:
-
-```
-Cube L0C  (NZ layout)  ──[fixpipe, NZ2ND]──▶  Vector UB  (ND layout)
-```
-
-Fixpipe supports a **dual-destination mode**: a single transfer can write to *both* AIV0's UB and
-AIV1's UB simultaneously, with the tile split in hardware along either the row axis
-(`DualModeSplitM`) or the column axis (`DualModeSplitN`):
-
-| Split | AIV0 receives | AIV1 receives |
-|---|---|---|
-| Split-M (rows) | Upper `[M/2, N]` in ND | Lower `[M/2, N]` in ND |
-| Split-N (cols) | Left `[M, N/2]` in ND | Right `[M, N/2]` in ND |
-
-This 1→2 broadcast with in-hardware tile split is the architectural basis for 1:2
-Cube-to-Vector tile distribution.
-
-##### V→C: Vector UB → Cube L1 (TMOV ub2l1)
-
-The reverse path uses `TMOV ub2l1` to transfer data from a Vector block's UB into Cube's L1
-buffer. A key architectural constraint: Cube's L1 stores tiles in **NZ fractal layout** (e.g.
-`K1M1M0K0` — for fp16: `K0=16`, `M0=16`) so they can be loaded into L0A/L0B for MMAD
-computation. Since Vector produces tiles in **ND layout**, the layout conversion from ND to NZ
-must be applied as part of the V→C transfer:
-
-```
-Vector UB  (ND layout)  ──[TMOV ub2l1, ND→NZ]──▶  Cube L1  (NZ K1M1M0K0)
-```
-
-For 1:2 mode, both AIV0 and AIV1 each transfer a sub-tile into Cube's L1. The two sub-tiles are
-assembled into a single contiguous NZ Mat tile in L1, ready for use as a LeftTile or RightTile
-input to MMAD:
-
-| Split | AIV0 writes to L1 | AIV1 writes to L1 | Assembled in L1 |
-|---|---|---|---|
-| Split-M (rows) | `[K/2, N]` NZ at base | `[K/2, N]` NZ at offset | Full `[K, N]` NZ Mat tile |
-| Split-N (cols) | `[K, N/2]` NZ at base | `[K, N/2]` NZ at offset | Full `[K, N]` NZ Mat tile |
-
-##### Fallback: GM-Staged Transfer
-
-When the local data path is not applicable, data can be exchanged via a **Global Memory staging
-buffer**: the producer DMAs data to GM, and the consumer DMAs from GM. This path incurs off-chip
-bandwidth cost and higher latency, but serves as a general fallback.
-
-#### Programming Model
-
-The common pattern for Cube–Vector co-programming is a **software pipeline**: the Cube and Vector
-programs run a coordinated loop where each iteration the Cube produces a tile and the Vector
-consumes it (or vice versa), with explicit `pto.set_intra_block` / `pto.wait_intra_core`
-handshakes at each step to maintain correct data ordering.
-
-The PTO micro ISA exposes all the hardware primitives above directly. Higher-level constructs
-that simplify this pattern (such as in-order FIFO abstractions) can be implemented as software
-libraries on top of these primitives; they are not part of the ISA itself.
-
 ### Scope
 
 This document is the interface specification centered on the `mlir::pto` dialect and the shared MLIR surface used alongside it in PTO micro Instruction programs.
@@ -1044,11 +894,10 @@ This section provides a categorized overview of all PTO micro Instruction operat
 | 13 | [DSA/SFU Ops](#micro-13-dsa-sfu-ops) | Specialized ops, index generation, and sorting helpers | 9 | `pto.vlrelu`, `pto.vprelu`, `pto.vexpdif`, `pto.vaxpy`, `pto.vmull`, `pto.vmula`, `pto.vci`, `pto.vbitsort`, `pto.vmrgsort4` |
 | 14 | [Arith (Shared MLIR Dialect)](#micro-14-shared-arith) | Full scalar `arith` surface used around PTO ops; the companion page lists categories and representative examples | all scalar ops | `arith.constant`, `arith.addi`, `arith.addf`, `arith.cmpi`, `arith.cmpf`, `arith.select`, `arith.index_cast`, `arith.extsi`, `arith.trunci`, `arith.andi`, `arith.shli`, etc. |
 | 15 | [SCF (Shared MLIR Dialect)](#micro-15-shared-scf) | Structured loops, branches, and loop-carried state around PTO regions | 5 | `scf.for`, `scf.if`, `scf.while`, `scf.condition`, `scf.yield` |
-| 16 | [Cube Matrix Multiply (MAT)](#micro-16-cube-matmul) | GM↔L1 cube staging, L0A/L0B loads, L0C matmul, and L0C/L1 side-buffer moves | 10+ | `pto.copy_gm_to_cbuf`, `pto.copy_gm_to_cbuf_multi_nd2nz`, `pto.copy_gm_to_cbuf_multi_dn2nz`, `pto.load_cbuf_to_ca`, `pto.load_cbuf_to_cb`, `pto.mad`, `pto.copy_matrix_cc_to_gm`, `pto.copy_matrix_cc_to_cbuf`, `pto.copy_matrix_cc_to_ub`, `pto.copy_cbuf_to_bt`, `pto.copy_cbuf_to_fbuf` |
 
 ## Detailed ISA Group Reference
 
-This section inlines the 16 ISA group documents so the architectural overview, notation, summary table, and per-group semantics can be read in a single file.
+This section inlines the 15 ISA group documents so the architectural overview, notation, summary table, and per-group semantics can be read in a single file.
 
 <a id="micro-01-pipeline-sync"></a>
 
@@ -5446,113 +5295,6 @@ scf.if %is_mode_a {
 - use `scf.while` only when a counted loop cannot express the control cleanly; `scf.for` remains the more common and better-exercised form in the current repository
 - build branch predicates and loop conditions with `arith` ops, not PTO vector masks, unless the control decision truly comes from a scalarized value
 
-<a id="micro-16-cube-matmul"></a>
-
-### 16. Cube Matrix Multiply (MAT)
-
-> **Category:** Cube unit — GM/L1 staging, L0A/L0B loads, L0C accumulate, and matrix-side side-buffer moves  
-> **Pipelines:** MTE2 (GM→L1 / cbuf), Cube (L0A/L0B→L0C), MTE3/FIX (L0C→{GM,L1,UB}, L1→{BT,FB})
-
-This group documents **buffer-pointer** PTO ops used to express a minimal **cube matmul data path** on A5: data is moved from GM into L1-aligned buffers (`cbuf`), loaded into L0A/L0B, multiplied into L0C (`cc`), then written back or redistributed to GM/L1/UB and related matrix-side buffers. These ops are distinct from the vector `!pto.vreg<…>` surface in groups 3–13.
-
-Typical usage keeps the body inside `pto.vecscope { … }` (or another enclosing region required by the PTO verifier) so cube-side effects remain ordered with respect to other PTO work.
-
----
-
-#### `pto.copy_gm_to_cbuf`
-
-- **syntax:** `pto.copy_gm_to_cbuf %src, %dst, %n_burst, %len_burst, %src_stride, %dst_stride : !pto.ptr<…, gm>, !pto.ptr<…, ub>, i64, i64, i64, i64`
-- **semantics:** GM→L1 (`cbuf`) aligned copy. `%src` is GM; `%dst` is UB-backed L1 (`cbuf`) staging.
-
-Operands `%n_burst`, `%len_burst`, `%src_stride`, and `%dst_stride` configure the transfer shape; they are lowered to packed `i64` configuration tokens for the target `llvm.hivm` MOV family intrinsic.
-
----
-
-#### `pto.load_cbuf_to_ca`
-
-- **syntax:** `pto.load_cbuf_to_ca %src, %dst, %m, %k : !pto.ptr<…, ub>, !pto.ptr<…, ub>, i64, i64`
-- **semantics:** L1 (`cbuf`) → L0A load. `%src` is `cbuf`; `%dst` is UB-backed L0A staging.
-
----
-
-#### `pto.load_cbuf_to_cb`
-
-- **syntax:** `pto.load_cbuf_to_cb %src, %dst, %k, %n : !pto.ptr<…, ub>, !pto.ptr<…, ub>, i64, i64`
-- **semantics:** L1 (`cbuf`) → L0B load. `%src` is `cbuf`; `%dst` is UB-backed L0B staging.
-
----
-
-#### `pto.mad`
-
-- **syntax:** `pto.mad %lhs, %rhs, %dst, %m, %n, %k : !pto.ptr<…, ub>, !pto.ptr<…, ub>, !pto.ptr<…, ub>, i64, i64, i64`
-- **semantics:** Cube **multiply** on L0A (`%lhs`) and L0B (`%rhs`) into L0C (`%dst`). All three pointers must be UB-backed **buffer** pointers (`!pto.ptr<…, ub>`) classified as left / right / accumulator roles in lowering.
-
-Supported element-type combinations follow the HIVM intrinsic selection in the compiler (for example `f16` × `f16` → `f32` accumulation, and MX-dtyped paths where applicable).
-
----
-
-#### `pto.copy_matrix_cc_to_gm`
-
-- **syntax:** `pto.copy_matrix_cc_to_gm %src, %dst, %m, %n : !pto.ptr<…, ub>, !pto.ptr<…, gm>, i64, i64`
-- **semantics:** L0C (`cc`) → GM matrix writeback. `%src` is UB-backed `cc`; `%dst` is GM.
-
----
-
-#### `pto.copy_gm_to_cbuf_multi_nd2nz` / `pto.copy_gm_to_cbuf_multi_dn2nz`
-
-- **syntax:** `pto.copy_gm_to_cbuf_multi_* %src, %dst, ... : !pto.ptr<…, gm>, !pto.ptr<…, ub>, ...`
-- **semantics:** GM→L1 (`cbuf`) multi-fractal staging paths for cube data layout conversion variants (`ND2NZ` / `DN2NZ`), lowered to `llvm.hivm.MOV.OUT.TO.L1.MULTI.*` families.
-
----
-
-#### `pto.copy_matrix_cc_to_cbuf` / `pto.copy_matrix_cc_to_ub`
-
-- **syntax:** `pto.copy_matrix_cc_to_* %src, %dst, %config0, %config1 : !pto.ptr<…, ub>, !pto.ptr<…, ub>, i64, i64`
-- **semantics:** L0C (`cc`) redistribution to L1 (`cbuf`) or UB destinations. These are post-matmul movement ops typically used before follow-up fusion or output formatting.
-
----
-
-#### `pto.copy_cbuf_to_bt` / `pto.copy_cbuf_to_fbuf`
-
-- **syntax:** `pto.copy_cbuf_to_bt ...` and `pto.copy_cbuf_to_fbuf ...`
-- **semantics:** L1 (`cbuf`) to bias/scaling-side buffers for matrix post-processing setup. Lowered to `llvm.hivm.MOV.L1.TO.BT.f16` and `llvm.hivm.MOV.L1.TO.FB.V2`.
-
----
-
-#### Verified A5 Op Set (Current Batch)
-
-The following PTO ops have been verified in the current A5 VPTO→LLVM/HIVM and Bisheng cube-flow validation batch:
-
-- `pto.copy_cbuf_to_bt`
-- `pto.copy_cbuf_to_fbuf`
-- `pto.copy_gm_to_cbuf_multi_dn2nz`
-- `pto.copy_gm_to_cbuf_multi_nd2nz`
-- `pto.copy_matrix_cc_to_cbuf`
-- `pto.copy_matrix_cc_to_ub`
-- `pto.load_cbuf_to_ca_mx`
-- `pto.load_cbuf_to_ca_s4`
-- `pto.load_cbuf_to_cb_mx`
-- `pto.load_cbuf_to_cb_s4`
-- `pto.set_atomic_s32`
-- `pto.set_atomic_s8`
-- `pto.set_channel_para`
-- `pto.set_fpc`
-- `pto.set_loop1_stride_outtol1`
-- `pto.set_loop2_stride_outtol1`
-- `pto.set_loop3_para`
-- `pto.set_loop_size_outtol1`
-- `pto.set_mte2_nz_para`
-- `pto.set_pad_val_outtol1`
-- `pto.set_quant_pre`
-
----
-
-#### Current PTOAS Coverage
-
-- VPTO → LLVM (`--vpto-emit-hivm-llvm`) lowers the ops in this group to target-specific `llvm.hivm.*` intrinsics with explicit address spaces for GM / cbuf / L0A / L0B / L0C and matrix-side side buffers.
-- FileCheck coverage lives under `test/basic/vpto_mad_*.pto` and `test/basic/vpto_cube_dma_matmul_*.pto`.
-- TileLang ST builds a cube-linked host testcase via `pto_tilelang_cube_st(tmatmul)` in `test/tilelang_st/npu/a5/src/st/testcase/tmatmul/`.
-
 ## Supported Data Types
 
 | Type | Bits | vreg Lanes | Description |
@@ -5621,12 +5363,6 @@ pto.vstsx2 %x, %y, %ub_xy[%offset], "INTLV_B32", %all_mask : !pto.vreg<64xf32>, 
 |-----------|-------|-------------|
 | GM→UB DMA | 2 | `pto.dma_load` |
 | UB→GM DMA | 2 | `pto.dma_store` |
-| GM→L1 (cube staging) | 16 | `pto.copy_gm_to_cbuf` |
-| GM→L1 (multi layout staging) | 16 | `pto.copy_gm_to_cbuf_multi_nd2nz`, `pto.copy_gm_to_cbuf_multi_dn2nz` |
-| L1→L0A / L1→L0B | 16 | `pto.load_cbuf_to_ca`, `pto.load_cbuf_to_cb` |
-| L0C→GM (cube writeback) | 16 | `pto.copy_matrix_cc_to_gm` |
-| L0C→L1 / L0C→UB | 16 | `pto.copy_matrix_cc_to_cbuf`, `pto.copy_matrix_cc_to_ub` |
-| L1→BT / L1→FB | 16 | `pto.copy_cbuf_to_bt`, `pto.copy_cbuf_to_fbuf` |
 | Contiguous Load | 3 | `pto.vlds` with `NORM` dist |
 | Broadcast Load | 3 | `pto.vlds` with `BRC` family dist |
 | Gather | 3 | `pto.vgather2`, `pto.vgatherb` |
@@ -5641,7 +5377,6 @@ pto.vstsx2 %x, %y, %ub_xy[%offset], "INTLV_B32", %all_mask : !pto.vreg<64xf32>, 
 | Scalar Operations | 8 | `pto.vadds`, `pto.vmuls`, etc. |
 | Transcendental | 6 | `pto.vexp`, `pto.vln`, `pto.vsqrt`, etc. |
 | Reduction | 10 | `pto.vcadd`, `pto.vcmax`, `pto.vcmin` |
-| Cube matmul (L0A×L0B→L0C) | 16 | `pto.mad` |
 | Comparison | 11 | `pto.vcmp`, `pto.vcmps` |
 | Selection | 11 | `pto.vsel`, `pto.vselr` |
 
@@ -5675,42 +5410,6 @@ Group 14 covers the full scalar `arith` surface. The rows below list common PTO 
 | Counted Loops | 15 | `scf.for` |
 | Conditional Regions | 15 | `scf.if`, `scf.yield` |
 | Break-like Structured Loops | 15 | `scf.while`, `scf.condition`, `scf.yield` |
-
-### Recent A5 Additions (Implemented)
-
-- `pto.set_quant_pre` (lowered to `llvm.hivm.SET.QUANT.PRE.v300`)
-- `pto.set_atomic_s32`, `pto.set_atomic_s8` (A5-selectable atomic mode controls)
-- Cube-side movement additions:
-  - `pto.copy_gm_to_cbuf_multi_nd2nz`
-  - `pto.copy_gm_to_cbuf_multi_dn2nz`
-  - `pto.copy_matrix_cc_to_cbuf`
-  - `pto.copy_matrix_cc_to_ub`
-  - `pto.copy_cbuf_to_bt`
-  - `pto.copy_cbuf_to_fbuf`
-
-### Verified Op List (Current Batch)
-
-- `pto.copy_cbuf_to_bt`
-- `pto.copy_cbuf_to_fbuf`
-- `pto.copy_gm_to_cbuf_multi_dn2nz`
-- `pto.copy_gm_to_cbuf_multi_nd2nz`
-- `pto.copy_matrix_cc_to_cbuf`
-- `pto.copy_matrix_cc_to_ub`
-- `pto.load_cbuf_to_ca_mx`
-- `pto.load_cbuf_to_ca_s4`
-- `pto.load_cbuf_to_cb_mx`
-- `pto.load_cbuf_to_cb_s4`
-- `pto.set_atomic_s32`
-- `pto.set_atomic_s8`
-- `pto.set_channel_para`
-- `pto.set_fpc`
-- `pto.set_loop1_stride_outtol1`
-- `pto.set_loop2_stride_outtol1`
-- `pto.set_loop3_para`
-- `pto.set_loop_size_outtol1`
-- `pto.set_mte2_nz_para`
-- `pto.set_pad_val_outtol1`
-- `pto.set_quant_pre`
 
 ## Part IV: PTO Tile Instruction
 

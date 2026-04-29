@@ -186,7 +186,6 @@ set(ALL_TESTCASES
     trowexpandsub
     texpands
     tfillpad
-    tfillpad_inplace
     tfillpad_expand
     tadds
     tands

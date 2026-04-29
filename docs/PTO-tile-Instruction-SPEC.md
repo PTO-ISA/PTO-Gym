@@ -1783,34 +1783,3 @@ pto.tfillpad_expand ins(%src : !pto.tile_buf<...>)
 pto.tfillpad_expand ins(%src : !pto.tile_buf<vec, 4x32xf32>)
                     outs(%dst : !pto.tile_buf<vec, 8x64xf32, pad=1>)
 ```
-
----
-
-### 12.3 `pto.tfillpad_inplace`
-
-- **syntax:**
-```mlir
-pto.tfillpad_inplace ins(%src : !pto.tile_buf<...>)
-                     outs(%dst : !pto.tile_buf<...>)
-```
-- **semantics:** update the padding / expansion region of an already materialized tile without a separate copy-in phase.
-
-**Parameter Table:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `src` | `pto.tile_buf` | Source tile buffer. |
-| `dst` | `pto.tile_buf` | Destination tile buffer, typically aliasing the same physical tile. |
-
-**Constraints:**
-
-- PTOAS exposes `pto.tfillpad_inplace` as a dedicated Tile op.
-- In typical use, `src` and `dst` refer to the same underlying tile buffer.
-- The fill value is derived from `dst.pad_value`.
-
-**Example:**
-
-```mlir
-pto.tfillpad_inplace ins(%tile : !pto.tile_buf<vec, 32x32xf32, pad=1>)
-                     outs(%tile : !pto.tile_buf<vec, 32x32xf32, pad=1>)
-```
