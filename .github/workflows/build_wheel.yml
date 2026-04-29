@@ -155,8 +155,7 @@ jobs:
 
       # Upload cache immediately after the build step , to avoid `build-shared` directory get polluted by later steps.
       - name: Save LLVM cache
-        # Allow cache writes except for PR/release runs to avoid duplicated tag/merge caches.
-        if: steps.cache-llvm.outputs.cache-hit != 'true' && github.event_name != 'pull_request' && github.event_name != 'release'
+        if: steps.cache-llvm.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: /llvm-workspace/llvm-project/build-shared
@@ -245,7 +244,7 @@ jobs:
           path: ptoas-dist/
 
   upload_release_assets:
-    if: false
+    if: github.event_name == 'release' || github.event_name == 'schedule'
     name: Upload release assets
     needs: build_wheel
     runs-on: ubuntu-latest
@@ -286,13 +285,6 @@ jobs:
             } >> "$GITHUB_ENV"
           fi
 
-      - name: Download all wheel artifacts
-        uses: actions/download-artifact@v4
-        with:
-          pattern: ptoas-wheel-*
-          path: release-artifacts
-          merge-multiple: true
-
       - name: Download x86_64 binary artifact
         uses: actions/download-artifact@v4
         with:
@@ -324,7 +316,6 @@ jobs:
           body: ${{ env.RELEASE_BODY }}
           overwrite_files: true
           files: |
-            release-artifacts/*.whl
             release-artifacts/*.tar.gz
 
   bump_base_version:
