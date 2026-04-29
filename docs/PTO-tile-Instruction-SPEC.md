@@ -681,6 +681,36 @@ These instructions build the address, view, and tile-buffer metadata that later 
 
 ---
 
+### `pto.tensor_view_addr`
+
+- **syntax:**
+```mlir
+%result = pto.tensor_view_addr %src : !pto.tensor_view<...> -> memref<...>
+%result = pto.tensor_view_addr %src : !pto.tensor_view<...> -> !pto.ptr<T, gm>
+```
+- **semantics:** Extract the underlying address view from a `tensor_view` or `partition_tensor_view`.
+
+**Parameter Table:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `%src` | `!pto.tensor_view<...>` or `!pto.partition_tensor_view<...>` | Source view descriptor. |
+
+**Constraints:**
+
+- The result type must be either the lowered memref view or a GM pointer `!pto.ptr<T, gm>` to the same underlying storage.
+- The op is pure and does not move data.
+
+**Example:**
+
+```mlir
+%base = pto.tensor_view_addr %tv : !pto.tensor_view<?x?xf32> -> !pto.ptr<f32, gm>
+```
+
+`pto.tensor_view_addr` exposes the underlying address represented by the view descriptor. When the result type is a memref, it exposes the lowered view directly. When the result type is `!pto.ptr<..., gm>`, it exposes the same address in pointer form. During compiler-internal lowering, the operand may already be rewritten to a memref form; in that case this op is folded away or rewritten to an equivalent memref-to-ptr cast.
+
+---
+
 ### `pto.partition_view`
 
 - **syntax:**
