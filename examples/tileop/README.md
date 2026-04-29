@@ -10,9 +10,7 @@ The runners depend on:
 - `ASCEND_HOME_PATH`: your local CANN installation root
 - `PTOAS_BIN`: path to the `ptoas` executable, or pass it with `--ptoas-bin`
 
-The scripts derive `bisheng`, `cce-ld`, `ld.lld`, and simulator libraries from
-`ASCEND_HOME_PATH`. If `${ASCEND_HOME_PATH}/bin/setenv.bash` exists, the runners
-source it automatically.
+The scripts derive `bisheng`, `cce-ld`, `ld.lld`, and simulator libraries from `ASCEND_HOME_PATH`. If `${ASCEND_HOME_PATH}/bin/setenv.bash` exists, the runners source it automatically.
 
 The commands below assume your current directory is `examples/tileop/`.
 
@@ -37,34 +35,25 @@ python3 script/run_example.py \
 
 Use `-r npu` to run on hardware instead of simulator.
 
-## Run Multiple Testcases
+## Find Runnable Testcases
 
-Run a selected set:
+Runnable testcases are the example directories under `src/testcase/`. Use the directory name as the `-t/--testcase` value for `script/run_example.py`.
+
+For example, `src/testcase/tadd/` maps to:
 
 ```bash
-python3 script/run_all_example.py \
-  -r sim \
-  -v a5 \
-  -t tadd \
-  -t tsub
+python3 script/run_example.py -r sim -v a5 -t tadd
 ```
 
-Run all discovered TileOp testcases:
+To see the available testcase names from `examples/tileop/`, run:
 
 ```bash
-python3 script/run_all_example.py -r sim -v a5 -j 8
-```
-
-List available testcases:
-
-```bash
-python3 script/run_all_example.py --list
+find src/testcase -mindepth 1 -maxdepth 1 -type d | xargs -n1 basename | sort
 ```
 
 ## Workspace
 
-Build products, generated input/output data, and comparison artifacts are
-written to a separate workspace instead of `examples/tileop/`.
+Build products, generated input/output data, and comparison artifacts are written to a separate workspace instead of `examples/tileop/`.
 
 Override it with either:
 
@@ -84,16 +73,7 @@ python3 script/run_example.py \
 
 If no workspace is provided, the runners default to `/tmp/pto-gym-tileop/...`.
 
-## Directory Layout
-
-- `script/run_example.py`: single-example runner
-- `script/run_all_example.py`: batch runner
-- `src/`: copied TileLang ST build tree and testcase sources
-
 ## Notes
 
-- `sim` mode requires simulator libraries under
-  `${ASCEND_HOME_PATH}/tools/simulator/Ascend950PR_9599/lib`.
-- `run_all_example.py` builds one shared workspace first, then runs individual
-  testcase comparisons from that workspace.
+- `sim` mode requires simulator libraries under `${ASCEND_HOME_PATH}/tools/simulator/Ascend950PR_9599/lib`.
 - `--without-build` reuses the existing workspace build directory.

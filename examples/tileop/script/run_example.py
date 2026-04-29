@@ -51,6 +51,23 @@ def find_ptoas_bin():
     return None
 
 
+def prepend_env_path(var_name, path):
+    if not path:
+        return
+    normalized = os.path.realpath(path)
+    entries = [entry for entry in os.environ.get(var_name, "").split(":") if entry]
+    filtered = [entry for entry in entries if os.path.realpath(entry) != normalized]
+    os.environ[var_name] = ":".join([normalized] + filtered)
+
+
+def add_ptoas_lib_dir(ptoas_bin):
+    lib_dir = os.path.realpath(os.path.join(os.path.dirname(os.path.realpath(ptoas_bin)), "..", "lib"))
+    if not os.path.isdir(lib_dir):
+        print(f"warning: ptoas lib dir not found: {lib_dir}")
+        return
+    prepend_env_path("LD_LIBRARY_PATH", lib_dir)
+
+
 def import_shell_env(script_path):
     quoted = shlex.quote(script_path)
     result = subprocess.run(
@@ -69,7 +86,7 @@ def import_shell_env(script_path):
         os.environ[key] = value
 
 
-def set_env_variables(run_mode, soc_version):
+def set_env_variables(run_mode, soc_version, ptoas_bin):
     ascend_home = os.environ.get("ASCEND_HOME_PATH")
     if not ascend_home:
         raise EnvironmentError("ASCEND_HOME_PATH is not set")
@@ -124,6 +141,7 @@ def set_env_variables(run_mode, soc_version):
         ]
         os.environ["LD_LIBRARY_PATH"] = ":".join(sim_paths + filtered_paths)
 
+    add_ptoas_lib_dir(ptoas_bin)
     return bisheng_bin
 
 
@@ -315,7 +333,7 @@ def main():
     print(f"[INFO] work_root: {work_root}")
 
     try:
-        bisheng_bin = set_env_variables(args.run_mode, default_soc_version)
+        bisheng_bin = set_env_variables(args.run_mode, default_soc_version, ptoas_bin)
         print(f"[INFO] bisheng: {bisheng_bin}")
 
         if not args.without_build:
