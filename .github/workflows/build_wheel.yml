@@ -11,6 +11,9 @@ name: Build Wheel
 on:
   pull_request:
   workflow_dispatch:
+  schedule:
+    # GitHub Actions cron uses UTC; this runs daily at 02:00 UTC+8.
+    - cron: '0 18 * * *'
   release:
     types: [prereleased, released]
 
