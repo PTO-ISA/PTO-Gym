@@ -17,6 +17,8 @@ import os
 import sys
 import numpy as np
 
+LOGICAL_ELEMS = 40
+
 
 def compare_bin(golden_path, output_path, dtype, eps):
     if not os.path.exists(golden_path) or not os.path.exists(output_path):
@@ -26,6 +28,8 @@ def compare_bin(golden_path, output_path, dtype, eps):
     if golden.shape != output.shape:
         print(f"[ERROR] Shape mismatch: {golden.shape} vs {output.shape}")
         return False
+    golden = golden[:LOGICAL_ELEMS]
+    output = output[:LOGICAL_ELEMS]
     if not np.allclose(golden, output, atol=eps, rtol=eps, equal_nan=True):
         diff = np.abs(golden.astype(np.float64) - output.astype(np.float64))
         idx = int(np.argmax(diff))
