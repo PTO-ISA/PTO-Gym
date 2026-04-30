@@ -29,24 +29,11 @@ typedef struct { unsigned char v; } float4_e2m1x2_t;
 #if defined(__CCE_AICORE__) && defined(PTOAS_ENABLE_CCE_PRINT)
 #include <ccelib/print/print.h>
 #endif
-#include <pto/pto-inst.hpp>
-#include <pto/common/constants.hpp>
-
-#if !defined(__CCE_AICORE__) && !defined(TMRGSORT_HPP)
-namespace pto {
-struct MrgSortExecutedNumList {
-    uint16_t mrgSortList0;
-    uint16_t mrgSortList1;
-    uint16_t mrgSortList2;
-    uint16_t mrgSortList3;
-};
-} // namespace pto
-#endif
 #ifndef __CPU_SIM
 #include "acl/acl.h"
 #endif
 
-extern "C" __global__ AICORE void online_softmax_update_kernel_2d(
+extern "C" __global__ [aicore] void online_softmax_update_kernel_2d(
     __gm__ float *v1, __gm__ float *v2, __gm__ float *v3,
     __gm__ float *v4, __gm__ float *v5, __gm__ float *v6,
     __gm__ float *v7, int32_t v8, int32_t v9);
