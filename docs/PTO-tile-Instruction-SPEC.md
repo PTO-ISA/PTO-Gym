@@ -1,6 +1,6 @@
 # PTO Tile Instruction SPEC (A5)
 
-- v0.4: Generate standalone Tile Instruction SPEC
+- v0.4: Initial PTO Tile Instruction SPEC covering core TileOps
 
 [toc]
 
