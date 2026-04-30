@@ -1,7 +1,7 @@
 // -----------------------------------------------------------------------------
 // case: kernels/online-softmax-update
 // family: kernels
-// target_ops: pto.get_block_idx, pto.copy_gm_to_ubuf, pto.copy_ubuf_to_gm, pto.vlds, pto.vcmax, pto.vdup, pto.vmax, pto.vexpdiff, pto.vcadd, pto.vadd, pto.vmul, pto.vdiv, pto.vsts
+// target_ops: pto.get_block_idx, pto.dma_load, pto.dma_store, pto.vlds, pto.vcmax, pto.vdup, pto.vmax, pto.vexpdif, pto.vcadd, pto.vadd, pto.vmul, pto.vdiv, pto.vsts
 // scenarios: online-softmax-update, dynamic-rows-and-seq, max-seq-128, block-rows-8, oldmax-oldsum-qk-to-newmax-newsum-expmax-out
 // -----------------------------------------------------------------------------
 module attributes {pto.target_arch = "a5"} {
@@ -38,8 +38,6 @@ module attributes {pto.target_arch = "a5"} {
     %c8_i32 = arith.constant 8 : i32
     %c64_i32 = arith.constant 64 : i32
     %c0_i32 = arith.constant 0 : i32
-    %false = arith.constant false
-
     %block = pto.get_block_idx
     %block_idx = arith.index_cast %block : i64 to index
     %row_base = arith.muli %block_idx, %c8 : index
@@ -71,14 +69,18 @@ module attributes {pto.target_arch = "a5"} {
     %ub_expmax = pto.castptr %c16896_i64 : i64 -> !pto.ptr<f32, ub>
 
     scf.if %has_rows {
-      pto.set_loop_size_outtoub %c1_i64, %c1_i64 : i64, i64
-      pto.copy_gm_to_ubuf %gm_oldmax, %ub_oldmax, %c0_i64, %c1_i64, %c32_i64, %c0_i64, %c0_i64, %false, %c0_i64, %c32_i64, %c32_i64 : !pto.ptr<f32, gm>, !pto.ptr<f32, ub>, i64, i64, i64, i64, i64, i1, i64, i64, i64
-      pto.set_loop_size_outtoub %c1_i64, %c1_i64 : i64, i64
-      pto.copy_gm_to_ubuf %gm_oldsum, %ub_oldsum, %c0_i64, %c1_i64, %c32_i64, %c0_i64, %c0_i64, %false, %c0_i64, %c32_i64, %c32_i64 : !pto.ptr<f32, gm>, !pto.ptr<f32, ub>, i64, i64, i64, i64, i64, i1, i64, i64, i64
-      pto.set_loop_size_outtoub %c1_i64, %c1_i64 : i64, i64
-      pto.copy_gm_to_ubuf %gm_qk, %ub_qk, %c0_i64, %row_count_i64, %c256_i64, %c0_i64, %c0_i64, %false, %c0_i64, %c512_i64, %c512_i64 : !pto.ptr<f32, gm>, !pto.ptr<f32, ub>, i64, i64, i64, i64, i64, i1, i64, i64, i64
-      pto.set_loop_size_outtoub %c1_i64, %c1_i64 : i64, i64
-      pto.copy_gm_to_ubuf %gm_qk_hi, %ub_qk_hi, %c0_i64, %row_count_i64, %c256_i64, %c0_i64, %c0_i64, %false, %c0_i64, %c512_i64, %c512_i64 : !pto.ptr<f32, gm>, !pto.ptr<f32, ub>, i64, i64, i64, i64, i64, i1, i64, i64, i64
+      pto.dma_load %gm_oldmax, %ub_oldmax, %c0_i64, %c32_i64
+        nburst(%c1_i64, %c32_i64, %c32_i64)
+        : !pto.ptr<f32, gm>, !pto.ptr<f32, ub>, i64, i64, i64, i64, i64
+      pto.dma_load %gm_oldsum, %ub_oldsum, %c0_i64, %c32_i64
+        nburst(%c1_i64, %c32_i64, %c32_i64)
+        : !pto.ptr<f32, gm>, !pto.ptr<f32, ub>, i64, i64, i64, i64, i64
+      pto.dma_load %gm_qk, %ub_qk, %c0_i64, %c256_i64
+        nburst(%row_count_i64, %c512_i64, %c512_i64)
+        : !pto.ptr<f32, gm>, !pto.ptr<f32, ub>, i64, i64, i64, i64, i64
+      pto.dma_load %gm_qk_hi, %ub_qk_hi, %c0_i64, %c256_i64
+        nburst(%row_count_i64, %c512_i64, %c512_i64)
+        : !pto.ptr<f32, gm>, !pto.ptr<f32, ub>, i64, i64, i64, i64, i64
 
       pto.set_flag["PIPE_MTE2", "PIPE_V", "EVENT_ID0"]
       pto.wait_flag["PIPE_MTE2", "PIPE_V", "EVENT_ID0"]
@@ -88,8 +90,8 @@ module attributes {pto.target_arch = "a5"} {
         %one_mask, %one_remaining = pto.plt_b32 %c1_i32 : i32 -> !pto.mask<b32>, i32
         scf.for %row = %c0 to %row_count step %c1 {
           %row_qk = arith.muli %row, %c128 : index
-          %oldmax_bc = pto.vlds %ub_oldmax[%row] {dist = "BRC"} : !pto.ptr<f32, ub> -> !pto.vreg<64xf32>
-          %oldsum_bc = pto.vlds %ub_oldsum[%row] {dist = "BRC"} : !pto.ptr<f32, ub> -> !pto.vreg<64xf32>
+          %oldmax_bc = pto.vlds %ub_oldmax[%row] {dist = "BRC_B32"} : !pto.ptr<f32, ub> -> !pto.vreg<64xf32>
+          %oldsum_bc = pto.vlds %ub_oldsum[%row] {dist = "BRC_B32"} : !pto.ptr<f32, ub> -> !pto.vreg<64xf32>
 
           %final_max, %final_sum = scf.for %chunk = %c0 to %c128 step %c64
               iter_args(%running_max = %oldmax_bc, %running_sum = %oldsum_bc)
@@ -104,9 +106,9 @@ module attributes {pto.target_arch = "a5"} {
               %chunk_max = pto.vcmax %vec, %chunk_mask : !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
               %chunk_max_bc = pto.vdup %chunk_max, %active {position = "LOWEST"} : !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
               %merged_max = pto.vmax %running_max, %chunk_max_bc, %active : !pto.vreg<64xf32>, !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
-              %scaled_running = pto.vexpdiff %running_max, %merged_max, "ODD" : !pto.vreg<64xf32>, !pto.vreg<64xf32> -> !pto.vreg<64xf32>
+              %scaled_running = pto.vexpdif %running_max, %merged_max, %active, "ODD" : !pto.vreg<64xf32>, !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
               %running_sum_scaled = pto.vmul %scaled_running, %running_sum, %active : !pto.vreg<64xf32>, !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
-              %chunk_exp = pto.vexpdiff %vec, %merged_max, "ODD" : !pto.vreg<64xf32>, !pto.vreg<64xf32> -> !pto.vreg<64xf32>
+              %chunk_exp = pto.vexpdif %vec, %merged_max, %chunk_mask, "ODD" : !pto.vreg<64xf32>, !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
               %chunk_sum = pto.vcadd %chunk_exp, %chunk_mask : !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
               %chunk_sum_bc = pto.vdup %chunk_sum, %active {position = "LOWEST"} : !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
               %merged_sum = pto.vadd %running_sum_scaled, %chunk_sum_bc, %active : !pto.vreg<64xf32>, !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
@@ -117,18 +119,12 @@ module attributes {pto.target_arch = "a5"} {
             scf.yield %next_max, %next_sum : !pto.vreg<64xf32>, !pto.vreg<64xf32>
           }
 
-          %raw_expmax = pto.vexpdiff %oldmax_bc, %final_max, "ODD" : !pto.vreg<64xf32>, !pto.vreg<64xf32> -> !pto.vreg<64xf32>
+          %raw_expmax = pto.vexpdif %oldmax_bc, %final_max, %active, "ODD" : !pto.vreg<64xf32>, !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
           %scaled_oldsum = pto.vmul %raw_expmax, %oldsum_bc, %active : !pto.vreg<64xf32>, !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
           %expmax = pto.vdiv %scaled_oldsum, %final_sum, %active : !pto.vreg<64xf32>, !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
-          pto.vsts %final_max, %ub_newmax[%row], %one_mask {dist = "1PT"} : !pto.vreg<64xf32>, !pto.ptr<f32, ub>, !pto.mask<b32>
-          pto.vsts %final_sum, %ub_newsum[%row], %one_mask {dist = "1PT"} : !pto.vreg<64xf32>, !pto.ptr<f32, ub>, !pto.mask<b32>
-          pto.vsts %expmax, %ub_expmax[%row], %one_mask {dist = "1PT"} : !pto.vreg<64xf32>, !pto.ptr<f32, ub>, !pto.mask<b32>
-
-          %zero = pto.vsub %final_max, %final_max, %active : !pto.vreg<64xf32>, !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
-          scf.for %chunk = %c0 to %c128 step %c64 {
-            %chunk_base = arith.addi %row_qk, %chunk : index
-            pto.vsts %zero, %ub_out[%chunk_base], %active : !pto.vreg<64xf32>, !pto.ptr<f32, ub>, !pto.mask<b32>
-          }
+          pto.vsts %final_max, %ub_newmax[%row], %one_mask {dist = "1PT_B32"} : !pto.vreg<64xf32>, !pto.ptr<f32, ub>, !pto.mask<b32>
+          pto.vsts %final_sum, %ub_newsum[%row], %one_mask {dist = "1PT_B32"} : !pto.vreg<64xf32>, !pto.ptr<f32, ub>, !pto.mask<b32>
+          pto.vsts %expmax, %ub_expmax[%row], %one_mask {dist = "1PT_B32"} : !pto.vreg<64xf32>, !pto.ptr<f32, ub>, !pto.mask<b32>
 
           scf.for %chunk = %c0 to %c128 step %c64 {
             %chunk_i32 = arith.index_cast %chunk : index to i32
@@ -138,7 +134,7 @@ module attributes {pto.target_arch = "a5"} {
               %chunk_mask, %chunk_rest = pto.plt_b32 %remaining_cols : i32 -> !pto.mask<b32>, i32
               %chunk_base = arith.addi %row_qk, %chunk : index
               %vec = pto.vlds %ub_qk[%chunk_base] : !pto.ptr<f32, ub> -> !pto.vreg<64xf32>
-              %exp = pto.vexpdiff %vec, %final_max, "ODD" : !pto.vreg<64xf32>, !pto.vreg<64xf32> -> !pto.vreg<64xf32>
+              %exp = pto.vexpdif %vec, %final_max, %chunk_mask, "ODD" : !pto.vreg<64xf32>, !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
               %out = pto.vdiv %exp, %final_sum, %chunk_mask : !pto.vreg<64xf32>, !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
               pto.vsts %out, %ub_out[%chunk_base], %chunk_mask : !pto.vreg<64xf32>, !pto.ptr<f32, ub>, !pto.mask<b32>
             }
@@ -149,14 +145,18 @@ module attributes {pto.target_arch = "a5"} {
       pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
       pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
 
-      pto.set_loop_size_ubtoout %c1_i64, %c1_i64 : i64, i64
-      pto.copy_ubuf_to_gm %ub_newmax, %gm_newmax, %c0_i64, %c1_i64, %c32_i64, %c0_i64, %c32_i64, %c32_i64 : !pto.ptr<f32, ub>, !pto.ptr<f32, gm>, i64, i64, i64, i64, i64, i64
-      pto.set_loop_size_ubtoout %c1_i64, %c1_i64 : i64, i64
-      pto.copy_ubuf_to_gm %ub_newsum, %gm_newsum, %c0_i64, %c1_i64, %c32_i64, %c0_i64, %c32_i64, %c32_i64 : !pto.ptr<f32, ub>, !pto.ptr<f32, gm>, i64, i64, i64, i64, i64, i64
-      pto.set_loop_size_ubtoout %c1_i64, %c1_i64 : i64, i64
-      pto.copy_ubuf_to_gm %ub_expmax, %gm_expmax, %c0_i64, %c1_i64, %c32_i64, %c0_i64, %c32_i64, %c32_i64 : !pto.ptr<f32, ub>, !pto.ptr<f32, gm>, i64, i64, i64, i64, i64, i64
-      pto.set_loop_size_ubtoout %c1_i64, %c1_i64 : i64, i64
-      pto.copy_ubuf_to_gm %ub_out, %gm_out, %c0_i64, %row_count_i64, %c512_i64, %c0_i64, %c512_i64, %c512_i64 : !pto.ptr<f32, ub>, !pto.ptr<f32, gm>, i64, i64, i64, i64, i64, i64
+      pto.dma_store %ub_newmax, %gm_newmax, %c32_i64
+        nburst(%c1_i64, %c32_i64, %c32_i64)
+        : !pto.ptr<f32, ub>, !pto.ptr<f32, gm>, i64, i64, i64, i64
+      pto.dma_store %ub_newsum, %gm_newsum, %c32_i64
+        nburst(%c1_i64, %c32_i64, %c32_i64)
+        : !pto.ptr<f32, ub>, !pto.ptr<f32, gm>, i64, i64, i64, i64
+      pto.dma_store %ub_expmax, %gm_expmax, %c32_i64
+        nburst(%c1_i64, %c32_i64, %c32_i64)
+        : !pto.ptr<f32, ub>, !pto.ptr<f32, gm>, i64, i64, i64, i64
+      pto.dma_store %ub_out, %gm_out, %c512_i64
+        nburst(%row_count_i64, %c512_i64, %c512_i64)
+        : !pto.ptr<f32, ub>, !pto.ptr<f32, gm>, i64, i64, i64, i64
     }
     pto.barrier #pto.pipe<PIPE_ALL>
     return

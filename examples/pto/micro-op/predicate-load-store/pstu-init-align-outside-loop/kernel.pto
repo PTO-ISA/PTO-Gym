@@ -37,8 +37,9 @@ module attributes {pto.target_arch = "a5"} {
 
     pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
     pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
-    pto.set_loop_size_ubtoout %c1_i64, %c1_i64 : i64, i64
-    pto.copy_ubuf_to_gm %ub_mask, %arg2, %c0_i64, %c1_i64, %c32_i64, %c0_i64, %c32_i64, %c32_i64 : !pto.ptr<ui32, ub>, !pto.ptr<ui32, gm>, i64, i64, i64, i64, i64, i64
+    pto.dma_store %ub_mask, %arg2, %c32_i64
+      nburst(%c1_i64, %c32_i64, %c32_i64)
+      : !pto.ptr<ui32, ub>, !pto.ptr<ui32, gm>, i64, i64, i64, i64
     pto.barrier #pto.pipe<PIPE_ALL>
     return
   }

@@ -1,0 +1,64 @@
+// -----------------------------------------------------------------------------
+// case: micro-op/conversion/vcvt-u32-to-u8-part-p0123
+// family: conversion
+// target_ops: pto.vcvt
+// scenarios: u32-to-u8, sat, part-p0123
+// -----------------------------------------------------------------------------
+module attributes {pto.target_arch = "a5"} {
+  func.func @vcvt_u32_to_u8_part_p0123_kernel(%arg0: !pto.ptr<ui32, gm>,
+                                              %arg1: !pto.ptr<ui8, gm>) {
+    %c0 = arith.constant 0 : index
+    %c64 = arith.constant 64 : index
+    %c128 = arith.constant 128 : index
+    %c192 = arith.constant 192 : index
+    %c256 = arith.constant 256 : index
+    %c1024 = arith.constant 1024 : index
+    %c0_i64 = arith.constant 0 : i64
+    %c1_i64 = arith.constant 1 : i64
+    %c4_i64 = arith.constant 4 : i64
+    %c8_i64 = arith.constant 8 : i64
+    %c32_i64 = arith.constant 32 : i64
+    %c128_i64 = arith.constant 128 : i64
+    %c256_i64 = arith.constant 256 : i64
+    %c4096_i64 = arith.constant 4096 : i64
+
+    %ub_in = pto.castptr %c0_i64 : i64 -> !pto.ptr<ui32, ub>
+    %ub_out = pto.castptr %c4096_i64 : i64 -> !pto.ptr<ui8, ub>
+
+    %false = arith.constant false
+    pto.set_loop_size_outtoub %c1_i64, %c1_i64 : i64, i64
+    pto.copy_gm_to_ubuf %arg0, %ub_in, %c0_i64, %c32_i64, %c128_i64, %c0_i64, %c0_i64, %false, %c0_i64, %c128_i64, %c128_i64 : !pto.ptr<ui32, gm>, !pto.ptr<ui32, ub>, i64, i64, i64, i64, i64, i1, i64, i64, i64
+
+    pto.set_flag["PIPE_MTE2", "PIPE_V", "EVENT_ID0"]
+    pto.wait_flag["PIPE_MTE2", "PIPE_V", "EVENT_ID0"]
+
+    pto.vecscope {
+      %full_mask = pto.pset_b8 "PAT_ALL" : !pto.mask<b8>
+      %cvt_mask = pto.pset_b32 "PAT_ALL" : !pto.mask<b32>
+      scf.for %offset = %c0 to %c1024 step %c256 {
+        %offset_p1 = arith.addi %offset, %c64 : index
+        %offset_p2 = arith.addi %offset, %c128 : index
+        %offset_p3 = arith.addi %offset, %c192 : index
+        %src_p0 = pto.vlds %ub_in[%offset] : !pto.ptr<ui32, ub> -> !pto.vreg<64xui32>
+        %src_p1 = pto.vlds %ub_in[%offset_p1] : !pto.ptr<ui32, ub> -> !pto.vreg<64xui32>
+        %src_p2 = pto.vlds %ub_in[%offset_p2] : !pto.ptr<ui32, ub> -> !pto.vreg<64xui32>
+        %src_p3 = pto.vlds %ub_in[%offset_p3] : !pto.ptr<ui32, ub> -> !pto.vreg<64xui32>
+        %part_p0 = pto.vcvt %src_p0, %cvt_mask {sat = "SAT", part = "P0"} : !pto.vreg<64xui32>, !pto.mask<b32> -> !pto.vreg<256xui8>
+        %part_p1 = pto.vcvt %src_p1, %cvt_mask {sat = "SAT", part = "P1"} : !pto.vreg<64xui32>, !pto.mask<b32> -> !pto.vreg<256xui8>
+        %part_p2 = pto.vcvt %src_p2, %cvt_mask {sat = "SAT", part = "P2"} : !pto.vreg<64xui32>, !pto.mask<b32> -> !pto.vreg<256xui8>
+        %part_p3 = pto.vcvt %src_p3, %cvt_mask {sat = "SAT", part = "P3"} : !pto.vreg<64xui32>, !pto.mask<b32> -> !pto.vreg<256xui8>
+        %merged01 = pto.vor %part_p0, %part_p1, %full_mask : !pto.vreg<256xui8>, !pto.vreg<256xui8>, !pto.mask<b8> -> !pto.vreg<256xui8>
+        %merged23 = pto.vor %part_p2, %part_p3, %full_mask : !pto.vreg<256xui8>, !pto.vreg<256xui8>, !pto.mask<b8> -> !pto.vreg<256xui8>
+        %merged = pto.vor %merged01, %merged23, %full_mask : !pto.vreg<256xui8>, !pto.vreg<256xui8>, !pto.mask<b8> -> !pto.vreg<256xui8>
+        pto.vsts %merged, %ub_out[%offset], %full_mask : !pto.vreg<256xui8>, !pto.ptr<ui8, ub>, !pto.mask<b8>
+      }
+    }
+
+    pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+    pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+    pto.set_loop_size_ubtoout %c1_i64, %c1_i64 : i64, i64
+    pto.copy_ubuf_to_gm %ub_out, %arg1, %c0_i64, %c4_i64, %c256_i64, %c0_i64, %c256_i64, %c256_i64 : !pto.ptr<ui8, ub>, !pto.ptr<ui8, gm>, i64, i64, i64, i64, i64, i64
+    pto.barrier #pto.pipe<PIPE_ALL>
+    return
+  }
+}

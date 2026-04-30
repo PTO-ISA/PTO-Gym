@@ -1,7 +1,15 @@
+// Copyright (c) 2026 Huawei Technologies Co., Ltd.
+// This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+// CANN Open Software License Agreement Version 2.0 (the "License").
+// Please refer to the License for details. You may not use this file except in compliance with the License.
+// THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+// INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+// See LICENSE in the root of the software repository for the full text of the License.
+
 // -----------------------------------------------------------------------------
 // case: kernels/online-softmax-update
 // family: kernels
-// target_ops: pto.get_block_idx, pto.copy_gm_to_ubuf, pto.copy_ubuf_to_gm, pto.vlds, pto.vcmax, pto.vdup, pto.vmax, pto.vexpdiff, pto.vcadd, pto.vadd, pto.vmul, pto.vdiv, pto.vsts
+// target_ops: pto.get_block_idx, pto.dma_load, pto.dma_store, pto.vlds, pto.vcmax, pto.vdup, pto.vmax, pto.vexpdif, pto.vcadd, pto.vadd, pto.vmul, pto.vdiv, pto.vsts
 // scenarios: online-softmax-update, dynamic-rows-and-seq, max-seq-128, block-rows-8, oldmax-oldsum-qk-to-newmax-newsum-expmax-out
 // -----------------------------------------------------------------------------
 #ifndef __VEC_SCOPE__
@@ -21,20 +29,24 @@ typedef struct { unsigned char v; } float4_e2m1x2_t;
 #if defined(__CCE_AICORE__) && defined(PTOAS_ENABLE_CCE_PRINT)
 #include <ccelib/print/print.h>
 #endif
+#include <pto/pto-inst.hpp>
+#include <pto/common/constants.hpp>
 
 #if !defined(__CCE_AICORE__) && !defined(TMRGSORT_HPP)
+namespace pto {
 struct MrgSortExecutedNumList {
     uint16_t mrgSortList0;
     uint16_t mrgSortList1;
     uint16_t mrgSortList2;
     uint16_t mrgSortList3;
 };
+} // namespace pto
 #endif
 #ifndef __CPU_SIM
 #include "acl/acl.h"
 #endif
 
-extern "C" __global__ [aicore] void online_softmax_update_kernel_2d(
+extern "C" __global__ AICORE void online_softmax_update_kernel_2d(
     __gm__ float *v1, __gm__ float *v2, __gm__ float *v3,
     __gm__ float *v4, __gm__ float *v5, __gm__ float *v6,
     __gm__ float *v7, int32_t v8, int32_t v9);

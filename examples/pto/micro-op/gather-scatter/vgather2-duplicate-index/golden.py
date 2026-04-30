@@ -1,4 +1,12 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026 Huawei Technologies Co., Ltd.
+# This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+# CANN Open Software License Agreement Version 2.0 (the "License").
+# Please refer to the License for details. You may not use this file except in compliance with the License.
+# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+# See LICENSE in the root of the software repository for the full text of the License.
+
 # case: micro-op/gather-scatter/vgather2-duplicate-index
 # family: gather-scatter
 # target_ops: pto.vgather2
@@ -22,7 +30,11 @@ def generate(output_dir: Path, seed: int) -> None:
     flat = rng.uniform(-8.0, 8.0, size=(ROWS * COLS,)).astype(np.float32)
     pair_ids = ((np.arange((ROWS * COLS) // 2, dtype=np.int32) * 29) + 5) % (ROWS * COLS)
     offsets = np.repeat(pair_ids, 2)
-    gathered = flat[offsets].reshape(ROWS, COLS)
+    gathered = np.zeros((ROWS * COLS,), dtype=np.float32)
+    for base in range(0, ROWS * COLS, 64):
+        lanes = np.arange(base + 8, base + 64, dtype=np.int32)
+        gathered[lanes] = flat[offsets[lanes]]
+    gathered = gathered.reshape(ROWS, COLS)
     v1 = flat.reshape(ROWS, COLS)
     v2 = offsets.reshape(ROWS, COLS)
     v3 = np.zeros((ROWS, COLS), dtype=np.float32)
