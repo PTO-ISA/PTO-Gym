@@ -1,6 +1,6 @@
 # PTO micro Instruction Spec — Draft (A5)
 
-- v0.4: Refresh bundled micro Instruction SPEC and add a standalone Tile Instruction companion doc
+- v0.4: Update DMA instruction docs and add PTO Tile Instruction SPEC
 - v0.3: Add runtime block query and vector-interval legality notes; Normalize load/store distribution families; Update get_buf/rls_buf details
 - v0.2: Update micro Instruction latency and throughput
 - v0.1: Doc Init
