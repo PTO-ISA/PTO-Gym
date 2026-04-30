@@ -1,0 +1,239 @@
+// -----------------------------------------------------------------------------
+// case: kernels/online-softmax-update
+// family: kernels
+// target_ops: pto.get_block_idx, pto.tload, pto.tstore, pto.tile_buf_addr, pto.vlds, pto.vcmax, pto.vdup, pto.vmax, pto.vexpdif, pto.vcadd, pto.vadd, pto.vmul, pto.vdiv, pto.vsts
+// scenarios: online-softmax-update, dynamic-rows-and-seq, max-seq-128, block-rows-8, oldmax-oldsum-qk-to-newmax-newsum-expmax-out, valid-region-only-output
+// note: compile with --pto-level=level3 because alloc_tile uses explicit addr=
+// -----------------------------------------------------------------------------
+module attributes {pto.target_arch = "a5"} {
+  func.func @online_softmax_update_kernel_2d(%arg0: !pto.ptr<f32, gm>,
+                                             %arg1: !pto.ptr<f32, gm>,
+                                             %arg2: !pto.ptr<f32, gm>,
+                                             %arg3: !pto.ptr<f32, gm>,
+                                             %arg4: !pto.ptr<f32, gm>,
+                                             %arg5: !pto.ptr<f32, gm>,
+                                             %arg6: !pto.ptr<f32, gm>,
+                                             %arg7: i32,
+                                             %arg8: i32) {
+    %c0 = arith.constant 0 : index
+    %c1 = arith.constant 1 : index
+    %c8 = arith.constant 8 : index
+    %c64 = arith.constant 64 : index
+    %c128 = arith.constant 128 : index
+
+    %c0_i64 = arith.constant 0 : i64
+    %c1_i64 = arith.constant 1 : i64
+    %c8_i64 = arith.constant 8 : i64
+    %c16_i64 = arith.constant 16 : i64
+    %c32_i64 = arith.constant 32 : i64
+    %c64_i64 = arith.constant 64 : i64
+    %c128_i64 = arith.constant 128 : i64
+    %c256_i64 = arith.constant 256 : i64
+    %c512_i64 = arith.constant 512 : i64
+    %c8448_i64 = arith.constant 8448 : i64
+    %c16640_i64 = arith.constant 16640 : i64
+    %c16768_i64 = arith.constant 16768 : i64
+    %c16896_i64 = arith.constant 16896 : i64
+
+    %c1_i32 = arith.constant 1 : i32
+    %c8_i32 = arith.constant 8 : i32
+    %c64_i32 = arith.constant 64 : i32
+    %c0_i32 = arith.constant 0 : i32
+
+    %block = pto.get_block_idx
+    %block_idx = arith.index_cast %block : i64 to index
+    %row_base = arith.muli %block_idx, %c8 : index
+    %block_rows_i32 = arith.index_cast %c8 : index to i32
+    %row_base_i32 = arith.index_cast %row_base : index to i32
+    %remaining_rows = arith.subi %arg8, %row_base_i32 : i32
+    %has_rows = arith.cmpi sgt, %remaining_rows, %c0_i32 : i32
+    %too_many_rows = arith.cmpi sgt, %remaining_rows, %c8_i32 : i32
+    %row_count_i32 = arith.select %too_many_rows, %c8_i32, %remaining_rows : i32
+    %row_count = arith.index_cast %row_count_i32 : i32 to index
+    %seq = arith.index_cast %arg7 : i32 to index
+    %rows = arith.index_cast %arg8 : i32 to index
+    %rows_x_128 = arith.muli %rows, %c128 : index
+
+    scf.if %has_rows {
+      %oldmax_view = pto.make_tensor_view %arg0,
+        shape = [%c1, %c1, %c1, %rows, %c1],
+        strides = [%rows, %rows, %rows, %c1, %rows]
+        : !pto.tensor_view<?x?x?x?x?xf32>
+      %oldsum_view = pto.make_tensor_view %arg1,
+        shape = [%c1, %c1, %c1, %rows, %c1],
+        strides = [%rows, %rows, %rows, %c1, %rows]
+        : !pto.tensor_view<?x?x?x?x?xf32>
+      %qk_view = pto.make_tensor_view %arg2,
+        shape = [%c1, %c1, %c1, %rows, %c128],
+        strides = [%rows_x_128, %rows_x_128, %rows_x_128, %c128, %c1]
+        : !pto.tensor_view<?x?x?x?x?xf32>
+      %newmax_view = pto.make_tensor_view %arg3,
+        shape = [%c1, %c1, %c1, %rows, %c1],
+        strides = [%rows, %rows, %rows, %c1, %rows]
+        : !pto.tensor_view<?x?x?x?x?xf32>
+      %newsum_view = pto.make_tensor_view %arg4,
+        shape = [%c1, %c1, %c1, %rows, %c1],
+        strides = [%rows, %rows, %rows, %c1, %rows]
+        : !pto.tensor_view<?x?x?x?x?xf32>
+      %expmax_view = pto.make_tensor_view %arg5,
+        shape = [%c1, %c1, %c1, %rows, %c1],
+        strides = [%rows, %rows, %rows, %c1, %rows]
+        : !pto.tensor_view<?x?x?x?x?xf32>
+      %out_view = pto.make_tensor_view %arg6,
+        shape = [%c1, %c1, %c1, %rows, %c128],
+        strides = [%rows_x_128, %rows_x_128, %rows_x_128, %c128, %c1]
+        : !pto.tensor_view<?x?x?x?x?xf32>
+
+      %oldmax_part = pto.partition_view %oldmax_view,
+        offsets = [%c0, %c0, %c0, %row_base, %c0],
+        sizes = [%c1, %c1, %c1, %row_count, %c1]
+        : !pto.tensor_view<?x?x?x?x?xf32> -> !pto.partition_tensor_view<?x?x?x?x?xf32>
+      %oldsum_part = pto.partition_view %oldsum_view,
+        offsets = [%c0, %c0, %c0, %row_base, %c0],
+        sizes = [%c1, %c1, %c1, %row_count, %c1]
+        : !pto.tensor_view<?x?x?x?x?xf32> -> !pto.partition_tensor_view<?x?x?x?x?xf32>
+      %qk_part = pto.partition_view %qk_view,
+        offsets = [%c0, %c0, %c0, %row_base, %c0],
+        sizes = [%c1, %c1, %c1, %row_count, %seq]
+        : !pto.tensor_view<?x?x?x?x?xf32> -> !pto.partition_tensor_view<?x?x?x?x?xf32>
+      %newmax_part = pto.partition_view %newmax_view,
+        offsets = [%c0, %c0, %c0, %row_base, %c0],
+        sizes = [%c1, %c1, %c1, %row_count, %c1]
+        : !pto.tensor_view<?x?x?x?x?xf32> -> !pto.partition_tensor_view<?x?x?x?x?xf32>
+      %newsum_part = pto.partition_view %newsum_view,
+        offsets = [%c0, %c0, %c0, %row_base, %c0],
+        sizes = [%c1, %c1, %c1, %row_count, %c1]
+        : !pto.tensor_view<?x?x?x?x?xf32> -> !pto.partition_tensor_view<?x?x?x?x?xf32>
+      %expmax_part = pto.partition_view %expmax_view,
+        offsets = [%c0, %c0, %c0, %row_base, %c0],
+        sizes = [%c1, %c1, %c1, %row_count, %c1]
+        : !pto.tensor_view<?x?x?x?x?xf32> -> !pto.partition_tensor_view<?x?x?x?x?xf32>
+      %out_part = pto.partition_view %out_view,
+        offsets = [%c0, %c0, %c0, %row_base, %c0],
+        sizes = [%c1, %c1, %c1, %row_count, %seq]
+        : !pto.tensor_view<?x?x?x?x?xf32> -> !pto.partition_tensor_view<?x?x?x?x?xf32>
+
+      // Tile domain: alloc_tile creates UB tile handles; tload/tstore operate
+      // on tile_buf values before/after the vector scope compute region.
+      %oldmax_tile = pto.alloc_tile addr = %c0_i64 valid_row = %row_count
+        : !pto.tile_buf<vec, 8x1xf32, valid=?x1, blayout=col_major>
+      %oldsum_tile = pto.alloc_tile addr = %c128_i64 valid_row = %row_count
+        : !pto.tile_buf<vec, 8x1xf32, valid=?x1, blayout=col_major>
+      %qk_tile = pto.alloc_tile addr = %c256_i64 valid_row = %row_count valid_col = %seq
+        : !pto.tile_buf<vec, 8x128xf32, valid=?x?>
+      %out_tile = pto.alloc_tile addr = %c8448_i64 valid_row = %row_count valid_col = %seq
+        : !pto.tile_buf<vec, 8x128xf32, valid=?x?>
+      %newmax_tile = pto.alloc_tile addr = %c16640_i64 valid_row = %row_count
+        : !pto.tile_buf<vec, 8x1xf32, valid=?x1, blayout=col_major>
+      %newsum_tile = pto.alloc_tile addr = %c16768_i64 valid_row = %row_count
+        : !pto.tile_buf<vec, 8x1xf32, valid=?x1, blayout=col_major>
+      %expmax_tile = pto.alloc_tile addr = %c16896_i64 valid_row = %row_count
+        : !pto.tile_buf<vec, 8x1xf32, valid=?x1, blayout=col_major>
+
+      pto.tload ins(%oldmax_part : !pto.partition_tensor_view<?x?x?x?x?xf32>)
+                outs(%oldmax_tile : !pto.tile_buf<vec, 8x1xf32, valid=?x1, blayout=col_major>)
+      pto.tload ins(%oldsum_part : !pto.partition_tensor_view<?x?x?x?x?xf32>)
+                outs(%oldsum_tile : !pto.tile_buf<vec, 8x1xf32, valid=?x1, blayout=col_major>)
+      pto.tload ins(%qk_part : !pto.partition_tensor_view<?x?x?x?x?xf32>)
+                outs(%qk_tile : !pto.tile_buf<vec, 8x128xf32, valid=?x?>)
+
+      pto.set_flag["PIPE_MTE2", "PIPE_V", "EVENT_ID0"]
+      pto.wait_flag["PIPE_MTE2", "PIPE_V", "EVENT_ID0"]
+
+      pto.vecscope {
+        // Boundary into vecscope instructions: tile_buf_addr materializes UB
+        // pointers from tile handles so vecscope can use vlds/vsts.
+        %ub_oldmax = pto.tile_buf_addr %oldmax_tile
+          : !pto.tile_buf<vec, 8x1xf32, valid=?x1, blayout=col_major>
+         -> !pto.ptr<f32, ub>
+        %ub_oldsum = pto.tile_buf_addr %oldsum_tile
+          : !pto.tile_buf<vec, 8x1xf32, valid=?x1, blayout=col_major>
+         -> !pto.ptr<f32, ub>
+        %ub_qk = pto.tile_buf_addr %qk_tile
+          : !pto.tile_buf<vec, 8x128xf32, valid=?x?>
+         -> !pto.ptr<f32, ub>
+        %ub_out = pto.tile_buf_addr %out_tile
+          : !pto.tile_buf<vec, 8x128xf32, valid=?x?>
+         -> !pto.ptr<f32, ub>
+        %ub_newmax = pto.tile_buf_addr %newmax_tile
+          : !pto.tile_buf<vec, 8x1xf32, valid=?x1, blayout=col_major>
+         -> !pto.ptr<f32, ub>
+        %ub_newsum = pto.tile_buf_addr %newsum_tile
+          : !pto.tile_buf<vec, 8x1xf32, valid=?x1, blayout=col_major>
+         -> !pto.ptr<f32, ub>
+        %ub_expmax = pto.tile_buf_addr %expmax_tile
+          : !pto.tile_buf<vec, 8x1xf32, valid=?x1, blayout=col_major>
+         -> !pto.ptr<f32, ub>
+        %active = pto.pset_b32 "PAT_ALL" : !pto.mask<b32>
+        %one_mask, %one_remaining = pto.plt_b32 %c1_i32 : i32 -> !pto.mask<b32>, i32
+        scf.for %row = %c0 to %row_count step %c1 {
+          %row_qk = arith.muli %row, %c128 : index
+          %oldmax_bc = pto.vlds %ub_oldmax[%row] {dist = "BRC_B32"} : !pto.ptr<f32, ub> -> !pto.vreg<64xf32>
+          %oldsum_bc = pto.vlds %ub_oldsum[%row] {dist = "BRC_B32"} : !pto.ptr<f32, ub> -> !pto.vreg<64xf32>
+
+          %final_max, %final_sum = scf.for %chunk = %c0 to %c128 step %c64
+              iter_args(%running_max = %oldmax_bc, %running_sum = %oldsum_bc)
+              -> (!pto.vreg<64xf32>, !pto.vreg<64xf32>) {
+            %chunk_i32 = arith.index_cast %chunk : index to i32
+            %remaining_cols = arith.subi %arg7, %chunk_i32 : i32
+            %has_chunk = arith.cmpi sgt, %remaining_cols, %c0_i32 : i32
+            %next_max, %next_sum = scf.if %has_chunk -> (!pto.vreg<64xf32>, !pto.vreg<64xf32>) {
+              %chunk_mask, %chunk_rest = pto.plt_b32 %remaining_cols : i32 -> !pto.mask<b32>, i32
+              %chunk_base = arith.addi %row_qk, %chunk : index
+              %vec = pto.vlds %ub_qk[%chunk_base] : !pto.ptr<f32, ub> -> !pto.vreg<64xf32>
+              %chunk_max = pto.vcmax %vec, %chunk_mask : !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
+              %chunk_max_bc = pto.vdup %chunk_max, %active {position = "LOWEST"} : !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
+              %merged_max = pto.vmax %running_max, %chunk_max_bc, %active : !pto.vreg<64xf32>, !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
+              %scaled_running = pto.vexpdif %running_max, %merged_max, %active, "ODD" : !pto.vreg<64xf32>, !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
+              %running_sum_scaled = pto.vmul %scaled_running, %running_sum, %active : !pto.vreg<64xf32>, !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
+              %chunk_exp = pto.vexpdif %vec, %merged_max, %chunk_mask, "ODD" : !pto.vreg<64xf32>, !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
+              %chunk_sum = pto.vcadd %chunk_exp, %chunk_mask : !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
+              %chunk_sum_bc = pto.vdup %chunk_sum, %active {position = "LOWEST"} : !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
+              %merged_sum = pto.vadd %running_sum_scaled, %chunk_sum_bc, %active : !pto.vreg<64xf32>, !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
+              scf.yield %merged_max, %merged_sum : !pto.vreg<64xf32>, !pto.vreg<64xf32>
+            } else {
+              scf.yield %running_max, %running_sum : !pto.vreg<64xf32>, !pto.vreg<64xf32>
+            }
+            scf.yield %next_max, %next_sum : !pto.vreg<64xf32>, !pto.vreg<64xf32>
+          }
+
+          %raw_expmax = pto.vexpdif %oldmax_bc, %final_max, %active, "ODD" : !pto.vreg<64xf32>, !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
+          %scaled_oldsum = pto.vmul %raw_expmax, %oldsum_bc, %active : !pto.vreg<64xf32>, !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
+          %expmax = pto.vdiv %scaled_oldsum, %final_sum, %active : !pto.vreg<64xf32>, !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
+          pto.vsts %final_max, %ub_newmax[%row], %one_mask {dist = "1PT_B32"} : !pto.vreg<64xf32>, !pto.ptr<f32, ub>, !pto.mask<b32>
+          pto.vsts %final_sum, %ub_newsum[%row], %one_mask {dist = "1PT_B32"} : !pto.vreg<64xf32>, !pto.ptr<f32, ub>, !pto.mask<b32>
+          pto.vsts %expmax, %ub_expmax[%row], %one_mask {dist = "1PT_B32"} : !pto.vreg<64xf32>, !pto.ptr<f32, ub>, !pto.mask<b32>
+
+          scf.for %chunk = %c0 to %c128 step %c64 {
+            %chunk_i32 = arith.index_cast %chunk : index to i32
+            %remaining_cols = arith.subi %arg7, %chunk_i32 : i32
+            %has_chunk = arith.cmpi sgt, %remaining_cols, %c0_i32 : i32
+            scf.if %has_chunk {
+              %chunk_mask, %chunk_rest = pto.plt_b32 %remaining_cols : i32 -> !pto.mask<b32>, i32
+              %chunk_base = arith.addi %row_qk, %chunk : index
+              %vec = pto.vlds %ub_qk[%chunk_base] : !pto.ptr<f32, ub> -> !pto.vreg<64xf32>
+              %exp = pto.vexpdif %vec, %final_max, %chunk_mask, "ODD" : !pto.vreg<64xf32>, !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
+              %out = pto.vdiv %exp, %final_sum, %chunk_mask : !pto.vreg<64xf32>, !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
+              pto.vsts %out, %ub_out[%chunk_base], %chunk_mask : !pto.vreg<64xf32>, !pto.ptr<f32, ub>, !pto.mask<b32>
+            }
+          }
+        }
+      }
+
+      pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+      pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+
+      // Leave the VPTO vecscope and switch back to tile-domain DMA ops.
+      pto.tstore ins(%newmax_tile : !pto.tile_buf<vec, 8x1xf32, valid=?x1, blayout=col_major>)
+                 outs(%newmax_part : !pto.partition_tensor_view<?x?x?x?x?xf32>)
+      pto.tstore ins(%newsum_tile : !pto.tile_buf<vec, 8x1xf32, valid=?x1, blayout=col_major>)
+                 outs(%newsum_part : !pto.partition_tensor_view<?x?x?x?x?xf32>)
+      pto.tstore ins(%expmax_tile : !pto.tile_buf<vec, 8x1xf32, valid=?x1, blayout=col_major>)
+                 outs(%expmax_part : !pto.partition_tensor_view<?x?x?x?x?xf32>)
+      pto.tstore ins(%out_tile : !pto.tile_buf<vec, 8x128xf32, valid=?x?>)
+                 outs(%out_part : !pto.partition_tensor_view<?x?x?x?x?xf32>)
+    }
+    pto.barrier #pto.pipe<PIPE_ALL>
+    return
+  }
+}

@@ -20,12 +20,14 @@ module attributes {pto.target_arch = "a5"} {
 
     %false = arith.constant false
     pto.get_buf "PIPE_MTE2", 0, 0
-    pto.set_loop_size_outtoub %c1_i64, %c1_i64 : i64, i64
-    pto.copy_gm_to_ubuf %arg0, %ub_lhs, %c0_i64, %c32_i64, %c128_i64, %c0_i64, %c0_i64, %false, %c0_i64, %c128_i64, %c128_i64 : !pto.ptr<f32, gm>, !pto.ptr<f32, ub>, i64, i64, i64, i64, i64, i1, i64, i64, i64
+    pto.dma_load %arg0, %ub_lhs, %c0_i64, %c128_i64
+      nburst(%c32_i64, %c128_i64, %c128_i64)
+      : !pto.ptr<f32, gm>, !pto.ptr<f32, ub>, i64, i64, i64, i64, i64
     pto.rls_buf "PIPE_MTE2", 0, 0
     pto.get_buf "PIPE_MTE2", 1, 0
-    pto.set_loop_size_outtoub %c1_i64, %c1_i64 : i64, i64
-    pto.copy_gm_to_ubuf %arg1, %ub_rhs, %c0_i64, %c32_i64, %c128_i64, %c0_i64, %c0_i64, %false, %c0_i64, %c128_i64, %c128_i64 : !pto.ptr<f32, gm>, !pto.ptr<f32, ub>, i64, i64, i64, i64, i64, i1, i64, i64, i64
+    pto.dma_load %arg1, %ub_rhs, %c0_i64, %c128_i64
+      nburst(%c32_i64, %c128_i64, %c128_i64)
+      : !pto.ptr<f32, gm>, !pto.ptr<f32, ub>, i64, i64, i64, i64, i64
     pto.rls_buf "PIPE_MTE2", 1, 0
     pto.get_buf "PIPE_V", 0, 0
     pto.get_buf "PIPE_V", 1, 0
@@ -46,8 +48,9 @@ module attributes {pto.target_arch = "a5"} {
     pto.rls_buf "PIPE_V", 2, 0
 
     pto.get_buf "PIPE_MTE3", 2, 0
-    pto.set_loop_size_ubtoout %c1_i64, %c1_i64 : i64, i64
-    pto.copy_ubuf_to_gm %ub_out, %arg2, %c0_i64, %c32_i64, %c128_i64, %c0_i64, %c128_i64, %c128_i64 : !pto.ptr<f32, ub>, !pto.ptr<f32, gm>, i64, i64, i64, i64, i64, i64
+    pto.dma_store %ub_out, %arg2, %c128_i64
+      nburst(%c32_i64, %c128_i64, %c128_i64)
+      : !pto.ptr<f32, ub>, !pto.ptr<f32, gm>, i64, i64, i64, i64
     pto.rls_buf "PIPE_MTE3", 2, 0
     pto.barrier #pto.pipe<PIPE_ALL>
     return

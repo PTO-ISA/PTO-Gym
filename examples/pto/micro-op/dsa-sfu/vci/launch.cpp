@@ -1,11 +1,11 @@
-// -----------------------------------------------------------------------------
-// case: micro-op/dsa-sfu/vci
-// family: dsa-sfu / conversion
-// target_ops: pto.vci
-// scenarios: index-generation
-// NOTE: bulk-generated coverage skeleton. Parser/verifier/lowering failure is
-// still a valid test conclusion in the current coverage-first phase.
-// -----------------------------------------------------------------------------
+// Copyright (c) 2026 Huawei Technologies Co., Ltd.
+// This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+// CANN Open Software License Agreement Version 2.0 (the "License").
+// Please refer to the License for details. You may not use this file except in compliance with the License.
+// THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+// INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+// See LICENSE in the root of the software repository for the full text of the License.
+
 #ifndef __VEC_SCOPE__
 #define __VEC_SCOPE__
 #endif
@@ -35,10 +35,10 @@ struct MrgSortExecutedNumList {
 #include "acl/acl.h"
 #endif
 
-extern "C" __global__ [aicore] void vci_kernel_2d(__gm__ int *v1,
-                                                __gm__ int *v2);
+extern "C" __global__ [aicore] void vci_kernel_2d(__gm__ int32_t *v1,
+                                                  __gm__ int32_t *v2);
 
-void LaunchVci_kernel_2d(int *v1, int *v2, void *stream) {
-  vci_kernel_2d<<<1, nullptr, stream>>>((__gm__ int *)v1,
-                                        (__gm__ int *)v2);
+void LaunchVci_kernel_2d(int32_t *v1, int32_t *v2, void *stream) {
+  vci_kernel_2d<<<1, nullptr, stream>>>((__gm__ int32_t *)v1,
+                                        (__gm__ int32_t *)v2);
 }

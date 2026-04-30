@@ -1,17 +1,14 @@
-// -----------------------------------------------------------------------------
-// case: micro-op/dsa-sfu/vci
-// family: dsa-sfu / conversion
-// target_ops: pto.vci
-// scenarios: index-generation
-// NOTE: bulk-generated coverage skeleton. Parser/verifier/lowering failure is
-// still a valid test conclusion in the current coverage-first phase.
-// -----------------------------------------------------------------------------
-/**
-Copyright (c) 2025 Huawei Technologies Co., Ltd.
-*/
+// Copyright (c) 2026 Huawei Technologies Co., Ltd.
+// This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+// CANN Open Software License Agreement Version 2.0 (the "License").
+// Please refer to the License for details. You may not use this file except in compliance with the License.
+// THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+// INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+// See LICENSE in the root of the software repository for the full text of the License.
 
 #include "test_common.h"
 #include "acl/acl.h"
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 
@@ -28,17 +25,17 @@ using namespace PtoTestCommon;
     }                                                                            \
   } while (0)
 
-void LaunchVci_kernel_2d(int *v1, int *v2, void *stream);
+void LaunchVci_kernel_2d(int32_t *v1, int32_t *v2, void *stream);
 
 int main() {
   size_t elemCount_v1 = 1024;
-  size_t fileSize_v1 = elemCount_v1 * sizeof(int);
+  size_t fileSize_v1 = elemCount_v1 * sizeof(int32_t);
   size_t elemCount_v2 = 1024;
-  size_t fileSize_v2 = elemCount_v2 * sizeof(int);
-  int *v1Host = nullptr;
-  int *v1Device = nullptr;
-  int *v2Host = nullptr;
-  int *v2Device = nullptr;
+  size_t fileSize_v2 = elemCount_v2 * sizeof(int32_t);
+  int32_t *v1Host = nullptr;
+  int32_t *v1Device = nullptr;
+  int32_t *v2Host = nullptr;
+  int32_t *v2Device = nullptr;
   int rc = 0;
   bool aclInited = false;
   bool deviceSet = false;
