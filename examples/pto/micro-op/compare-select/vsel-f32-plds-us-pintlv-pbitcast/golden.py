@@ -18,9 +18,46 @@ MASK_BYTES = 32
 SEED = 19
 
 
-def unpack_mask_lanes(packed: np.ndarray) -> np.ndarray:
+def load_us_source_bits(packed: np.ndarray) -> np.ndarray:
+    # `plds ..., "US"` on this path consumes only the first VL/16 bytes.
     bits = np.unpackbits(packed[:16], bitorder="little")
     return bits.astype(np.bool_, copy=False)
+
+
+def plds_us_to_mask_b8(src_bits: np.ndarray) -> np.ndarray:
+    # "US": duplicate each loaded bit once.
+    return np.repeat(src_bits, 2).astype(np.bool_, copy=False)
+
+
+def pbitcast_b8_to_b16(mask_b8: np.ndarray) -> np.ndarray:
+    # Reinterpret the same predicate image at b16 granularity.
+    # For the duplicated "US" image, each b16 lane observes the first bit of
+    # the corresponding 2-bit pair, which reconstructs the original 128 bits.
+    return mask_b8[::2].astype(np.bool_, copy=False)
+
+
+def pintlv_b16_with_all(mask_b16: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    # Interleave `%mask_b16` with `all_b16`, then split into low/high outputs.
+    interleaved = np.empty((256,), dtype=np.bool_)
+    interleaved[0::2] = mask_b16
+    interleaved[1::2] = True
+    return interleaved[:128], interleaved[128:]
+
+
+def pbitcast_b16_to_b32(mask_b16_image: np.ndarray) -> np.ndarray:
+    # Reinterpret the same predicate image at b32 granularity.
+    # The b32 lanes read back the even-positioned b16 lanes.
+    return mask_b16_image[0::2][:64].astype(np.bool_, copy=False)
+
+
+def build_vsel_lanes_from_mask_pipeline(packed: np.ndarray) -> np.ndarray:
+    src_bits = load_us_source_bits(packed)
+    mask_b8 = plds_us_to_mask_b8(src_bits)
+    mask_b16 = pbitcast_b8_to_b16(mask_b8)
+    mask0_b16, mask1_b16 = pintlv_b16_with_all(mask_b16)
+    mask0_b32 = pbitcast_b16_to_b32(mask0_b16)
+    mask1_b32 = pbitcast_b16_to_b32(mask1_b16)
+    return np.concatenate([mask0_b32, mask1_b32]).astype(np.bool_, copy=False)
 
 
 def generate(output_dir: Path, seed: int) -> None:
@@ -28,7 +65,7 @@ def generate(output_dir: Path, seed: int) -> None:
     v1 = rng.uniform(-3.0, 3.0, size=(LANES,)).astype(np.float32)
     v2 = rng.uniform(-3.0, 3.0, size=(LANES,)).astype(np.float32)
     packed = rng.integers(0, 256, size=(MASK_BYTES,), dtype=np.uint8)
-    lanes = unpack_mask_lanes(packed)
+    lanes = build_vsel_lanes_from_mask_pipeline(packed)
     v4 = np.zeros((LANES,), dtype=np.float32)
     golden_v4 = np.where(lanes, v1, v2).astype(np.float32, copy=False)
 
