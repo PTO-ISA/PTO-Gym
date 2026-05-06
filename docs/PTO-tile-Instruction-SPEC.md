@@ -1,6 +1,4 @@
-# PTO Tile Instruction SPEC (A5)
-
-- v0.4: Initial PTO Tile Instruction SPEC covering core TileOps
+# PTO Tile Instruction SPEC
 
 [toc]
 
