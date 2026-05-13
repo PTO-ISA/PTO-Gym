@@ -207,13 +207,13 @@ jobs:
           export PATH="$PTO_SOURCE_DIR/build/tools/ptoas:${PY_PATH}/bin:$PATH"
           export PTOAS_BIN="$PTO_SOURCE_DIR/build/tools/ptoas/ptoas"
           export PTOAS_FLAGS="--pto-arch a5"
-          export VPTO_FLAGS=""
-          export LLVM_IR_OUT="$RUNNER_TEMP/current-repo-ptoas-cli-test.ll"
+          export VPTO_FLAGS="--emit-vpto"
+          export VPTO_IR_OUT="$RUNNER_TEMP/current-repo-ptoas-cli-test.mlir"
           test -f "$CURRENT_REPO_DIR/$CURRENT_REPO_CLI_TEST_FILE"
           "$PTOAS_BIN" $PTOAS_FLAGS $VPTO_FLAGS \
             "$CURRENT_REPO_DIR/$CURRENT_REPO_CLI_TEST_FILE" \
-            -o "$LLVM_IR_OUT"
-          test -s "$LLVM_IR_OUT"
+            -o "$VPTO_IR_OUT"
+          test -s "$VPTO_IR_OUT"
 
       - name: Copy wheel to workspace
         if: false
