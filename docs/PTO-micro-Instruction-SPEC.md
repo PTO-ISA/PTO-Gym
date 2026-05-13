@@ -5599,19 +5599,21 @@ effects from the user's point of view.
 
 #### Common Cube Operand Model
 
-Cube ops use typed PTO pointers to name logical storage domains. The accepted
-`!pto.ptr` address-space names and their roles are:
+Cube ops use typed PTO pointers to name logical storage domains. The canonical
+`!pto.ptr` address-space names are the hardware-domain names below. The legacy
+names are accepted only as parser aliases and are printed back as canonical
+names.
 
-| Address space | Logical role |
-|---------------|--------------|
-| `gm` | Global memory |
-| `l1` | L1 matrix staging buffer |
-| `l0a` | Left matrix operand tile for Cube compute |
-| `l0b` | Right matrix operand tile for Cube compute |
-| `l0c` | Accumulator/result tile produced by Cube compute |
-| `bt` | Bias vector payload consumed by bias matmul forms |
-| `fb` | FIXPIPE parameter payloads consumed by vector quant/ReLU clauses |
-| `ub` | Unified Buffer destination/source for vector-side use |
+| Canonical address space | Legacy alias | Logical role |
+|-------------------------|--------------|--------------|
+| `gm` | - | Global memory |
+| `l1` | `mat` | L1 matrix staging buffer |
+| `l0a` | `left` | Left matrix operand tile for Cube compute |
+| `l0b` | `right` | Right matrix operand tile for Cube compute |
+| `l0c` | `acc` | Accumulator/result tile produced by Cube compute |
+| `bt` | `bias` | Bias vector payload consumed by bias matmul forms |
+| `fb` | `scaling` | FIXPIPE parameter payloads consumed by vector quant/ReLU clauses |
+| `ub` | `vec` | Unified Buffer destination/source for vector-side use |
 
 Unless an op says otherwise:
 
