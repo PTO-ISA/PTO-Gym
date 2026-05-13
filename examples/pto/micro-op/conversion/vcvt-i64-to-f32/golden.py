@@ -9,7 +9,7 @@
 
 # case: micro-op/conversion/vcvt-i64-to-f32
 # family: conversion
-# target_ops: pto.dma_load, pto.dma_store, pto.vcvt, pto.vsts
+# target_ops: pto.mte_gm_ub, pto.mte_ub_gm, pto.vcvt, pto.vsts
 # scenarios: i64-dma-roundtrip, i64-to-f32, signed-input, rounded, part-even-low-half
 
 import argparse

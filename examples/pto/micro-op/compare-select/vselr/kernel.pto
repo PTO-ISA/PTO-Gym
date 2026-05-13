@@ -4,8 +4,8 @@
 // target_ops: pto.vselr
 // scenarios: core-f32, full-mask, explicit-lane-index
 // -----------------------------------------------------------------------------
-module attributes {pto.target_arch = "a5"} {
-  func.func @vselr_kernel_2d(%arg0: !pto.ptr<f32, gm>, %arg1: !pto.ptr<i32, gm>, %arg2: !pto.ptr<f32, gm>) {
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
+  func.func @vselr_kernel_2d(%arg0: !pto.ptr<f32, gm>, %arg1: !pto.ptr<i32, gm>, %arg2: !pto.ptr<f32, gm>) attributes {pto.aicore} {
     %c8192_i64 = arith.constant 8192 : i64
     %c4096_i64 = arith.constant 4096 : i64
     %c0_i64 = arith.constant 0 : i64
@@ -24,7 +24,7 @@ module attributes {pto.target_arch = "a5"} {
     pto.set_loop1_stride_outtoub %c4096_i64, %c4096_i64 : i64, i64
     %6 = pto.castptr %5 : !pto.ptr<i8, gm> -> !pto.ptr<f32, gm>
     %false = arith.constant false
-    pto.dma_load %6, %0, %c0_i64, %2
+    pto.mte_gm_ub %6, %0, %c0_i64, %2
       nburst(%c32_i64, %c128_i64, %c128_i64)
       : !pto.ptr<f32, gm>, !pto.ptr<f32, ub>, i64, i64, i64, i64, i64
     %7 = pto.castptr %c4096_i64 : i64 -> !pto.ptr<i32, ub>
@@ -33,7 +33,7 @@ module attributes {pto.target_arch = "a5"} {
     pto.set_loop2_stride_outtoub %c4096_i64, %c4096_i64 : i64, i64
     pto.set_loop1_stride_outtoub %c4096_i64, %c4096_i64 : i64, i64
     %10 = pto.castptr %9 : !pto.ptr<i8, gm> -> !pto.ptr<i32, gm>
-    pto.dma_load %10, %7, %c0_i64, %2
+    pto.mte_gm_ub %10, %7, %c0_i64, %2
       nburst(%c32_i64, %c128_i64, %c128_i64)
       : !pto.ptr<i32, gm>, !pto.ptr<i32, ub>, i64, i64, i64, i64, i64
     pto.set_flag["PIPE_MTE2", "PIPE_V", "EVENT_ID0"]
@@ -65,7 +65,7 @@ module attributes {pto.target_arch = "a5"} {
     pto.set_loop1_stride_ubtoout %c4096_i64, %c4096_i64 : i64, i64
     pto.set_loop2_stride_ubtoout %c4096_i64, %c4096_i64 : i64, i64
     %15 = pto.castptr %14 : !pto.ptr<i8, gm> -> !pto.ptr<f32, gm>
-    pto.dma_store %11, %15, %12
+    pto.mte_ub_gm %11, %15, %12
       nburst(%c32_i64, %c128_i64, %c128_i64)
       : !pto.ptr<f32, ub>, !pto.ptr<f32, gm>, i64, i64, i64, i64
     pto.barrier #pto.pipe<PIPE_ALL>

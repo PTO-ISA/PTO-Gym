@@ -5,8 +5,8 @@
 //   pto.get_subblock_num, pto.store_scalar
 // scenarios: multi-block, runtime-query
 // -----------------------------------------------------------------------------
-module attributes {pto.target_arch = "a5"} {
-  func.func @get_block_subblock_id_kernel(%arg0: !pto.ptr<i64, gm>) {
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
+  func.func @get_block_subblock_id_kernel(%arg0: !pto.ptr<i64, gm>) attributes {pto.aicore} {
     %c1 = arith.constant 1 : index
     %c2 = arith.constant 2 : index
     %c3 = arith.constant 3 : index

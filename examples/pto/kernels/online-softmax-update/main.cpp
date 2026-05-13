@@ -9,7 +9,7 @@
 // -----------------------------------------------------------------------------
 // case: kernels/online-softmax-update
 // family: kernels
-// target_ops: pto.get_block_idx, pto.dma_load, pto.dma_store, pto.vlds, pto.vcmax, pto.vdup, pto.vmax, pto.vexpdif, pto.vcadd, pto.vadd, pto.vmul, pto.vdiv, pto.vsts
+// target_ops: pto.get_block_idx, pto.mte_gm_ub, pto.mte_ub_gm, pto.vlds, pto.vcmax, pto.vdup, pto.vmax, pto.vexpdif, pto.vcadd, pto.vadd, pto.vmul, pto.vdiv, pto.vsts
 // scenarios: online-softmax-update, dynamic-rows-and-seq, max-seq-128, block-rows-8, oldmax-oldsum-qk-to-newmax-newsum-expmax-out
 // -----------------------------------------------------------------------------
 #include "test_common.h"

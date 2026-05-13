@@ -1,13 +1,13 @@
 // -----------------------------------------------------------------------------
 // case: micro-op/conversion/vcvt-i64-to-f32
 // family: conversion
-// target_ops: pto.dma_load, pto.dma_store, pto.vcvt, pto.vsts
+// target_ops: pto.mte_gm_ub, pto.mte_ub_gm, pto.vcvt, pto.vsts
 // scenarios: i64-dma-roundtrip, i64-to-f32, signed-input, rounded, part-even-low-half
 // -----------------------------------------------------------------------------
-module attributes {pto.target_arch = "a5"} {
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
   func.func @vcvt_i64_to_f32_kernel(%arg0: !pto.ptr<si64, gm>,
                                     %arg1: !pto.ptr<f32, gm>,
-                                    %arg2: !pto.ptr<si64, gm>) {
+                                    %arg2: !pto.ptr<si64, gm>) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c2 = arith.constant 2 : index
     %c16 = arith.constant 16 : index
@@ -22,7 +22,7 @@ module attributes {pto.target_arch = "a5"} {
     %ub_in = pto.castptr %c0_i64 : i64 -> !pto.ptr<si64, ub>
     %ub_out = pto.castptr %c8192_i64 : i64 -> !pto.ptr<f32, ub>
 
-    pto.dma_load %arg0, %ub_in, %c0_i64, %c256_i64
+    pto.mte_gm_ub %arg0, %ub_in, %c0_i64, %c256_i64
       nburst(%c32_i64, %c256_i64, %c256_i64)
       : !pto.ptr<si64, gm>, !pto.ptr<si64, ub>, i64, i64, i64, i64, i64
 
@@ -30,7 +30,7 @@ module attributes {pto.target_arch = "a5"} {
     pto.set_flag["PIPE_MTE2", "PIPE_MTE3", "EVENT_ID1"]
     pto.wait_flag["PIPE_MTE2", "PIPE_V", "EVENT_ID0"]
     pto.wait_flag["PIPE_MTE2", "PIPE_MTE3", "EVENT_ID1"]
-    pto.dma_store %ub_in, %arg2, %c256_i64
+    pto.mte_ub_gm %ub_in, %arg2, %c256_i64
       nburst(%c32_i64, %c256_i64, %c256_i64)
       : !pto.ptr<si64, ub>, !pto.ptr<si64, gm>, i64, i64, i64, i64
 
@@ -46,7 +46,7 @@ module attributes {pto.target_arch = "a5"} {
 
     pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
     pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
-    pto.dma_store %ub_out, %arg1, %c64_i64
+    pto.mte_ub_gm %ub_out, %arg1, %c64_i64
       nburst(%c32_i64, %c64_i64, %c64_i64)
       : !pto.ptr<f32, ub>, !pto.ptr<f32, gm>, i64, i64, i64, i64
     pto.barrier #pto.pipe<PIPE_ALL>

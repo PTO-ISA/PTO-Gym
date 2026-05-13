@@ -1,0 +1,178 @@
+// Copyright (c) 2026 Huawei Technologies Co., Ltd.
+// This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+// CANN Open Software License Agreement Version 2.0 (the "License").
+// Please refer to the License for details. You may not use this file except in compliance with the License.
+// THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+// INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+// See LICENSE in the root of the software repository for the full text of the License.
+
+// -----------------------------------------------------------------------------
+// case: micro-op/cv-mixed/fixpipe-quant-normal-relu-clip-f16-scalar-ub-cv
+// family: cv-mixed
+// target_ops: pto.mte_gm_l1_frac, pto.mte_l1_l0a, pto.mte_l1_l0b, pto.mad,
+//   pto.mte_l0c_ub, pto.mte_l0c_gm, pto.mte_l0c_l1, pto.mte_l1_ub,
+//   pto.mte_ub_gm, pto.sync.set, pto.sync.wait
+// scenarios: split-compile, cube-producer, vector-consumer, fixpipe-qf322f16-scalar,
+//   normal-relu, clip-relu-pre, strict-matmul-golden, cc-store-ub-gm-l1
+// -----------------------------------------------------------------------------
+
+module attributes {pto.target_arch = "a5"} {
+  func.func @fixpipe_quant_normal_relu_clip_f16_scalar_ub_cv_kernel(
+      %lhs_gm: !pto.ptr<f16, gm>,
+      %rhs_gm: !pto.ptr<f16, gm>,
+      %out_ub_relu_gm: !pto.ptr<f16, gm>,
+      %out_ub_clip_gm: !pto.ptr<f16, gm>,
+      %out_gm_relu_gm: !pto.ptr<f16, gm>,
+      %out_gm_clip_gm: !pto.ptr<f16, gm>,
+      %out_l1_relu_gm: !pto.ptr<f16, gm>,
+      %out_l1_clip_gm: !pto.ptr<f16, gm>)
+      attributes {pto.aicore} {
+    %c0_i64 = arith.constant 0 : i64
+    %c1_i64 = arith.constant 1 : i64
+    %c40_i64 = arith.constant 40 : i64
+    %c48_i64 = arith.constant 48 : i64
+    %c50_i64 = arith.constant 50 : i64
+    %c64_i64 = arith.constant 64 : i64
+    %c100_i64 = arith.constant 100 : i64
+    %c128_i64 = arith.constant 128 : i64
+    %c2560_i64 = arith.constant 2560 : i64
+    %c32768_i64 = arith.constant 32768 : i64
+    %c49152_i64 = arith.constant 49152 : i64
+    %c65536_i64 = arith.constant 65536 : i64
+    %c98304_i64 = arith.constant 98304 : i64
+    %c131072_i64 = arith.constant 131072 : i64
+    %c196608_i64 = arith.constant 196608 : i64
+    %c8_f16 = arith.constant 8.000000e+00 : f16
+    %c1_f32 = arith.constant 1.000000e+00 : f32
+    %false = arith.constant false
+
+    %mat_lhs = pto.castptr %c0_i64 : i64 -> !pto.ptr<f16, l1>
+    %mat_rhs = pto.castptr %c65536_i64 : i64 -> !pto.ptr<f16, l1>
+    %l1_relu = pto.castptr %c131072_i64 : i64 -> !pto.ptr<f16, l1>
+    %l1_clip = pto.castptr %c196608_i64 : i64 -> !pto.ptr<f16, l1>
+    %ub_relu = pto.castptr %c0_i64 : i64 -> !pto.ptr<f16, ub>
+    %ub_clip = pto.castptr %c32768_i64 : i64 -> !pto.ptr<f16, ub>
+    %ub_l1_relu = pto.castptr %c65536_i64 : i64 -> !pto.ptr<f16, ub>
+    %ub_l1_clip = pto.castptr %c98304_i64 : i64 -> !pto.ptr<f16, ub>
+    %l0a = pto.castptr %c0_i64 : i64 -> !pto.ptr<f16, l0a>
+    %l0b = pto.castptr %c0_i64 : i64 -> !pto.ptr<f16, l0b>
+    %l0c = pto.castptr %c0_i64 : i64 -> !pto.ptr<f32, l0c>
+
+    pto.section.cube {
+      pto.mte_gm_l1_frac %lhs_gm, %mat_lhs, nd2nz,
+          shape(%c40_i64, %c50_i64),
+          src_layout(%c100_i64),
+          dst_group(%c1_i64, %c1_i64, %c48_i64, %c0_i64),
+          ctrl(%c0_i64, %false)
+        : !pto.ptr<f16, gm>, !pto.ptr<f16, l1>, nd2nz,
+          shape i64, i64, src_layout(i64),
+          dst_group i64, i64, i64, i64, ctrl i64, i1
+      pto.mte_gm_l1_frac %rhs_gm, %mat_rhs, nd2nz,
+          shape(%c50_i64, %c64_i64),
+          src_layout(%c128_i64),
+          dst_group(%c1_i64, %c1_i64, %c64_i64, %c0_i64),
+          ctrl(%c0_i64, %false)
+        : !pto.ptr<f16, gm>, !pto.ptr<f16, l1>, nd2nz,
+          shape i64, i64, src_layout(i64),
+          dst_group i64, i64, i64, i64, ctrl i64, i1
+
+      pto.set_flag["PIPE_MTE2", "PIPE_MTE1", "EVENT_ID0"]
+      pto.wait_flag["PIPE_MTE2", "PIPE_MTE1", "EVENT_ID0"]
+      pto.mte_l1_l0a %mat_lhs, %l0a, %c40_i64, %c50_i64
+        : !pto.ptr<f16, l1>, !pto.ptr<f16, l0a>, i64, i64
+      pto.mte_l1_l0b %mat_rhs, %l0b, %c50_i64, %c64_i64 {transpose = true}
+        : !pto.ptr<f16, l1>, !pto.ptr<f16, l0b>, i64, i64
+
+      pto.set_flag["PIPE_MTE1", "PIPE_M", "EVENT_ID0"]
+      pto.wait_flag["PIPE_MTE1", "PIPE_M", "EVENT_ID0"]
+      pto.mad %l0a, %l0b, %l0c, %c40_i64, %c64_i64, %c50_i64
+        : !pto.ptr<f16, l0a>, !pto.ptr<f16, l0b>, !pto.ptr<f32, l0c>, i64, i64, i64
+
+      pto.set_flag["PIPE_M", "PIPE_FIX", "EVENT_ID1"]
+      pto.wait_flag["PIPE_M", "PIPE_FIX", "EVENT_ID1"]
+      pto.set_flag["PIPE_MTE2", "PIPE_FIX", "EVENT_ID0"]
+      pto.wait_flag["PIPE_MTE2", "PIPE_FIX", "EVENT_ID0"]
+      pto.mte_l0c_ub %l0c, %ub_relu, %c40_i64, %c64_i64, %c48_i64, %c64_i64, dst_mode(%c0_i64),
+        pre_quant(%c1_f32, mode = qf322f16_pre_scalar),
+        pre_relu(mode = normal_relu),
+        nz2nd,
+        loop3(%c1_i64, %c49152_i64, %c2560_i64)
+        : !pto.ptr<f32, l0c>, !pto.ptr<f16, ub>, i64, i64, i64, i64, i64,
+          f32, i64, i64, i64
+      pto.mte_l0c_ub %l0c, %ub_clip, %c40_i64, %c64_i64, %c48_i64, %c64_i64, dst_mode(%c0_i64),
+        pre_quant(%c1_f32, mode = qf322f16_pre_scalar),
+        pre_relu(mode = normal_relu, clip = %c8_f16),
+        nz2nd,
+        loop3(%c1_i64, %c49152_i64, %c2560_i64)
+        : !pto.ptr<f32, l0c>, !pto.ptr<f16, ub>, i64, i64, i64, i64, i64,
+          f32, f16, i64, i64, i64
+
+      pto.mte_l0c_gm %l0c, %out_gm_relu_gm, %c40_i64, %c64_i64, %c48_i64, %c64_i64, %c0_i64, %c0_i64,
+        pre_quant(%c1_f32, mode = qf322f16_pre_scalar),
+        pre_relu(mode = normal_relu),
+        nz2nd,
+        loop3(%c1_i64, %c49152_i64, %c2560_i64)
+        : !pto.ptr<f32, l0c>, !pto.ptr<f16, gm>, i64, i64, i64, i64, i64, i64,
+          f32, i64, i64, i64
+      pto.mte_l0c_gm %l0c, %out_gm_clip_gm, %c40_i64, %c64_i64, %c48_i64, %c64_i64, %c0_i64, %c0_i64,
+        pre_quant(%c1_f32, mode = qf322f16_pre_scalar),
+        pre_relu(mode = normal_relu, clip = %c8_f16),
+        nz2nd,
+        loop3(%c1_i64, %c49152_i64, %c2560_i64)
+        : !pto.ptr<f32, l0c>, !pto.ptr<f16, gm>, i64, i64, i64, i64, i64, i64,
+          f32, f16, i64, i64, i64
+
+      pto.mte_l0c_l1 %l0c, %l1_relu, %c40_i64, %c64_i64, %c48_i64, %c64_i64,
+        pre_quant(%c1_f32, mode = qf322f16_pre_scalar),
+        pre_relu(mode = normal_relu),
+        nz2nd,
+        loop3(%c1_i64, %c49152_i64, %c2560_i64)
+        : !pto.ptr<f32, l0c>, !pto.ptr<f16, l1>, i64, i64, i64, i64,
+          f32, i64, i64, i64
+      pto.mte_l0c_l1 %l0c, %l1_clip, %c40_i64, %c64_i64, %c48_i64, %c64_i64,
+        pre_quant(%c1_f32, mode = qf322f16_pre_scalar),
+        pre_relu(mode = normal_relu, clip = %c8_f16),
+        nz2nd,
+        loop3(%c1_i64, %c49152_i64, %c2560_i64)
+        : !pto.ptr<f32, l0c>, !pto.ptr<f16, l1>, i64, i64, i64, i64,
+          f32, f16, i64, i64, i64
+
+      pto.set_flag["PIPE_FIX", "PIPE_MTE1", "EVENT_ID0"]
+      pto.wait_flag["PIPE_FIX", "PIPE_MTE1", "EVENT_ID0"]
+      pto.mte_l1_ub %l1_relu, %ub_l1_relu, %c128_i64
+        nburst(%c40_i64, %c0_i64, %c0_i64)
+        : !pto.ptr<f16, l1>, !pto.ptr<f16, ub>, i64, i64, i64, i64
+      pto.mte_l1_ub %l1_clip, %ub_l1_clip, %c128_i64
+        nburst(%c40_i64, %c0_i64, %c0_i64)
+        : !pto.ptr<f16, l1>, !pto.ptr<f16, ub>, i64, i64, i64, i64
+
+      pto.set_flag["PIPE_MTE1", "PIPE_FIX", "EVENT_ID0"]
+      pto.wait_flag["PIPE_MTE1", "PIPE_FIX", "EVENT_ID0"]
+      pto.sync.set <PIPE_FIX>, 1
+      pto.sync.set <PIPE_FIX>, 17
+    }
+
+    pto.section.vector {
+      %subblock = pto.get_subblock_idx
+      %is_subblock0 = arith.cmpi eq, %subblock, %c0_i64 : i64
+
+      scf.if %is_subblock0 {
+        pto.sync.wait <PIPE_MTE3>, 1
+        pto.mte_ub_gm %ub_relu, %out_ub_relu_gm, %c128_i64
+          nburst(%c40_i64, %c128_i64, %c128_i64)
+          : !pto.ptr<f16, ub>, !pto.ptr<f16, gm>, i64, i64, i64, i64
+        pto.mte_ub_gm %ub_clip, %out_ub_clip_gm, %c128_i64
+          nburst(%c40_i64, %c128_i64, %c128_i64)
+          : !pto.ptr<f16, ub>, !pto.ptr<f16, gm>, i64, i64, i64, i64
+        pto.mte_ub_gm %ub_l1_relu, %out_l1_relu_gm, %c128_i64
+          nburst(%c40_i64, %c128_i64, %c128_i64)
+          : !pto.ptr<f16, ub>, !pto.ptr<f16, gm>, i64, i64, i64, i64
+        pto.mte_ub_gm %ub_l1_clip, %out_l1_clip_gm, %c128_i64
+          nburst(%c40_i64, %c128_i64, %c128_i64)
+          : !pto.ptr<f16, ub>, !pto.ptr<f16, gm>, i64, i64, i64, i64
+      }
+      pto.barrier #pto.pipe<PIPE_ALL>
+    }
+    return
+  }
+}

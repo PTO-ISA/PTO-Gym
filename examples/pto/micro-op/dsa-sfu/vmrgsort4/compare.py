@@ -33,15 +33,24 @@ def read_pairs(path: str):
     return np.array(values, dtype=np.float32), np.array(indices, dtype=np.uint32)
 
 
+def read_counts(path: str):
+    with open(path, "rb") as f:
+        data = f.read(8)
+    return np.array(struct.unpack("4h", data), dtype=np.int16)
+
+
 def main() -> None:
     strict = os.getenv("COMPARE_STRICT", "1") != "0"
     golden_values, golden_indices = read_pairs("golden_v2.bin")
     output_values, output_indices = read_pairs("v2.bin")
+    golden_counts = read_counts("golden_v3.bin")
+    output_counts = read_counts("v3.bin")
     ok = (
         golden_values.shape == output_values.shape
         and golden_indices.shape == output_indices.shape
         and np.allclose(golden_values, output_values)
         and np.array_equal(golden_indices, output_indices)
+        and np.array_equal(golden_counts, output_counts)
     )
     if not ok:
         if strict:

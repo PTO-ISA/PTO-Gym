@@ -1,5 +1,5 @@
-module attributes {pto.target_arch = "a5"} {
-  func.func @vcmps_f32_exceptional_kernel_2d(%arg0: !pto.ptr<f32, gm>, %arg1: !pto.ptr<ui8, gm>) {
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
+  func.func @vcmps_f32_exceptional_kernel_2d(%arg0: !pto.ptr<f32, gm>, %arg1: !pto.ptr<ui8, gm>) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c0_i64 = arith.constant 0 : i64
@@ -16,7 +16,7 @@ module attributes {pto.target_arch = "a5"} {
     %ub_out = pto.castptr %c256_i64 : i64 -> !pto.ptr<ui8, ub>
     pto.set_loop1_stride_outtoub %c256_i64, %c256_i64 : i64, i64
     pto.set_loop2_stride_outtoub %c256_i64, %c256_i64 : i64, i64
-    pto.dma_load %arg0, %ub_src, %c0_i64, %c256_i64
+    pto.mte_gm_ub %arg0, %ub_src, %c0_i64, %c256_i64
       nburst(%c64_i64, %c256_i64, %c256_i64)
       : !pto.ptr<f32, gm>, !pto.ptr<f32, ub>, i64, i64, i64, i64, i64
 
@@ -37,7 +37,7 @@ module attributes {pto.target_arch = "a5"} {
     pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
     pto.set_loop1_stride_ubtoout %c32_i64, %c32_i64 : i64, i64
     pto.set_loop2_stride_ubtoout %c32_i64, %c32_i64 : i64, i64
-    pto.dma_store %ub_out, %arg1, %c32_i64
+    pto.mte_ub_gm %ub_out, %arg1, %c32_i64
       nburst(%c32_i64, %c32_i64, %c32_i64)
       : !pto.ptr<ui8, ub>, !pto.ptr<ui8, gm>, i64, i64, i64, i64
     pto.barrier #pto.pipe<PIPE_ALL>

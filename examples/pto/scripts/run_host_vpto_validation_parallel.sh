@@ -1,10 +1,18 @@
 #!/usr/bin/env bash
+# Copyright (c) 2026 Huawei Technologies Co., Ltd.
+# This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+# CANN Open Software License Agreement Version 2.0 (the "License").
+# Please refer to the License for details. You may not use this file except in compliance with the License.
+# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+# See LICENSE in the root of the software repository for the full text of the License.
+
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
-VPTO_ROOT="${ROOT_DIR}/examples/pto"
-CASES_ROOT="${VPTO_ROOT}"
+VPTO_ROOT="${VPTO_ROOT:-${ROOT_DIR}/examples/pto}"
+CASES_ROOT="${CASES_ROOT:-${VPTO_ROOT}}"
 SERIAL_SCRIPT="${SCRIPT_DIR}/run_host_vpto_validation.sh"
 
 WORK_SPACE="${WORK_SPACE:-}"
@@ -68,8 +76,6 @@ RUNNER_LOG="${WORK_SPACE}/parallel-runner.log"
 
 discover_cases() {
   local required_files=(
-    kernel.pto
-    stub.cpp
     launch.cpp
     main.cpp
     golden.py
@@ -82,7 +88,9 @@ discover_cases() {
     for f in "${required_files[@]}"; do
       [[ -f "${requested_dir}/${f}" ]] || die "case ${CASE_NAME} is missing ${f}"
     done
-    printf "%s\n" "${CASE_NAME#/}"
+    [[ -f "${requested_dir}/kernel.pto" ]] ||
+      die "case ${CASE_NAME} must provide kernel.pto"
+    printf "%s\n" "${CASE_NAME}"
     return 0
   fi
 
@@ -95,6 +103,7 @@ discover_cases() {
       fi
     done
     [[ "${ok}" -eq 1 ]] || continue
+    [[ -f "${dir}/kernel.pto" ]] || continue
     local rel="${dir#${CASES_ROOT}/}"
     if [[ -n "${CASE_PREFIX}" && "${rel}" != "${CASE_PREFIX}"* ]]; then
       continue

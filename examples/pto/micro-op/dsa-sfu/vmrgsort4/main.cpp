@@ -24,15 +24,19 @@ using namespace PtoTestCommon;
     }                                                                            \
   } while (0)
 
-void LaunchVmrgsort4_kernel_f32(float *src, float *dst, void *stream);
+void LaunchVmrgsort4_kernel_f32(float *src, float *dst, int16_t *counts,
+                                void *stream);
 
 int main() {
   size_t inputBytes = 32;
   size_t outputBytes = 32;
+  size_t countsBytes = 8;
   float *srcHost = nullptr;
   float *srcDevice = nullptr;
   float *dstHost = nullptr;
   float *dstDevice = nullptr;
+  int16_t *countsHost = nullptr;
+  int16_t *countsDevice = nullptr;
   int rc = 0;
   bool aclInited = false;
   bool deviceSet = false;
@@ -48,8 +52,10 @@ int main() {
   ACL_CHECK(aclrtCreateStream(&stream));
   ACL_CHECK(aclrtMallocHost((void **)(&srcHost), inputBytes));
   ACL_CHECK(aclrtMallocHost((void **)(&dstHost), outputBytes));
+  ACL_CHECK(aclrtMallocHost((void **)(&countsHost), countsBytes));
   ACL_CHECK(aclrtMalloc((void **)&srcDevice, inputBytes, ACL_MEM_MALLOC_HUGE_FIRST));
   ACL_CHECK(aclrtMalloc((void **)&dstDevice, outputBytes, ACL_MEM_MALLOC_HUGE_FIRST));
+  ACL_CHECK(aclrtMalloc((void **)&countsDevice, countsBytes, ACL_MEM_MALLOC_HUGE_FIRST));
 
   if (!ReadFile("./v1.bin", inputBytes, srcHost, inputBytes)) {
     std::fprintf(stderr, "[ERROR] failed to read v1.bin\n");
@@ -61,19 +67,29 @@ int main() {
     rc = 1;
     goto cleanup;
   }
+  if (!ReadFile("./v3.bin", countsBytes, countsHost, countsBytes)) {
+    std::fprintf(stderr, "[ERROR] failed to read v3.bin\n");
+    rc = 1;
+    goto cleanup;
+  }
 
   ACL_CHECK(aclrtMemcpy(srcDevice, inputBytes, srcHost, inputBytes, ACL_MEMCPY_HOST_TO_DEVICE));
   ACL_CHECK(aclrtMemcpy(dstDevice, outputBytes, dstHost, outputBytes, ACL_MEMCPY_HOST_TO_DEVICE));
-  LaunchVmrgsort4_kernel_f32(srcDevice, dstDevice, stream);
+  ACL_CHECK(aclrtMemcpy(countsDevice, countsBytes, countsHost, countsBytes, ACL_MEMCPY_HOST_TO_DEVICE));
+  LaunchVmrgsort4_kernel_f32(srcDevice, dstDevice, countsDevice, stream);
   ACL_CHECK(aclrtSynchronizeStream(stream));
   ACL_CHECK(aclrtMemcpy(dstHost, outputBytes, dstDevice, outputBytes, ACL_MEMCPY_DEVICE_TO_HOST));
+  ACL_CHECK(aclrtMemcpy(countsHost, countsBytes, countsDevice, countsBytes, ACL_MEMCPY_DEVICE_TO_HOST));
   WriteFile("./v2.bin", dstHost, outputBytes);
+  WriteFile("./v3.bin", countsHost, countsBytes);
 
 cleanup:
   aclrtFree(srcDevice);
   aclrtFree(dstDevice);
+  aclrtFree(countsDevice);
   aclrtFreeHost(srcHost);
   aclrtFreeHost(dstHost);
+  aclrtFreeHost(countsHost);
   if (stream != nullptr)
     aclrtDestroyStream(stream);
   if (deviceSet)

@@ -1,6 +1,6 @@
-module attributes {pto.target_arch = "a5"} {
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
   func.func @vsel_kernel_2d(%arg0: !pto.ptr<f32, gm>, %arg1: !pto.ptr<f32, gm>,
-                            %arg2: !pto.ptr<f32, gm>) {
+                            %arg2: !pto.ptr<f32, gm>) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c0_i64 = arith.constant 0 : i64
@@ -16,10 +16,10 @@ module attributes {pto.target_arch = "a5"} {
     %ub_out = pto.castptr %c512_i64 : i64 -> !pto.ptr<f32, ub>
     pto.set_loop1_stride_outtoub %c256_i64, %c256_i64 : i64, i64
     pto.set_loop2_stride_outtoub %c256_i64, %c256_i64 : i64, i64
-    pto.dma_load %arg0, %ub_lhs, %c0_i64, %c256_i64
+    pto.mte_gm_ub %arg0, %ub_lhs, %c0_i64, %c256_i64
       nburst(%c64_i64, %c256_i64, %c256_i64)
       : !pto.ptr<f32, gm>, !pto.ptr<f32, ub>, i64, i64, i64, i64, i64
-    pto.dma_load %arg1, %ub_rhs, %c0_i64, %c256_i64
+    pto.mte_gm_ub %arg1, %ub_rhs, %c0_i64, %c256_i64
       nburst(%c64_i64, %c256_i64, %c256_i64)
       : !pto.ptr<f32, gm>, !pto.ptr<f32, ub>, i64, i64, i64, i64, i64
 
@@ -42,7 +42,7 @@ module attributes {pto.target_arch = "a5"} {
     pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
     pto.set_loop1_stride_ubtoout %c256_i64, %c256_i64 : i64, i64
     pto.set_loop2_stride_ubtoout %c256_i64, %c256_i64 : i64, i64
-    pto.dma_store %ub_out, %arg2, %c256_i64
+    pto.mte_ub_gm %ub_out, %arg2, %c256_i64
       nburst(%c64_i64, %c256_i64, %c256_i64)
       : !pto.ptr<f32, ub>, !pto.ptr<f32, gm>, i64, i64, i64, i64
     pto.barrier #pto.pipe<PIPE_ALL>

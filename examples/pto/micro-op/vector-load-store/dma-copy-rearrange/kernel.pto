@@ -1,0 +1,67 @@
+// -----------------------------------------------------------------------------
+// case: micro-op/vector-load-store/dma-copy-rearrange
+// family: micro-op/vector-load-store
+// target_ops: pto.copy_gm_to_ubuf, pto.mte_ub_ub, pto.copy_ubuf_to_gm
+// scenarios: i16, ub-rearrange, permute-4x16-rows
+// -----------------------------------------------------------------------------
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
+  func.func @dma_copy_rearrange_kernel(%arg0: !pto.ptr<i16, gm>,
+                                       %arg1: !pto.ptr<i16, gm>,
+                                       %arg2: i64,
+                                       %arg3: i64,
+                                       %arg4: i64,
+                                       %arg5: i64) attributes {pto.aicore} {
+    %false = arith.constant false
+    %c0_i64 = arith.constant 0 : i64
+    %c1_i64 = arith.constant 1 : i64
+    %c32_i64 = arith.constant 32 : i64
+    %c64_i64 = arith.constant 64 : i64
+    %c96_i64 = arith.constant 96 : i64
+    %c128_i64 = arith.constant 128 : i64
+    %c160_i64 = arith.constant 160 : i64
+    %c192_i64 = arith.constant 192 : i64
+    %c224_i64 = arith.constant 224 : i64
+    %c256_i64 = arith.constant 256 : i64
+
+    %ub_in = pto.castptr %c0_i64 : i64 -> !pto.ptr<i16, ub>
+    %ub_out = pto.castptr %c128_i64 : i64 -> !pto.ptr<i16, ub>
+
+    pto.set_loop_size_outtoub %c1_i64, %c1_i64 : i64, i64
+    pto.copy_gm_to_ubuf %arg0, %ub_in, %c0_i64, %c1_i64, %c128_i64,
+                        %c0_i64, %c0_i64, %false, %c0_i64, %c128_i64, %c128_i64
+      : !pto.ptr<i16, gm>, !pto.ptr<i16, ub>, i64, i64, i64, i64, i64, i1, i64, i64, i64
+
+    pto.barrier #pto.pipe<PIPE_ALL>
+
+    %src_row0 = pto.castptr %c0_i64 : i64 -> !pto.ptr<i16, ub>
+    %src_row1 = pto.castptr %c32_i64 : i64 -> !pto.ptr<i16, ub>
+    %src_row2 = pto.castptr %c64_i64 : i64 -> !pto.ptr<i16, ub>
+    %src_row3 = pto.castptr %c96_i64 : i64 -> !pto.ptr<i16, ub>
+
+    %dst_row0 = pto.castptr %c128_i64 : i64 -> !pto.ptr<i16, ub>
+    %dst_row1 = pto.castptr %c160_i64 : i64 -> !pto.ptr<i16, ub>
+    %dst_row2 = pto.castptr %c192_i64 : i64 -> !pto.ptr<i16, ub>
+    %dst_row3 = pto.castptr %c224_i64 : i64 -> !pto.ptr<i16, ub>
+
+    pto.mte_ub_ub %src_row2, %dst_row0, %arg3
+      nburst(%arg2, %arg4, %arg5)
+      : !pto.ptr<i16, ub>, !pto.ptr<i16, ub>, i64, i64, i64, i64
+    pto.mte_ub_ub %src_row0, %dst_row1, %arg3
+      nburst(%arg2, %arg4, %arg5)
+      : !pto.ptr<i16, ub>, !pto.ptr<i16, ub>, i64, i64, i64, i64
+    pto.mte_ub_ub %src_row3, %dst_row2, %arg3
+      nburst(%arg2, %arg4, %arg5)
+      : !pto.ptr<i16, ub>, !pto.ptr<i16, ub>, i64, i64, i64, i64
+    pto.mte_ub_ub %src_row1, %dst_row3, %arg3
+      nburst(%arg2, %arg4, %arg5)
+      : !pto.ptr<i16, ub>, !pto.ptr<i16, ub>, i64, i64, i64, i64
+
+    pto.barrier #pto.pipe<PIPE_ALL>
+
+    pto.set_loop_size_ubtoout %c1_i64, %c1_i64 : i64, i64
+    pto.copy_ubuf_to_gm %ub_out, %arg1, %c0_i64, %c1_i64, %c128_i64, %c0_i64, %c128_i64, %c128_i64
+      : !pto.ptr<i16, ub>, !pto.ptr<i16, gm>, i64, i64, i64, i64, i64, i64
+    pto.barrier #pto.pipe<PIPE_ALL>
+    return
+  }
+}
