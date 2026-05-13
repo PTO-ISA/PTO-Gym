@@ -7,21 +7,6 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 
 cmake_minimum_required(VERSION 3.16)
-
-if(NOT DEFINED BISHENG_BIN)
-    if(DEFINED ENV{BISHENG_BIN})
-        set(BISHENG_BIN "$ENV{BISHENG_BIN}")
-    else()
-        message(FATAL_ERROR "BISHENG_BIN is not set. Pass -DBISHENG_BIN=/path/to/bisheng to cmake.")
-    endif()
-endif()
-if(NOT EXISTS "${BISHENG_BIN}")
-    message(FATAL_ERROR "BISHENG_BIN does not exist: ${BISHENG_BIN}")
-endif()
-
-set(CMAKE_C_COMPILER "${BISHENG_BIN}")
-set(CMAKE_CXX_COMPILER "${BISHENG_BIN}")
-
 project(tilelang_st)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -54,9 +39,14 @@ else()
     set(ASCEND_HOME_PATH $ENV{ASCEND_HOME_PATH})
 endif()
 
+set(PTO_ISA_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../../../../../../pto-isa" CACHE PATH "Path to pto-isa repo")
 set(PTO_TILELANG_ST_COMMON_DIR
     "${CMAKE_CURRENT_LIST_DIR}/common")
 set(ASCEND_DRIVER_PATH /usr/local/Ascend/driver)
+
+set(CMAKE_COMPILER bisheng)
+set(CMAKE_C_COMPILER ${CMAKE_COMPILER})
+set(CMAKE_CXX_COMPILER ${CMAKE_COMPILER})
 
 add_compile_options(
     -D_FORTIFY_SOURCE=2

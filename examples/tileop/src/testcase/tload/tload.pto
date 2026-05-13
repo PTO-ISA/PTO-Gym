@@ -10,8 +10,8 @@
 // Each kernel only performs GM -> Tile -> GM, so the testcase validates the
 // DMA layout path directly for ND, DN, and NZ vector tiles.
 
-module {
-  func.func @TLOAD_ND_f32_16x64(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
+  func.func @TLOAD_ND_f32_16x64(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c16   = arith.constant 16   : index
@@ -46,7 +46,7 @@ module {
     return
   }
 
-  func.func @TLOAD_DN_f32_16x64(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TLOAD_DN_f32_16x64(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c16   = arith.constant 16   : index
@@ -81,7 +81,7 @@ module {
     return
   }
 
-  func.func @TLOAD_NZ_f32_128x128(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TLOAD_NZ_f32_128x128(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c8    = arith.constant 8    : index
@@ -117,7 +117,7 @@ module {
     return
   }
 
-  func.func @TLOAD_ND_PAD_ZERO_f32_16x64(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TLOAD_ND_PAD_ZERO_f32_16x64(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c16   = arith.constant 16   : index
@@ -153,7 +153,7 @@ module {
     return
   }
 
-  func.func @TLOAD_DN_PAD_MAX_f32_16x64(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TLOAD_DN_PAD_MAX_f32_16x64(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c15   = arith.constant 15   : index
@@ -189,7 +189,7 @@ module {
     return
   }
 
-  func.func @TLOAD_NZ_PAD_MIN_f32_128x128(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TLOAD_NZ_PAD_MIN_f32_128x128(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c8    = arith.constant 8    : index

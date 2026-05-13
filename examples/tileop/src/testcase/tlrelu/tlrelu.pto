@@ -8,12 +8,12 @@
 
 // TileLang ST kernels for pto.tlrelu: tload(src) + tlrelu(src, slope)->dst + tstore(dst).
 // Multiple cases with different shapes in a single module.
-// Compiled by ptoas --enable-insert-sync --enable-tile-op-expand --vpto-emit-hivm-llvm
-// to produce LLVM IR.
+// Compiled by ptoas --enable-insert-sync --enable-tile-op-expand
+// to produce a fatobj object.
 
-module {
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
   // Case 0: f32 src 32x64 -> dst 32x128 (valid 32x64)
-  func.func @TLRELU_f32_32x64_dst128(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>, %slope: f32) {
+  func.func @TLRELU_f32_32x64_dst128(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>, %slope: f32) attributes {pto.aicore} {
     %c0   = arith.constant 0    : index
     %c1   = arith.constant 1    : index
     %c32  = arith.constant 32   : index
@@ -63,7 +63,7 @@ module {
   }
 
   // Case 1: f16 src 63x64 -> dst 63x128 (valid 63x64)
-  func.func @TLRELU_f16_63x64_dst128(%src_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>, %slope: f32) {
+  func.func @TLRELU_f16_63x64_dst128(%src_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>, %slope: f32) attributes {pto.aicore} {
     %c0   = arith.constant 0    : index
     %c1   = arith.constant 1    : index
     %c63  = arith.constant 63   : index
@@ -113,7 +113,7 @@ module {
   }
 
   // Case 2: f32 src 7x448 -> dst 7x512 (valid 7x448)
-  func.func @TLRELU_f32_7x448_dst512(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>, %slope: f32) {
+  func.func @TLRELU_f32_7x448_dst512(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>, %slope: f32) attributes {pto.aicore} {
     %c0   = arith.constant 0    : index
     %c1   = arith.constant 1    : index
     %c7   = arith.constant 7    : index
@@ -163,7 +163,7 @@ module {
   }
 
   // Case 3: f32 src 256x16 -> dst 256x32 (valid 256x16)
-  func.func @TLRELU_f32_256x16_dst32(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>, %slope: f32) {
+  func.func @TLRELU_f32_256x16_dst32(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>, %slope: f32) attributes {pto.aicore} {
     %c0   = arith.constant 0    : index
     %c1   = arith.constant 1    : index
     %c16  = arith.constant 16   : index

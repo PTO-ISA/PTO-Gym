@@ -10,9 +10,9 @@
 // Matches PTO-ISA testcase parameters.
 // Key: tile_buf cols = full tensor width, v_col = valid portion
 
-module {
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
   // Case 1: fp32_32_64_1_64 (float32, src0=(32,64), src1=(1,64), dst=(32,64))
-  func.func @TCOLEXPANDDIV_fp32_32_64_1_64(%src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TCOLEXPANDDIV_fp32_32_64_1_64(%src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c32   = arith.constant 32   : index
@@ -74,7 +74,7 @@ module {
   }
 
   // Case 2: fp32_8_32_1_32 (float32, src0=(8,32), src1=(1,32), dst=(8,32))
-  func.func @TCOLEXPANDDIV_fp32_8_32_1_32(%src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TCOLEXPANDDIV_fp32_8_32_1_32(%src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0   = arith.constant 0   : index
     %c1   = arith.constant 1   : index
     %c8   = arith.constant 8   : index
@@ -136,7 +136,7 @@ module {
   }
 
   // Case 3: fp16_16_64_1_64 (float16, src0=(16,64), src1=(1,64), dst=(16,64))
-  func.func @TCOLEXPANDDIV_fp16_16_64_1_64(%src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) {
+  func.func @TCOLEXPANDDIV_fp16_16_64_1_64(%src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c16   = arith.constant 16   : index
@@ -198,7 +198,7 @@ module {
   }
 
   // Case 4: fp16_4_128_1_128 (float16, src0=(4,128), src1=(1,128), dst=(4,128))
-  func.func @TCOLEXPANDDIV_fp16_4_128_1_128(%src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) {
+  func.func @TCOLEXPANDDIV_fp16_4_128_1_128(%src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c4    = arith.constant 4    : index
@@ -260,7 +260,7 @@ pto.tstore ins(%dst : !pto.tile_buf<vec, 4x128xf16>)
   }
 
   // Case 5: int32_16_32_1_32 (int32, src0=(16,32), src1=(1,32), dst=(16,32))
-  func.func @TCOLEXPANDDIV_int32_16_32_1_32(%src0_ptr: !pto.ptr<i32>, %src1_ptr: !pto.ptr<i32>, %dst_ptr: !pto.ptr<i32>) {
+  func.func @TCOLEXPANDDIV_int32_16_32_1_32(%src0_ptr: !pto.ptr<i32>, %src1_ptr: !pto.ptr<i32>, %dst_ptr: !pto.ptr<i32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c16   = arith.constant 16   : index
@@ -322,7 +322,7 @@ pto.tstore ins(%dst : !pto.tile_buf<vec, 4x128xf16>)
   }
 
   // Case 6: int16_16_64_1_64 (int16, src0=(16,64), src1=(1,64), dst=(16,64))
-  func.func @TCOLEXPANDDIV_int16_16_64_1_64(%src0_ptr: !pto.ptr<i16>, %src1_ptr: !pto.ptr<i16>, %dst_ptr: !pto.ptr<i16>) {
+  func.func @TCOLEXPANDDIV_int16_16_64_1_64(%src0_ptr: !pto.ptr<i16>, %src1_ptr: !pto.ptr<i16>, %dst_ptr: !pto.ptr<i16>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c16   = arith.constant 16   : index
@@ -384,7 +384,7 @@ pto.tstore ins(%dst : !pto.tile_buf<vec, 4x128xf16>)
   }
 
   // Case 7: fp32_40_32_1_32 (float32, src0=(40,32), src1=(1,32), dst=(40,32))
-  func.func @TCOLEXPANDDIV_fp32_40_32_1_32(%src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TCOLEXPANDDIV_fp32_40_32_1_32(%src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c40   = arith.constant 40   : index
@@ -446,7 +446,7 @@ pto.tstore ins(%dst : !pto.tile_buf<vec, 4x128xf16>)
   }
 
   // Case 8: fp16_16_128_1_128 (float16, src0=(16,128), src1=(1,128), dst=(16,128))
-  func.func @TCOLEXPANDDIV_fp16_16_128_1_128(%src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) {
+  func.func @TCOLEXPANDDIV_fp16_16_128_1_128(%src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c16   = arith.constant 16   : index
@@ -508,7 +508,7 @@ pto.tstore ins(%dst : !pto.tile_buf<vec, 4x128xf16>)
   }
 
   // Case 9: fp32_20_64_1_64 (float32, src0=(20,64), src1=(1,64), dst=(20,64))
-  func.func @TCOLEXPANDDIV_fp32_20_64_1_64(%src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TCOLEXPANDDIV_fp32_20_64_1_64(%src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c20   = arith.constant 20   : index

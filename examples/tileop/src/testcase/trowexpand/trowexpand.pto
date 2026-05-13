@@ -10,9 +10,9 @@
 // dst[row, col] = src[row, 0] (broadcast scalar per row)
 // srcCols = 32/sizeof(dtype) for NPU 32-byte alignment
 
-module {
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
   // f32_16x128: rows=16, srcCols=8, dstValidCols=128, dstCols=128
-  func.func @TROWEXPAND_f32_16x128(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TROWEXPAND_f32_16x128(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c8    = arith.constant 8    : index
@@ -55,7 +55,7 @@ module {
   }
 
   // f32_16x127: rows=16, srcCols=8, dstValidCols=127, dstCols=128
-  func.func @TROWEXPAND_f32_16x127(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TROWEXPAND_f32_16x127(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c8    = arith.constant 8    : index
@@ -99,7 +99,7 @@ module {
   }
 
   // f16_16x512: rows=16, srcCols=16, dstValidCols=512, dstCols=512
-  func.func @TROWEXPAND_f16_16x512(%src_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) {
+  func.func @TROWEXPAND_f16_16x512(%src_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c16   = arith.constant 16   : index
@@ -142,7 +142,7 @@ module {
   }
 
   // f16_16x511: rows=16, srcCols=16, dstValidCols=511, dstCols=512
-  func.func @TROWEXPAND_f16_16x511(%src_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) {
+  func.func @TROWEXPAND_f16_16x511(%src_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c16   = arith.constant 16   : index
@@ -186,7 +186,7 @@ module {
   }
 
   // i8_16x256: rows=16, srcCols=32, dstValidCols=256, dstCols=256
-  func.func @TROWEXPAND_i8_16x256(%src_ptr: !pto.ptr<i8>, %dst_ptr: !pto.ptr<i8>) {
+  func.func @TROWEXPAND_i8_16x256(%src_ptr: !pto.ptr<i8>, %dst_ptr: !pto.ptr<i8>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c16   = arith.constant 16   : index
@@ -230,7 +230,7 @@ module {
   }
 
   // i8_16x255: rows=16, srcCols=32, dstValidCols=255, dstCols=256
-  func.func @TROWEXPAND_i8_16x255(%src_ptr: !pto.ptr<i8>, %dst_ptr: !pto.ptr<i8>) {
+  func.func @TROWEXPAND_i8_16x255(%src_ptr: !pto.ptr<i8>, %dst_ptr: !pto.ptr<i8>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c16   = arith.constant 16   : index

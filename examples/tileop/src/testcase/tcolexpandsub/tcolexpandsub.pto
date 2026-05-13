@@ -10,9 +10,9 @@
 // Matches PTO-ISA testcase parameters.
 // Golden: src0 - np.tile(src1, (reps, 1))[:, :dst_col]
 
-module {
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
   // Case 1: fp32_6_128_1_128 (float32, src0=(6,128), src1=(1,128), dst=(6,128))
-  func.func @TCOLEXPANDSUB_fp32_6_128_1_128(%src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TCOLEXPANDSUB_fp32_6_128_1_128(%src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c6    = arith.constant 6    : index
@@ -74,7 +74,7 @@ module {
   }
 
   // Case 2: fp32_18_32_1_32 (float32, src0=(18,32), src1=(1,32), dst=(18,32))
-  func.func @TCOLEXPANDSUB_fp32_18_32_1_32(%src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TCOLEXPANDSUB_fp32_18_32_1_32(%src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c18   = arith.constant 18   : index
@@ -136,7 +136,7 @@ module {
   }
 
   // Case 3: fp16_10_256_1_256 (float16, src0=(10,256), src1=(1,256), dst=(10,256))
-  func.func @TCOLEXPANDSUB_fp16_10_256_1_256(%src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) {
+  func.func @TCOLEXPANDSUB_fp16_10_256_1_256(%src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) attributes {pto.aicore} {
     %c0     = arith.constant 0     : index
     %c1     = arith.constant 1     : index
     %c10    = arith.constant 10    : index
@@ -198,7 +198,7 @@ module {
   }
 
   // Case 4: fp16_12_64_1_64 (float16, src0=(12,64), src1=(1,64), dst=(12,64))
-  func.func @TCOLEXPANDSUB_fp16_12_64_1_64(%src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) {
+  func.func @TCOLEXPANDSUB_fp16_12_64_1_64(%src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c12   = arith.constant 12   : index
@@ -260,7 +260,7 @@ module {
   }
 
   // Case 5: int32_16_32_1_32 (int32, src0=(16,32), src1=(1,32), dst=(16,32))
-  func.func @TCOLEXPANDSUB_int32_16_32_1_32(%src0_ptr: !pto.ptr<i32>, %src1_ptr: !pto.ptr<i32>, %dst_ptr: !pto.ptr<i32>) {
+  func.func @TCOLEXPANDSUB_int32_16_32_1_32(%src0_ptr: !pto.ptr<i32>, %src1_ptr: !pto.ptr<i32>, %dst_ptr: !pto.ptr<i32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c16   = arith.constant 16   : index
@@ -322,7 +322,7 @@ module {
   }
 
   // Case 6: int16_16_64_1_64 (int16, src0=(16,64), src1=(1,64), dst=(16,64))
-  func.func @TCOLEXPANDSUB_int16_16_64_1_64(%src0_ptr: !pto.ptr<i16>, %src1_ptr: !pto.ptr<i16>, %dst_ptr: !pto.ptr<i16>) {
+  func.func @TCOLEXPANDSUB_int16_16_64_1_64(%src0_ptr: !pto.ptr<i16>, %src1_ptr: !pto.ptr<i16>, %dst_ptr: !pto.ptr<i16>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c16   = arith.constant 16   : index

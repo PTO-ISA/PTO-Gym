@@ -1,8 +1,8 @@
 // Auto-generated trowargmax ST testcases
 
-module {
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
 
-  func.func @TROWARGMAX_uint32_float_8x1_8x8_8x8(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<ui32>) {
+  func.func @TROWARGMAX_uint32_float_8x1_8x8_8x8(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<ui32>) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c8_r = arith.constant 8 : index
@@ -44,7 +44,7 @@ module {
     return
   }
 
-  func.func @TROWARGMAX_uint32_float_1024x1_1024x8_1024x8(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<ui32>) {
+  func.func @TROWARGMAX_uint32_float_1024x1_1024x8_1024x8(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<ui32>) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c1024_r = arith.constant 1024 : index
@@ -86,7 +86,7 @@ module {
     return
   }
 
-  func.func @TROWARGMAX_uint32_float_16x1_13x16_13x13(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<ui32>) {
+  func.func @TROWARGMAX_uint32_float_16x1_13x16_13x13(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<ui32>) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c13_r = arith.constant 13 : index
@@ -128,7 +128,7 @@ module {
     return
   }
 
-  func.func @TROWARGMAX_uint32_float_1024x1_1023x24_1023x17(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<ui32>) {
+  func.func @TROWARGMAX_uint32_float_1024x1_1023x24_1023x17(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<ui32>) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c1023_r = arith.constant 1023 : index
@@ -170,7 +170,7 @@ module {
     return
   }
 
-  func.func @TROWARGMAX_uint32_float_8x1_8x64_8x64(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<ui32>) {
+  func.func @TROWARGMAX_uint32_float_8x1_8x64_8x64(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<ui32>) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c8_r = arith.constant 8 : index
@@ -212,7 +212,7 @@ module {
     return
   }
 
-  func.func @TROWARGMAX_uint32_float_264x1_260x64_260x64(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<ui32>) {
+  func.func @TROWARGMAX_uint32_float_264x1_260x64_260x64(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<ui32>) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c260_r = arith.constant 260 : index
@@ -254,7 +254,7 @@ module {
     return
   }
 
-  func.func @TROWARGMAX_uint32_float_8x1_1x128_1x128(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<ui32>) {
+  func.func @TROWARGMAX_uint32_float_8x1_1x128_1x128(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<ui32>) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c1_r = arith.constant 1 : index
@@ -296,7 +296,7 @@ module {
     return
   }
 
-  func.func @TROWARGMAX_uint32_float_64x1_32x128_32x128(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<ui32>) {
+  func.func @TROWARGMAX_uint32_float_64x1_32x128_32x128(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<ui32>) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c32_r = arith.constant 32 : index
@@ -338,7 +338,7 @@ module {
     return
   }
 
-  func.func @TROWARGMAX_uint32_float_8x1_3x4096_3x4095(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<ui32>) {
+  func.func @TROWARGMAX_uint32_float_8x1_3x4096_3x4095(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<ui32>) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c3_r = arith.constant 3 : index
@@ -380,7 +380,7 @@ module {
     return
   }
 
-  func.func @TROWARGMAX_uint32_float_8x1_2x16384_2x16381(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<ui32>) {
+  func.func @TROWARGMAX_uint32_float_8x1_2x16384_2x16381(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<ui32>) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c2_r = arith.constant 2 : index
@@ -422,7 +422,7 @@ module {
     return
   }
 
-  func.func @TROWARGMAX_uint32_half_16x1_2x16_2x16(%src_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<ui32>) {
+  func.func @TROWARGMAX_uint32_half_16x1_2x16_2x16(%src_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<ui32>) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c2_r = arith.constant 2 : index
@@ -464,7 +464,7 @@ module {
     return
   }
 
-  func.func @TROWARGMAX_uint32_half_16x1_13x16_13x13(%src_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<ui32>) {
+  func.func @TROWARGMAX_uint32_half_16x1_13x16_13x13(%src_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<ui32>) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c13_r = arith.constant 13 : index
@@ -506,7 +506,7 @@ module {
     return
   }
 
-  func.func @TROWARGMAX_uint32_half_272x1_260x64_260x64(%src_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<ui32>) {
+  func.func @TROWARGMAX_uint32_half_272x1_260x64_260x64(%src_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<ui32>) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c260_r = arith.constant 260 : index
@@ -548,7 +548,7 @@ module {
     return
   }
 
-  func.func @TROWARGMAX_uint32_half_16x1_3x8192_3x8191(%src_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<ui32>) {
+  func.func @TROWARGMAX_uint32_half_16x1_3x8192_3x8191(%src_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<ui32>) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c3_r = arith.constant 3 : index
@@ -590,7 +590,7 @@ module {
     return
   }
 
-  func.func @TROWARGMAX_uint32_half_16x1_1x16384_1x16381(%src_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<ui32>) {
+  func.func @TROWARGMAX_uint32_half_16x1_1x16384_1x16381(%src_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<ui32>) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c1_r = arith.constant 1 : index
@@ -632,7 +632,7 @@ module {
     return
   }
 
-  func.func @TROWARGMAX_uint32_half_16x1_1x32768_1x32761(%src_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<ui32>) {
+  func.func @TROWARGMAX_uint32_half_16x1_1x32768_1x32761(%src_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<ui32>) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c1_r = arith.constant 1 : index
@@ -674,7 +674,7 @@ module {
     return
   }
 
-  func.func @TROWARGMAX_int32_float_16x1_13x16_13x13(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<i32>) {
+  func.func @TROWARGMAX_int32_float_16x1_13x16_13x13(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<i32>) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c13_r = arith.constant 13 : index
@@ -716,7 +716,7 @@ module {
     return
   }
 
-  func.func @TROWARGMAX_int32_half_16x1_13x16_13x13(%src_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<i32>) {
+  func.func @TROWARGMAX_int32_half_16x1_13x16_13x13(%src_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<i32>) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c13_r = arith.constant 13 : index
@@ -758,7 +758,7 @@ module {
     return
   }
 
-  func.func @TROWARGMAX_uint32_float_3x8_3x3480_3x3473(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<ui32>) {
+  func.func @TROWARGMAX_uint32_float_3x8_3x3480_3x3473(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<ui32>) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c3_r = arith.constant 3 : index
@@ -800,7 +800,7 @@ module {
     return
   }
 
-  func.func @TROWARGMAX_uint32_float_260x8_260x64_260x64(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<ui32>) {
+  func.func @TROWARGMAX_uint32_float_260x8_260x64_260x64(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<ui32>) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c260_r = arith.constant 260 : index
@@ -842,7 +842,7 @@ module {
     return
   }
 
-  func.func @TROWARGMAX_uint32_float_1023x8_1023x24_1023x17(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<ui32>) {
+  func.func @TROWARGMAX_uint32_float_1023x8_1023x24_1023x17(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<ui32>) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c1023_r = arith.constant 1023 : index
@@ -884,7 +884,7 @@ module {
     return
   }
 
-  func.func @TROWARGMAX_uint32_half_3x16_3x3488_3x3473(%src_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<ui32>) {
+  func.func @TROWARGMAX_uint32_half_3x16_3x3488_3x3473(%src_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<ui32>) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c3_r = arith.constant 3 : index
@@ -926,7 +926,7 @@ module {
     return
   }
 
-  func.func @TROWARGMAX_uint32_half_260x16_260x64_260x64(%src_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<ui32>) {
+  func.func @TROWARGMAX_uint32_half_260x16_260x64_260x64(%src_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<ui32>) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c260_r = arith.constant 260 : index
@@ -968,7 +968,7 @@ module {
     return
   }
 
-  func.func @TROWARGMAX_uint32_half_1023x16_1023x32_1023x17(%src_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<ui32>) {
+  func.func @TROWARGMAX_uint32_half_1023x16_1023x32_1023x17(%src_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<ui32>) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c1023_r = arith.constant 1023 : index

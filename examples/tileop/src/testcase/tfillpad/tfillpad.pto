@@ -8,7 +8,7 @@
 
 // TileLang ST kernels for pto.tfillpad (non-inplace mode).
 // Matches C++ reference test cases: Cases 1, 2, 3, 4, 6, 7, 10, 11, 12, 13
-// Compiled by ptoas --enable-insert-sync --enable-tile-op-expand --vpto-emit-hivm-llvm
+// Compiled by ptoas --enable-insert-sync --enable-tile-op-expand
 //
 // PadValue encoding: 0=Null, 1=Zero, 2=Max, 3=Min
 // Cases 12/13 use Custom(-1.0f) which cannot be encoded in PTO IR,
@@ -16,10 +16,10 @@
 //
 // C++ template params: shape3=src_rows, shape4=src_cols, kTRows_=dst_rows, kTCols_=dst_cols
 
-module {
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
   // ========== Case 1: float, src=128x127, dst=128x128, LoadPad=Max, FillPad=Max ==========
 
-  func.func @TFILLPAD_f32_128x128_pad_128x127(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TFILLPAD_f32_128x128_pad_128x127(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0     = arith.constant 0     : index
     %c1     = arith.constant 1     : index
     %c127   = arith.constant 127   : index
@@ -27,7 +27,7 @@ module {
     %c16256 = arith.constant 16256 : index  // 128*127 (src size)
     %c16384 = arith.constant 16384 : index  // 128*128 (dst size)
 
-    // Src tensor_view: 128x127 (matching C++ shape4=127)
+    // Src tensor_view: 128x127
     %src_view = pto.make_tensor_view %src_ptr,
       shape = [%c1, %c1, %c1, %c128, %c127],
       strides = [%c16256, %c16256, %c16256, %c127, %c1]
@@ -47,8 +47,7 @@ module {
       sizes = [%c1, %c1, %c1, %c128, %c128]
       : !pto.tensor_view<1x1x1x128x128xf32> -> !pto.partition_tensor_view<1x1x1x128x128xf32>
 
-    // Src tile: LoadPadVal=Max (pad=2), src physical=128x127, v_col=127
-    // C++: shape4_aligned = align_to_32B(127, float) = 128, so tile cols=128 for alignment
+    // Src tile: LoadPadVal=Max (pad=2), src physical=128x128, v_col=127
     %src = pto.alloc_tile
       : !pto.tile_buf<vec, 128x128xf32, valid=128x127, pad=2>
     // Dst tile: FillPadVal=Max (pad=2), dst physical=128x128, v_col=128 (full output)
@@ -68,7 +67,7 @@ module {
 
   // ========== Case 2: float, src=128x127, dst=128x160, LoadPad=Max, FillPad=Max ==========
 
-  func.func @TFILLPAD_f32_128x160_pad_128x127(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TFILLPAD_f32_128x160_pad_128x127(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0     = arith.constant 0     : index
     %c1     = arith.constant 1     : index
     %c127   = arith.constant 127   : index
@@ -97,7 +96,7 @@ module {
       sizes = [%c1, %c1, %c1, %c128, %c160]
       : !pto.tensor_view<1x1x1x128x160xf32> -> !pto.partition_tensor_view<1x1x1x128x160xf32>
 
-    // Src tile: LoadPadVal=Max (pad=2), shape4_aligned=128, v_col=127
+    // Src tile: LoadPadVal=Max (pad=2), src physical=128x160, v_col=127
     %src = pto.alloc_tile
       : !pto.tile_buf<vec, 128x160xf32, valid=128x127, pad=2>
     // Dst tile: FillPadVal=Max (pad=2), dst physical=128x160, v_col=160 (full output)
@@ -117,7 +116,7 @@ module {
 
   // ========== Case 3: float, src=128x127, dst=128x160, LoadPad=Min, FillPad=Max ==========
 
-  func.func @TFILLPAD_f32_128x160_pad_128x127_v2(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TFILLPAD_f32_128x160_pad_128x127_v2(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0     = arith.constant 0     : index
     %c1     = arith.constant 1     : index
     %c127   = arith.constant 127   : index
@@ -146,7 +145,7 @@ module {
       sizes = [%c1, %c1, %c1, %c128, %c160]
       : !pto.tensor_view<1x1x1x128x160xf32> -> !pto.partition_tensor_view<1x1x1x128x160xf32>
 
-    // Src tile: LoadPadVal=Min (pad=3), shape4_aligned=128, v_col=127
+    // Src tile: LoadPadVal=Min (pad=3), src physical=128x160, v_col=127
     %src = pto.alloc_tile
       : !pto.tile_buf<vec, 128x160xf32, valid=128x127, pad=3>
     // Dst tile: FillPadVal=Max (pad=2), dst physical=128x160, v_col=160 (full output)
@@ -166,7 +165,7 @@ module {
 
   // ========== Case 4: float, src=260x7, dst=260x16, LoadPad=Min, FillPad=Max ==========
 
-  func.func @TFILLPAD_f32_260x16_pad_260x7(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TFILLPAD_f32_260x16_pad_260x7(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0     = arith.constant 0     : index
     %c1     = arith.constant 1     : index
     %c7     = arith.constant 7     : index
@@ -195,7 +194,7 @@ module {
       sizes = [%c1, %c1, %c1, %c260, %c16]
       : !pto.tensor_view<1x1x1x260x16xf32> -> !pto.partition_tensor_view<1x1x1x260x16xf32>
 
-    // Src tile: LoadPadVal=Min (pad=3), shape4_aligned=8 (align 7 to 8 for f32), v_col=7
+    // Src tile: LoadPadVal=Min (pad=3), src physical=260x16, v_col=7
     %src = pto.alloc_tile
       : !pto.tile_buf<vec, 260x16xf32, valid=260x7, pad=3>
     // Dst tile: FillPadVal=Max (pad=2), dst physical=260x16, v_col=16 (full output)
@@ -215,7 +214,7 @@ module {
 
   // ========== Case 6: uint16, src=260x7, dst=260x32, LoadPad=Min, FillPad=Max ==========
 
-  func.func @TFILLPAD_u16_260x32_pad_260x7(%src_ptr: !pto.ptr<ui16>, %dst_ptr: !pto.ptr<ui16>) {
+  func.func @TFILLPAD_u16_260x32_pad_260x7(%src_ptr: !pto.ptr<ui16>, %dst_ptr: !pto.ptr<ui16>) attributes {pto.aicore} {
     %c0     = arith.constant 0     : index
     %c1     = arith.constant 1     : index
     %c7     = arith.constant 7     : index
@@ -244,7 +243,7 @@ module {
       sizes = [%c1, %c1, %c1, %c260, %c32]
       : !pto.tensor_view<1x1x1x260x32xui16> -> !pto.partition_tensor_view<1x1x1x260x32xui16>
 
-    // Src tile: LoadPadVal=Min (pad=3), shape4_aligned=16, v_col=7
+    // Src tile: LoadPadVal=Min (pad=3), src physical=260x32, v_col=7
     %src = pto.alloc_tile
       : !pto.tile_buf<vec, 260x32xui16, valid=260x7, pad=3>
     // Dst tile: FillPadVal=Max (pad=2), dst physical=260x32, v_col=32 (full output)
@@ -264,7 +263,7 @@ module {
 
   // ========== Case 7: int8, src=260x7, dst=260x64, LoadPad=Min, FillPad=Max ==========
 
-  func.func @TFILLPAD_s8_260x64_pad_260x7(%src_ptr: !pto.ptr<i8>, %dst_ptr: !pto.ptr<i8>) {
+  func.func @TFILLPAD_s8_260x64_pad_260x7(%src_ptr: !pto.ptr<i8>, %dst_ptr: !pto.ptr<i8>) attributes {pto.aicore} {
     %c0     = arith.constant 0     : index
     %c1     = arith.constant 1     : index
     %c7     = arith.constant 7     : index
@@ -293,7 +292,7 @@ module {
       sizes = [%c1, %c1, %c1, %c260, %c64]
       : !pto.tensor_view<1x1x1x260x64xi8> -> !pto.partition_tensor_view<1x1x1x260x64xi8>
 
-    // Src tile: LoadPadVal=Min (pad=3), shape4_aligned=32 (align 7 to 32 for i8), v_col=7
+    // Src tile: LoadPadVal=Min (pad=3), src physical=260x64, v_col=7
     %src = pto.alloc_tile
       : !pto.tile_buf<vec, 260x64xi8, valid=260x7, pad=3>
     // Dst tile: FillPadVal=Max (pad=2), dst physical=260x64, v_col=64 (full output)
@@ -313,7 +312,7 @@ module {
 
   // ========== Case 10: int16, src=260x7, dst=260x32, LoadPad=Min, FillPad=Min ==========
 
-  func.func @TFILLPAD_s16_260x32_pad_260x7(%src_ptr: !pto.ptr<i16>, %dst_ptr: !pto.ptr<i16>) {
+  func.func @TFILLPAD_s16_260x32_pad_260x7(%src_ptr: !pto.ptr<i16>, %dst_ptr: !pto.ptr<i16>) attributes {pto.aicore} {
     %c0     = arith.constant 0     : index
     %c1     = arith.constant 1     : index
     %c7     = arith.constant 7     : index
@@ -342,7 +341,7 @@ module {
       sizes = [%c1, %c1, %c1, %c260, %c32]
       : !pto.tensor_view<1x1x1x260x32xi16> -> !pto.partition_tensor_view<1x1x1x260x32xi16>
 
-    // Src tile: LoadPadVal=Min (pad=3), shape4_aligned=16, v_col=7
+    // Src tile: LoadPadVal=Min (pad=3), src physical=260x32, v_col=7
     %src = pto.alloc_tile
       : !pto.tile_buf<vec, 260x32xi16, valid=260x7, pad=3>
     // Dst tile: FillPadVal=Min (pad=3), dst physical=260x32, v_col=32 (full output)
@@ -362,7 +361,7 @@ module {
 
   // ========== Case 11: int32, src=260x7, dst=260x32, LoadPad=Min, FillPad=Min ==========
 
-  func.func @TFILLPAD_s32_260x32_pad_260x7(%src_ptr: !pto.ptr<i32>, %dst_ptr: !pto.ptr<i32>) {
+  func.func @TFILLPAD_s32_260x32_pad_260x7(%src_ptr: !pto.ptr<i32>, %dst_ptr: !pto.ptr<i32>) attributes {pto.aicore} {
     %c0     = arith.constant 0     : index
     %c1     = arith.constant 1     : index
     %c7     = arith.constant 7     : index
@@ -391,7 +390,7 @@ module {
       sizes = [%c1, %c1, %c1, %c260, %c32]
       : !pto.tensor_view<1x1x1x260x32xi32> -> !pto.partition_tensor_view<1x1x1x260x32xi32>
 
-    // Src tile: LoadPadVal=Min (pad=3), shape4_aligned=8 (align 7 to 8 for i32), v_col=7
+    // Src tile: LoadPadVal=Min (pad=3), src physical=260x32, v_col=7
     %src = pto.alloc_tile
       : !pto.tile_buf<vec, 260x32xi32, valid=260x7, pad=3>
     // Dst tile: FillPadVal=Min (pad=3), dst physical=260x32, v_col=32 (full output)
@@ -413,7 +412,7 @@ module {
   // PTO IR cannot encode Custom PadValue, template uses shape-based detection:
   // src.valid_cols < dst.valid_cols => fill expansion region with -1.0f
 
-  func.func @TFILLPAD_f32_128x128_pad_128x64_neg1(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TFILLPAD_f32_128x128_pad_128x64_neg1(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0     = arith.constant 0     : index
     %c1     = arith.constant 1     : index
     %c64    = arith.constant 64    : index
@@ -421,7 +420,7 @@ module {
     %c8192  = arith.constant 8192  : index  // 128*64 (src size)
     %c16384 = arith.constant 16384 : index  // 128*128 (dst size)
 
-    // Src tensor_view: 128x64 (C++ shape4=64)
+    // Src tensor_view: 128x64
     %src_view = pto.make_tensor_view %src_ptr,
       shape = [%c1, %c1, %c1, %c128, %c64],
       strides = [%c8192, %c8192, %c8192, %c64, %c1]
@@ -442,7 +441,7 @@ module {
       sizes = [%c1, %c1, %c1, %c128, %c128]
       : !pto.tensor_view<1x1x1x128x128xf32> -> !pto.partition_tensor_view<1x1x1x128x128xf32>
 
-    // Src tile: LoadPadVal=Null (pad=0), shape4_aligned=64 (already aligned), v_col=64
+    // Src tile: LoadPadVal=Null (pad=0), src physical=128x128, v_col=64
     %src = pto.alloc_tile
       : !pto.tile_buf<vec, 128x128xf32, valid=128x64>
     // Dst tile: FillPadVal=Custom(-1.0f) - detected by template via src.v_col < dst.v_col
@@ -464,7 +463,7 @@ module {
   // ========== Case 13: float, src=128x127, dst=128x160, LoadPad=Custom(-1.0f), FillPad=Custom(-1.0f) ==========
   // PTO IR cannot encode Custom PadValue, template uses shape-based detection
 
-  func.func @TFILLPAD_f32_128x160_pad_128x127_neg1(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TFILLPAD_f32_128x160_pad_128x127_neg1(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0     = arith.constant 0     : index
     %c1     = arith.constant 1     : index
     %c127   = arith.constant 127   : index
@@ -494,7 +493,7 @@ module {
       sizes = [%c1, %c1, %c1, %c128, %c160]
       : !pto.tensor_view<1x1x1x128x160xf32> -> !pto.partition_tensor_view<1x1x1x128x160xf32>
 
-    // Src tile: LoadPadVal=Custom(-1.0f), shape4_aligned=128, v_col=127
+    // Src tile: LoadPadVal=Custom(-1.0f), src physical=128x160, v_col=127
     // Use pad=0, template will detect and fill src padding region with -1.0f
     %src = pto.alloc_tile
       : !pto.tile_buf<vec, 128x160xf32, valid=128x127>

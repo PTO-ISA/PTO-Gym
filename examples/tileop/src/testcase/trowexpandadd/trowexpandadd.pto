@@ -11,9 +11,9 @@
 // src1 physical cols = 32/sizeof(dtype) for NPU alignment
 // src1 v_col = src1Col from template (1 or 8)
 
-module {
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
   // f32_16x32: dstRow=16, dstCol=32, src1Row=16, src1Col=1
-  func.func @TROWEXPANDADD_f32_16x32(%src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TROWEXPANDADD_f32_16x32(%src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c8 = arith.constant 8 : index
@@ -70,7 +70,7 @@ module {
   }
 
   // f32_56x128: dstRow=56, dstCol=128, src1Row=56, src1Col=1
-  func.func @TROWEXPANDADD_f32_56x128(%src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TROWEXPANDADD_f32_56x128(%src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c8 = arith.constant 8 : index
@@ -129,7 +129,7 @@ module {
   // Note: launchTRowExpandAdd2 with src1Col=8 has different semantics - TBD
 
   // f16_48x64: dstRow=48, dstCol=64, src1Row=48, src1Col=1
-  func.func @TROWEXPANDADD_f16_48x64(%src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) {
+  func.func @TROWEXPANDADD_f16_48x64(%src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c16 = arith.constant 16 : index
@@ -186,7 +186,7 @@ module {
   }
 
   // f16_16x128: dstRow=16, dstCol=128, src1Row=16, src1Col=1
-  func.func @TROWEXPANDADD_f16_16x128(%src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) {
+  func.func @TROWEXPANDADD_f16_16x128(%src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c16 = arith.constant 16 : index
@@ -242,7 +242,7 @@ module {
   }
 
   // f16_32x64_noeq: dstRow=32, dstCol=64, src1Row=32, src1Col=1 (src0eqdst=false)
-  func.func @TROWEXPANDADD_f16_32x64(%src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) {
+  func.func @TROWEXPANDADD_f16_32x64(%src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c16 = arith.constant 16 : index
@@ -299,7 +299,7 @@ module {
   }
 
   // i32_16x32: dstRow=16, dstCol=32, src1Row=16, src1Col=1
-  func.func @TROWEXPANDADD_i32_16x32(%src0_ptr: !pto.ptr<i32>, %src1_ptr: !pto.ptr<i32>, %dst_ptr: !pto.ptr<i32>) {
+  func.func @TROWEXPANDADD_i32_16x32(%src0_ptr: !pto.ptr<i32>, %src1_ptr: !pto.ptr<i32>, %dst_ptr: !pto.ptr<i32>) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c8 = arith.constant 8 : index
@@ -356,7 +356,7 @@ module {
   }
 
   // i16_16x64: dstRow=16, dstCol=64, src1Row=16, src1Col=1
-  func.func @TROWEXPANDADD_i16_16x64(%src0_ptr: !pto.ptr<i16>, %src1_ptr: !pto.ptr<i16>, %dst_ptr: !pto.ptr<i16>) {
+  func.func @TROWEXPANDADD_i16_16x64(%src0_ptr: !pto.ptr<i16>, %src1_ptr: !pto.ptr<i16>, %dst_ptr: !pto.ptr<i16>) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c16 = arith.constant 16 : index

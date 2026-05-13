@@ -10,9 +10,9 @@
 // Matches PTO-ISA testcase parameters.
 // Key: tile_buf cols = full tensor width, v_col = valid portion
 
-module {
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
   // Case 1: half_1_16_512_512 (fp16, valid_col=512, cols=512)
-  func.func @TCOLEXPAND_half_1_16_512_512(%src_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) {
+  func.func @TCOLEXPAND_half_1_16_512_512(%src_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c16   = arith.constant 16   : index
@@ -57,7 +57,7 @@ module {
   }
 
   // Case 2: int8_2_32_256_255 (int8, cols=256, valid_col=255)
-  func.func @TCOLEXPAND_int8_2_32_256_255(%src_ptr: !pto.ptr<i8>, %dst_ptr: !pto.ptr<i8>) {
+  func.func @TCOLEXPAND_int8_2_32_256_255(%src_ptr: !pto.ptr<i8>, %dst_ptr: !pto.ptr<i8>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c2    = arith.constant 2    : index
@@ -105,7 +105,7 @@ module {
   }
 
   // Case 3: float_1_8_128_63 (float32, cols=128, valid_col=63)
-  func.func @TCOLEXPAND_float_1_8_128_63(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TCOLEXPAND_float_1_8_128_63(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c8    = arith.constant 8    : index
@@ -151,7 +151,7 @@ module {
   }
 
   // Case 4: half_1_33_512_512 (fp16, cols=512, valid_col=512)
-  func.func @TCOLEXPAND_half_1_33_512_512(%src_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) {
+  func.func @TCOLEXPAND_half_1_33_512_512(%src_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) attributes {pto.aicore} {
     %c0     = arith.constant 0     : index
     %c1     = arith.constant 1     : index
     %c33    = arith.constant 33    : index
@@ -196,7 +196,7 @@ module {
   }
 
   // Case 5: int8_2_17_256_44 (int8, cols=256, valid_col=44)
-  func.func @TCOLEXPAND_int8_2_17_256_44(%src_ptr: !pto.ptr<i8>, %dst_ptr: !pto.ptr<i8>) {
+  func.func @TCOLEXPAND_int8_2_17_256_44(%src_ptr: !pto.ptr<i8>, %dst_ptr: !pto.ptr<i8>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c2    = arith.constant 2    : index
@@ -244,7 +244,7 @@ module {
   }
 
   // Case 6: float_1_54_64_63 (float32, cols=64, valid_col=63)
-  func.func @TCOLEXPAND_float_1_54_64_63(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TCOLEXPAND_float_1_54_64_63(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c54   = arith.constant 54   : index

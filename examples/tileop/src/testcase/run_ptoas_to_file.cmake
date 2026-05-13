@@ -6,12 +6,12 @@
 # INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 # See LICENSE in the root of the software repository for the full text of the License.
 
-if(NOT DEFINED PTOAS_BIN OR NOT DEFINED PTO_SRC OR NOT DEFINED KERNEL_LL)
-    message(FATAL_ERROR "PTOAS_BIN, PTO_SRC, and KERNEL_LL must be provided")
+if(NOT DEFINED PTOAS_BIN OR NOT DEFINED PTO_SRC OR NOT DEFINED KERNEL_FATOBJ)
+    message(FATAL_ERROR "PTOAS_BIN, PTO_SRC, and KERNEL_FATOBJ must be provided")
 endif()
 
-get_filename_component(KERNEL_LL_DIR "${KERNEL_LL}" DIRECTORY)
-file(MAKE_DIRECTORY "${KERNEL_LL_DIR}")
+get_filename_component(KERNEL_FATOBJ_DIR "${KERNEL_FATOBJ}" DIRECTORY)
+file(MAKE_DIRECTORY "${KERNEL_FATOBJ_DIR}")
 
 if(NOT DEFINED PTOAS_ENABLE_INSERT_SYNC)
     set(PTOAS_ENABLE_INSERT_SYNC ON)
@@ -26,47 +26,42 @@ if(DEFINED PTOAS_PTO_LEVEL AND NOT PTOAS_PTO_LEVEL STREQUAL "")
     list(APPEND PTOAS_COMMAND "--pto-level=${PTOAS_PTO_LEVEL}")
 endif()
 
-list(APPEND PTOAS_COMMAND --pto-backend=vpto)
-
 if(PTOAS_ENABLE_INSERT_SYNC)
     list(APPEND PTOAS_COMMAND --enable-insert-sync)
 endif()
 
 list(APPEND PTOAS_COMMAND
     --enable-tile-op-expand
-    --vpto-emit-hivm-llvm
     "${PTO_SRC}"
     -o
-    -
+    "${KERNEL_FATOBJ}"
 )
 
 execute_process(
     COMMAND ${PTOAS_COMMAND}
-    OUTPUT_FILE "${KERNEL_LL}"
     ERROR_VARIABLE PTOAS_STDERR
     RESULT_VARIABLE PTOAS_RESULT
 )
 
 if(NOT PTOAS_RESULT EQUAL 0)
-    file(REMOVE "${KERNEL_LL}")
     string(STRIP "${PTOAS_STDERR}" PTOAS_STDERR)
     if(PTOAS_STDERR)
-        message(FATAL_ERROR "ptoas failed while generating ${KERNEL_LL}:\n${PTOAS_STDERR}")
+        message(FATAL_ERROR "ptoas failed while generating ${KERNEL_FATOBJ}:\n${PTOAS_STDERR}")
     endif()
-    message(FATAL_ERROR "ptoas failed while generating ${KERNEL_LL}")
+    message(FATAL_ERROR "ptoas failed while generating ${KERNEL_FATOBJ}")
 endif()
 
-if(NOT EXISTS "${KERNEL_LL}")
-    message(FATAL_ERROR "ptoas completed without producing ${KERNEL_LL}")
+if(NOT EXISTS "${KERNEL_FATOBJ}")
+    message(FATAL_ERROR "ptoas completed without producing ${KERNEL_FATOBJ}")
 endif()
 
-file(SIZE "${KERNEL_LL}" KERNEL_LL_SIZE)
-if(KERNEL_LL_SIZE EQUAL 0)
-    file(REMOVE "${KERNEL_LL}")
+file(SIZE "${KERNEL_FATOBJ}" KERNEL_FATOBJ_SIZE)
+if(KERNEL_FATOBJ_SIZE EQUAL 0)
+    file(REMOVE "${KERNEL_FATOBJ}")
     string(STRIP "${PTOAS_STDERR}" PTOAS_STDERR)
     if(PTOAS_STDERR)
         message(FATAL_ERROR
-            "ptoas produced empty LLVM IR for ${PTO_SRC}:\n${PTOAS_STDERR}")
+            "ptoas produced empty fatobj for ${PTO_SRC}:\n${PTOAS_STDERR}")
     endif()
-    message(FATAL_ERROR "ptoas produced empty LLVM IR for ${PTO_SRC}")
+    message(FATAL_ERROR "ptoas produced empty fatobj for ${PTO_SRC}")
 endif()

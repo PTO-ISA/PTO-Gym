@@ -4,9 +4,9 @@
 // target_ops: pto.vcvt
 // scenarios: u32-to-u8, sat, part-p0123
 // -----------------------------------------------------------------------------
-module attributes {pto.target_arch = "a5"} {
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
   func.func @vcvt_u32_to_u8_part_p0123_kernel(%arg0: !pto.ptr<ui32, gm>,
-                                              %arg1: !pto.ptr<ui8, gm>) {
+                                              %arg1: !pto.ptr<ui8, gm>) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c64 = arith.constant 64 : index
     %c128 = arith.constant 128 : index

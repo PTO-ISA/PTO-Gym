@@ -8,13 +8,13 @@
 
 // TileLang ST kernels for pto.tors: tload(src) + tors(src, scalar)->dst + tstore(dst).
 // Multiple cases with different shapes/dtypes in a single module.
-// Compiled by ptoas --enable-insert-sync --enable-tile-op-expand --vpto-emit-hivm-llvm
-// to produce LLVM IR.
+// Compiled by ptoas --enable-insert-sync --enable-tile-op-expand
+// to produce a fatobj object.
 
-module {
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
 
   // Case 0: i32 32x64 (2048 elements)
-  func.func @TORS_i32_32x64(%src_ptr: !pto.ptr<i32>, %dst_ptr: !pto.ptr<i32>, %scalar: i32) {
+  func.func @TORS_i32_32x64(%src_ptr: !pto.ptr<i32>, %dst_ptr: !pto.ptr<i32>, %scalar: i32) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c32   = arith.constant 32   : index
@@ -54,7 +54,7 @@ module {
   }
 
   // Case 1: i16 63x64 (4032 elements)
-  func.func @TORS_i16_63x64(%src_ptr: !pto.ptr<i16>, %dst_ptr: !pto.ptr<i16>, %scalar: i16) {
+  func.func @TORS_i16_63x64(%src_ptr: !pto.ptr<i16>, %dst_ptr: !pto.ptr<i16>, %scalar: i16) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c63   = arith.constant 63   : index
@@ -94,7 +94,7 @@ module {
   }
 
   // Case 2: i32 31x128 (3968 elements)
-  func.func @TORS_i32_31x128(%src_ptr: !pto.ptr<i32>, %dst_ptr: !pto.ptr<i32>, %scalar: i32) {
+  func.func @TORS_i32_31x128(%src_ptr: !pto.ptr<i32>, %dst_ptr: !pto.ptr<i32>, %scalar: i32) attributes {pto.aicore} {
     %c0    = arith.constant 0     : index
     %c1    = arith.constant 1     : index
     %c31   = arith.constant 31    : index
@@ -134,7 +134,7 @@ module {
   }
 
   // Case 3: i16 15x192 (2880 elements)
-  func.func @TORS_i16_15x192(%src_ptr: !pto.ptr<i16>, %dst_ptr: !pto.ptr<i16>, %scalar: i16) {
+  func.func @TORS_i16_15x192(%src_ptr: !pto.ptr<i16>, %dst_ptr: !pto.ptr<i16>, %scalar: i16) attributes {pto.aicore} {
     %c0    = arith.constant 0     : index
     %c1    = arith.constant 1     : index
     %c15   = arith.constant 15    : index

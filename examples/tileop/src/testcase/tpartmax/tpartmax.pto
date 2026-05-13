@@ -8,12 +8,12 @@
 
 // TileLang ST kernels for pto.tpartmax: partial elementwise max with valid region handling.
 // Multiple cases with different valid_shape combinations in a single module.
-// Compiled by ptoas --enable-insert-sync --enable-tile-op-expand --vpto-emit-hivm-llvm
-// to produce LLVM IR.
+// Compiled by ptoas --enable-insert-sync --enable-tile-op-expand
+// to produce a fatobj object.
 
-module {
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
   // Case: f32_64x64_full (src0 valid 64x64, src1 valid 64x64, dst valid 64x64)
-  func.func @TPARTMAX_f32_64x64_full(%a_ptr: !pto.ptr<f32>, %b_ptr: !pto.ptr<f32>, %c_ptr: !pto.ptr<f32>) {
+  func.func @TPARTMAX_f32_64x64_full(%a_ptr: !pto.ptr<f32>, %b_ptr: !pto.ptr<f32>, %c_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c64    = arith.constant 64    : index
@@ -70,7 +70,7 @@ module {
   }
 
   // Case: f32_2x24_src1_col_less (src0 valid 2x24, src1 valid 2x8, dst valid 2x24)
-  func.func @TPARTMAX_f32_2x24_src1_col_less(%a_ptr: !pto.ptr<f32>, %b_ptr: !pto.ptr<f32>, %c_ptr: !pto.ptr<f32>) {
+  func.func @TPARTMAX_f32_2x24_src1_col_less(%a_ptr: !pto.ptr<f32>, %b_ptr: !pto.ptr<f32>, %c_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c2    = arith.constant 2    : index
@@ -128,7 +128,7 @@ module {
   }
 
   // Case: f32_128x64_src1_row_less (src0 valid 128x64, src1 valid 96x64, dst valid 128x64)
-  func.func @TPARTMAX_f32_128x64_src1_row_less(%a_ptr: !pto.ptr<f32>, %b_ptr: !pto.ptr<f32>, %c_ptr: !pto.ptr<f32>) {
+  func.func @TPARTMAX_f32_128x64_src1_row_less(%a_ptr: !pto.ptr<f32>, %b_ptr: !pto.ptr<f32>, %c_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c128    = arith.constant 128    : index
@@ -186,7 +186,7 @@ module {
   }
 
   // Case: f32_95x95_full (src0 valid 95x95, src1 valid 95x95, dst valid 95x95)
-  func.func @TPARTMAX_f32_95x95_full(%a_ptr: !pto.ptr<f32>, %b_ptr: !pto.ptr<f32>, %c_ptr: !pto.ptr<f32>) {
+  func.func @TPARTMAX_f32_95x95_full(%a_ptr: !pto.ptr<f32>, %b_ptr: !pto.ptr<f32>, %c_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c95    = arith.constant 95    : index
@@ -244,7 +244,7 @@ module {
   }
 
   // Case: f32_122x123_complex (src0 valid 104x123, src1 valid 122x110, dst valid 122x123)
-  func.func @TPARTMAX_f32_122x123_complex(%a_ptr: !pto.ptr<f32>, %b_ptr: !pto.ptr<f32>, %c_ptr: !pto.ptr<f32>) {
+  func.func @TPARTMAX_f32_122x123_complex(%a_ptr: !pto.ptr<f32>, %b_ptr: !pto.ptr<f32>, %c_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c122    = arith.constant 122    : index
@@ -303,7 +303,7 @@ module {
   }
 
   // Case: f16_122x123_complex (src0 valid 104x123, src1 valid 122x110, dst valid 122x123)
-  func.func @TPARTMAX_f16_122x123_complex(%a_ptr: !pto.ptr<f16>, %b_ptr: !pto.ptr<f16>, %c_ptr: !pto.ptr<f16>) {
+  func.func @TPARTMAX_f16_122x123_complex(%a_ptr: !pto.ptr<f16>, %b_ptr: !pto.ptr<f16>, %c_ptr: !pto.ptr<f16>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c122    = arith.constant 122    : index
@@ -362,7 +362,7 @@ module {
   }
 
   // Case: i16_122x123_complex (src0 valid 104x123, src1 valid 122x110, dst valid 122x123)
-  func.func @TPARTMAX_i16_122x123_complex(%a_ptr: !pto.ptr<i16>, %b_ptr: !pto.ptr<i16>, %c_ptr: !pto.ptr<i16>) {
+  func.func @TPARTMAX_i16_122x123_complex(%a_ptr: !pto.ptr<i16>, %b_ptr: !pto.ptr<i16>, %c_ptr: !pto.ptr<i16>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c122    = arith.constant 122    : index
@@ -421,7 +421,7 @@ module {
   }
 
   // Case: i32_122x123_complex (src0 valid 104x123, src1 valid 122x110, dst valid 122x123)
-  func.func @TPARTMAX_i32_122x123_complex(%a_ptr: !pto.ptr<i32>, %b_ptr: !pto.ptr<i32>, %c_ptr: !pto.ptr<i32>) {
+  func.func @TPARTMAX_i32_122x123_complex(%a_ptr: !pto.ptr<i32>, %b_ptr: !pto.ptr<i32>, %c_ptr: !pto.ptr<i32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c122    = arith.constant 122    : index
@@ -480,7 +480,7 @@ module {
   }
 
   // Case: u16_122x123_complex (src0 valid 104x123, src1 valid 122x110, dst valid 122x123)
-  func.func @TPARTMAX_u16_122x123_complex(%a_ptr: !pto.ptr<ui16>, %b_ptr: !pto.ptr<ui16>, %c_ptr: !pto.ptr<ui16>) {
+  func.func @TPARTMAX_u16_122x123_complex(%a_ptr: !pto.ptr<ui16>, %b_ptr: !pto.ptr<ui16>, %c_ptr: !pto.ptr<ui16>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c122    = arith.constant 122    : index
@@ -539,7 +539,7 @@ module {
   }
 
   // Case: u32_122x123_complex (src0 valid 104x123, src1 valid 122x110, dst valid 122x123)
-  func.func @TPARTMAX_u32_122x123_complex(%a_ptr: !pto.ptr<ui32>, %b_ptr: !pto.ptr<ui32>, %c_ptr: !pto.ptr<ui32>) {
+  func.func @TPARTMAX_u32_122x123_complex(%a_ptr: !pto.ptr<ui32>, %b_ptr: !pto.ptr<ui32>, %c_ptr: !pto.ptr<ui32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c122    = arith.constant 122    : index
@@ -598,7 +598,7 @@ module {
   }
 
   // Case: i8_122x123_complex (src0 valid 104x123, src1 valid 122x110, dst valid 122x123)
-  func.func @TPARTMAX_i8_122x123_complex(%a_ptr: !pto.ptr<i8>, %b_ptr: !pto.ptr<i8>, %c_ptr: !pto.ptr<i8>) {
+  func.func @TPARTMAX_i8_122x123_complex(%a_ptr: !pto.ptr<i8>, %b_ptr: !pto.ptr<i8>, %c_ptr: !pto.ptr<i8>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c122    = arith.constant 122    : index
@@ -657,7 +657,7 @@ module {
   }
 
   // Case: u8_122x123_complex (src0 valid 104x123, src1 valid 122x110, dst valid 122x123)
-  func.func @TPARTMAX_u8_122x123_complex(%a_ptr: !pto.ptr<ui8>, %b_ptr: !pto.ptr<ui8>, %c_ptr: !pto.ptr<ui8>) {
+  func.func @TPARTMAX_u8_122x123_complex(%a_ptr: !pto.ptr<ui8>, %b_ptr: !pto.ptr<ui8>, %c_ptr: !pto.ptr<ui8>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c122    = arith.constant 122    : index

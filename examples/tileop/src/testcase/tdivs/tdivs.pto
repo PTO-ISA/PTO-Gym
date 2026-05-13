@@ -8,10 +8,10 @@
 
 // TileLang ST kernels for pto.tdivs: tload(src) + tdivs(src, scalar)->dst + tstore(dst).
 // vdiv only supports f16/f32 in TileLang DSL v1.
-module {
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
 
   // Case 0: f32 32x64
-  func.func @TDIVS_f32_32x64(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>, %scalar: f32) {
+  func.func @TDIVS_f32_32x64(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>, %scalar: f32) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c32 = arith.constant 32 : index
@@ -30,7 +30,7 @@ module {
   }
 
   // Case 1: f16 63x64
-  func.func @TDIVS_f16_63x64(%src_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>, %scalar: f16) {
+  func.func @TDIVS_f16_63x64(%src_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>, %scalar: f16) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c63 = arith.constant 63 : index
@@ -49,7 +49,7 @@ module {
   }
 
   // Case 2: f32 7x448
-  func.func @TDIVS_f32_7x448(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>, %scalar: f32) {
+  func.func @TDIVS_f32_7x448(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>, %scalar: f32) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c7 = arith.constant 7 : index
@@ -68,7 +68,7 @@ module {
   }
 
   // Case 3: f32 256x16
-  func.func @TDIVS_f32_256x16(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>, %scalar: f32) {
+  func.func @TDIVS_f32_256x16(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>, %scalar: f32) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c256 = arith.constant 256 : index
@@ -89,7 +89,7 @@ module {
   // ========== scalar / src direction ==========
 
   // Case 4: f32 32x64 scalar/src
-  func.func @TDIVS_f32_32x64_scalar_src(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>, %scalar: f32) {
+  func.func @TDIVS_f32_32x64_scalar_src(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>, %scalar: f32) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c32 = arith.constant 32 : index
@@ -108,7 +108,7 @@ module {
   }
 
   // Case 5: f16 63x64 scalar/src
-  func.func @TDIVS_f16_63x64_scalar_src(%src_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>, %scalar: f16) {
+  func.func @TDIVS_f16_63x64_scalar_src(%src_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>, %scalar: f16) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c63 = arith.constant 63 : index
@@ -127,7 +127,7 @@ module {
   }
 
   // Case 6: f32 7x448 scalar/src
-  func.func @TDIVS_f32_7x448_scalar_src(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>, %scalar: f32) {
+  func.func @TDIVS_f32_7x448_scalar_src(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>, %scalar: f32) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c7 = arith.constant 7 : index
@@ -146,7 +146,7 @@ module {
   }
 
   // Case 7: f32 256x16 scalar/src
-  func.func @TDIVS_f32_256x16_scalar_src(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>, %scalar: f32) {
+  func.func @TDIVS_f32_256x16_scalar_src(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>, %scalar: f32) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c256 = arith.constant 256 : index

@@ -30,11 +30,13 @@ def main() -> None:
     out.mkdir(parents=True, exist_ok=True)
 
     src = [(9.0, 90), (7.0, 70), (8.0, 80), (6.0, 60)]
-    golden = [(9.0, 90), (8.0, 80), (7.0, 70), (6.0, 60)]
+    golden = [(9.0, 90), (0.0, 0), (0.0, 0), (0.0, 0)]
 
     write_pairs(out / "v1.bin", src)
     write_pairs(out / "v2.bin", [(0.0, 0)] * 4)
     write_pairs(out / "golden_v2.bin", golden)
+    (out / "v3.bin").write_bytes(struct.pack("4h", 0, 0, 0, 0))
+    (out / "golden_v3.bin").write_bytes(struct.pack("4h", 1, 0, 0, 0))
 
 
 if __name__ == "__main__":

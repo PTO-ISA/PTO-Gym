@@ -1,4 +1,7 @@
-# PTO Tile Instruction SPEC
+# PTO Tile Instruction SPEC (A5)
+
+- v0.5: Add new tileops
+- v0.4: Initial PTO Tile Instruction SPEC covering core TileOps
 
 [toc]
 
@@ -1010,6 +1013,9 @@ pto.<op> ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>)
 - The valid region must match across all three tiles.
 - Element type legality is target-defined; ops specialize over the tile dtype selected at expansion time.
 - `pto.tdiv` uses element-wise division; **undefined behavior** on divide-by-zero.
+- `pto.tdiv` additionally accepts `precision_mode = #pto<precision_mode DEFAULT|HIGH_PRECISION>`.
+  Omitted means `DEFAULT`.
+  `HIGH_PRECISION` is currently legal only when the tile element type is `f16` or `f32`.
 
 **Example:**
 
@@ -1047,9 +1053,11 @@ For `pto.tdivs`:
 ```mlir
 pto.tdivs ins(%src, %scalar : !pto.tile_buf<...>, <scalar_type>)
           outs(%dst : !pto.tile_buf<...>)
+          {precision_mode = #pto<precision_mode HIGH_PRECISION>}
 
 pto.tdivs ins(%scalar, %src : <scalar_type>, !pto.tile_buf<...>)
           outs(%dst : !pto.tile_buf<...>)
+          {precision_mode = #pto<precision_mode HIGH_PRECISION>}
 ```
 
 **Parameter Table:**
@@ -1065,6 +1073,9 @@ pto.tdivs ins(%scalar, %src : <scalar_type>, !pto.tile_buf<...>)
 - `src` and `dst` must be shape-compatible `loc=vec` tile buffers.
 - The scalar element type must be compatible with the tile element type.
 - `pto.tdivs` is the only scalar family with two public operand orders. **Undefined behavior** on divide-by-zero (either `scalar==0` or any `src[i,j]==0` in the `scalar/src` form).
+- `pto.tdivs` additionally accepts `precision_mode = #pto<precision_mode DEFAULT|HIGH_PRECISION>`.
+  Omitted means `DEFAULT`.
+  `HIGH_PRECISION` is currently legal only when the tile element type is `f16` or `f32`.
 
 **Example:**
 
@@ -1104,6 +1115,18 @@ pto.<op> ins(%src : !pto.tile_buf<...>)
 - `src` and `dst` must have the same valid region.
 - These ops are numeric Tile Instruction ops on `loc=vec`.
 - **Undefined behavior** on out-of-domain inputs: `tlog(<=0)`, `tsqrt(<0)`, `trsqrt(<=0)`, `trecip(0)`.
+- `pto.texp`, `pto.tlog`, `pto.tsqrt`, `pto.trsqrt`, and `pto.trecip` additionally accept
+  `precision_mode = #pto<precision_mode DEFAULT|HIGH_PRECISION>`.
+  Omitted means `DEFAULT`.
+  For these five unary ops, `HIGH_PRECISION` is currently legal on their supported floating-point element types.
+
+**Precision-Mode Form:**
+
+```mlir
+pto.<op> ins(%src : !pto.tile_buf<...>)
+         outs(%dst : !pto.tile_buf<...>)
+         {precision_mode = #pto<precision_mode HIGH_PRECISION>}
+```
 
 **Example:**
 
@@ -1566,6 +1589,9 @@ pto.<op> ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>)
 - `src1` must provide one logical scalar per destination row.
 - Templates target row-major VEC layouts.
 - `pto.trowexpanddiv` and `pto.trowexpandexpdif` are floating-point-only.
+- `pto.trowexpanddiv` additionally accepts `precision_mode = #pto<precision_mode DEFAULT|HIGH_PRECISION>`.
+  Omitted means `DEFAULT`.
+  `HIGH_PRECISION` is currently legal only when the tile element type is `f16` or `f32`.
 
 **Example:**
 
@@ -1573,6 +1599,13 @@ pto.<op> ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>)
 pto.trowexpandadd ins(%src0, %src1 : !pto.tile_buf<vec, 16x128xf32>,
                                      !pto.tile_buf<vec, 16x1xf32, blayout=col_major>)
                   outs(%dst : !pto.tile_buf<vec, 16x128xf32>)
+```
+
+```mlir
+pto.trowexpanddiv ins(%src0, %src1 : !pto.tile_buf<vec, 16x128xf32>,
+                                     !pto.tile_buf<vec, 16x1xf32, blayout=col_major>)
+                  outs(%dst : !pto.tile_buf<vec, 16x128xf32>)
+                  {precision_mode = #pto<precision_mode HIGH_PRECISION>}
 ```
 
 ---
@@ -1643,6 +1676,9 @@ pto.<op> ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>)
 - `src1` must provide one logical scalar per destination column.
 - Templates target row-major VEC layouts.
 - `pto.tcolexpanddiv` and `pto.tcolexpandexpdif` are floating-point-only.
+- `pto.tcolexpanddiv` additionally accepts `precision_mode = #pto<precision_mode DEFAULT|HIGH_PRECISION>`.
+  Omitted means `DEFAULT`.
+  `HIGH_PRECISION` is currently legal only when the tile element type is `f16` or `f32`.
 
 **Example:**
 
@@ -1650,6 +1686,13 @@ pto.<op> ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>)
 pto.tcolexpandadd ins(%src0, %src1 : !pto.tile_buf<vec, 16x128xf32>,
                                      !pto.tile_buf<vec, 1x128xf32>)
                   outs(%dst : !pto.tile_buf<vec, 16x128xf32>)
+```
+
+```mlir
+pto.tcolexpanddiv ins(%src0, %src1 : !pto.tile_buf<vec, 16x128xf32>,
+                                     !pto.tile_buf<vec, 1x128xf32>)
+                  outs(%dst : !pto.tile_buf<vec, 16x128xf32>)
+                  {precision_mode = #pto<precision_mode HIGH_PRECISION>}
 ```
 
 <a id="tile-11-selection-ops"></a>
@@ -1810,4 +1853,35 @@ pto.tfillpad_expand ins(%src : !pto.tile_buf<...>)
 ```mlir
 pto.tfillpad_expand ins(%src : !pto.tile_buf<vec, 4x32xf32>)
                     outs(%dst : !pto.tile_buf<vec, 8x64xf32, pad=1>)
+```
+
+---
+
+### 12.3 `pto.tfillpad_inplace`
+
+- **syntax:**
+```mlir
+pto.tfillpad_inplace ins(%src : !pto.tile_buf<...>)
+                     outs(%dst : !pto.tile_buf<...>)
+```
+- **semantics:** update the padding / expansion region of an already materialized tile without a separate copy-in phase.
+
+**Parameter Table:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `src` | `pto.tile_buf` | Source tile buffer. |
+| `dst` | `pto.tile_buf` | Destination tile buffer, typically aliasing the same physical tile. |
+
+**Constraints:**
+
+- PTOAS exposes `pto.tfillpad_inplace` as a dedicated Tile op.
+- In typical use, `src` and `dst` refer to the same underlying tile buffer.
+- The fill value is derived from `dst.pad_value`.
+
+**Example:**
+
+```mlir
+pto.tfillpad_inplace ins(%tile : !pto.tile_buf<vec, 32x32xf32, pad=1>)
+                     outs(%tile : !pto.tile_buf<vec, 32x32xf32, pad=1>)
 ```

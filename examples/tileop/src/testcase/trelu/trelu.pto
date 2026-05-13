@@ -8,12 +8,12 @@
 
 // TileLang ST kernels for pto.trelu: tload(input) + trelu(input)->output + tstore(output).
 // Multiple cases with different shapes and dtypes in a single module.
-// Compiled by ptoas --enable-insert-sync --enable-tile-op-expand --vpto-emit-hivm-llvm
-// to produce LLVM IR.
+// Compiled by ptoas --enable-insert-sync --enable-tile-op-expand
+// to produce a fatobj object.
 
-module {
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
   // Case 0: int32 64x64 (4096 elements, valid=64x64)
-  func.func @TRELU_int32_64x64(%input_ptr: !pto.ptr<i32>, %output_ptr: !pto.ptr<i32>) {
+  func.func @TRELU_int32_64x64(%input_ptr: !pto.ptr<i32>, %output_ptr: !pto.ptr<i32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c64   = arith.constant 64   : index
@@ -54,7 +54,7 @@ module {
   }
 
   // Case 1: f16 64x64 (4096 elements, valid=60x60)
-  func.func @TRELU_f16_64x64_v60x60(%input_ptr: !pto.ptr<f16>, %output_ptr: !pto.ptr<f16>) {
+  func.func @TRELU_f16_64x64_v60x60(%input_ptr: !pto.ptr<f16>, %output_ptr: !pto.ptr<f16>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c60   = arith.constant 60   : index
@@ -96,7 +96,7 @@ module {
   }
 
   // Case 2: f32 64x64 (4096 elements, valid=60x60)
-  func.func @TRELU_f32_64x64_v60x60(%input_ptr: !pto.ptr<f32>, %output_ptr: !pto.ptr<f32>) {
+  func.func @TRELU_f32_64x64_v60x60(%input_ptr: !pto.ptr<f32>, %output_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c60   = arith.constant 60   : index

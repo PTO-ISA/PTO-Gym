@@ -8,12 +8,12 @@
 
 // TileLang ST kernels for pto.tcolmax: tload(src) + tcolmax(dst, src) + tstore(dst).
 // Multiple cases with different shapes in a single module.
-// Compiled by ptoas --enable-insert-sync --enable-tile-op-expand --vpto-emit-hivm-llvm
-// to produce LLVM IR.
+// Compiled by ptoas --enable-insert-sync --enable-tile-op-expand
+// to produce a fatobj object.
 
-module {
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
   // Case 0: f32 1x256 (input: 1x256, output: 1x256)
-  func.func @TCOLMAX_f32_1x256(%dst_ptr: !pto.ptr<f32>, %src_ptr: !pto.ptr<f32>) {
+  func.func @TCOLMAX_f32_1x256(%dst_ptr: !pto.ptr<f32>, %src_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c256  = arith.constant 256  : index
@@ -54,7 +54,7 @@ module {
   }
 
 // Case 1: f32 16x128 (input: 16x128, output: 1x128)
-  func.func @TCOLMAX_f32_16x128(%dst_ptr: !pto.ptr<f32>, %src_ptr: !pto.ptr<f32>) {
+  func.func @TCOLMAX_f32_16x128(%dst_ptr: !pto.ptr<f32>, %src_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c16   = arith.constant 16   : index
@@ -97,7 +97,7 @@ module {
   }
 
   // Case 2: f32 16x256 (input: 16x256, output: 1x256)
-  func.func @TCOLMAX_f32_16x256(%dst_ptr: !pto.ptr<f32>, %src_ptr: !pto.ptr<f32>) {
+  func.func @TCOLMAX_f32_16x256(%dst_ptr: !pto.ptr<f32>, %src_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c15   = arith.constant 15   : index
@@ -141,7 +141,7 @@ module {
   }
 
   // Case 3: f16 1x256 (input: 1x256, output: 1x256)
-  func.func @TCOLMAX_f16_1x256(%dst_ptr: !pto.ptr<f16>, %src_ptr: !pto.ptr<f16>) {
+  func.func @TCOLMAX_f16_1x256(%dst_ptr: !pto.ptr<f16>, %src_ptr: !pto.ptr<f16>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c256  = arith.constant 256  : index
@@ -182,7 +182,7 @@ module {
   }
 
   // Case 4: f16 16x128 (input: 16x128, output: 1x128)
-  func.func @TCOLMAX_f16_16x128(%dst_ptr: !pto.ptr<f16>, %src_ptr: !pto.ptr<f16>) {
+  func.func @TCOLMAX_f16_16x128(%dst_ptr: !pto.ptr<f16>, %src_ptr: !pto.ptr<f16>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c16   = arith.constant 16   : index
@@ -225,7 +225,7 @@ module {
   }
 
   // Case 5: f16 16x256 (input: 16x256, output: 1x256)
-  func.func @TCOLMAX_f16_16x256(%dst_ptr: !pto.ptr<f16>, %src_ptr: !pto.ptr<f16>) {
+  func.func @TCOLMAX_f16_16x256(%dst_ptr: !pto.ptr<f16>, %src_ptr: !pto.ptr<f16>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c15   = arith.constant 15   : index
@@ -269,7 +269,7 @@ module {
   }
 
   // Case 6: i8 1x256 (input: 1x256, output: 1x256)
-  func.func @TCOLMAX_i8_1x256(%dst_ptr: !pto.ptr<i8>, %src_ptr: !pto.ptr<i8>) {
+  func.func @TCOLMAX_i8_1x256(%dst_ptr: !pto.ptr<i8>, %src_ptr: !pto.ptr<i8>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c256  = arith.constant 256  : index
@@ -310,7 +310,7 @@ module {
   }
 
   // Case 7: i8 16x128 (input: 16x128, output: 1x128)
-  func.func @TCOLMAX_i8_16x128(%dst_ptr: !pto.ptr<i8>, %src_ptr: !pto.ptr<i8>) {
+  func.func @TCOLMAX_i8_16x128(%dst_ptr: !pto.ptr<i8>, %src_ptr: !pto.ptr<i8>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c16   = arith.constant 16   : index
@@ -353,7 +353,7 @@ module {
   }
 
   // Case 8: i8 16x256 (input: 16x256, output: 1x256)
-  func.func @TCOLMAX_i8_16x256(%dst_ptr: !pto.ptr<i8>, %src_ptr: !pto.ptr<i8>) {
+  func.func @TCOLMAX_i8_16x256(%dst_ptr: !pto.ptr<i8>, %src_ptr: !pto.ptr<i8>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c15   = arith.constant 15   : index
@@ -397,7 +397,7 @@ module {
   }
 
   // Case 9: i16 1x256 (input: 1x256, output: 1x256)
-  func.func @TCOLMAX_i16_1x256(%dst_ptr: !pto.ptr<i16>, %src_ptr: !pto.ptr<i16>) {
+  func.func @TCOLMAX_i16_1x256(%dst_ptr: !pto.ptr<i16>, %src_ptr: !pto.ptr<i16>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c256  = arith.constant 256  : index
@@ -438,7 +438,7 @@ module {
   }
 
   // Case 10: i16 16x128 (input: 16x128, output: 1x128)
-  func.func @TCOLMAX_i16_16x128(%dst_ptr: !pto.ptr<i16>, %src_ptr: !pto.ptr<i16>) {
+  func.func @TCOLMAX_i16_16x128(%dst_ptr: !pto.ptr<i16>, %src_ptr: !pto.ptr<i16>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c16   = arith.constant 16   : index
@@ -481,7 +481,7 @@ module {
   }
 
   // Case 11: i16 16x256 (input: 16x256, output: 1x256)
-  func.func @TCOLMAX_i16_16x256(%dst_ptr: !pto.ptr<i16>, %src_ptr: !pto.ptr<i16>) {
+  func.func @TCOLMAX_i16_16x256(%dst_ptr: !pto.ptr<i16>, %src_ptr: !pto.ptr<i16>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c15   = arith.constant 15   : index
@@ -525,7 +525,7 @@ module {
   }
 
   // Case 12: i32 1x256 (input: 1x256, output: 1x256)
-  func.func @TCOLMAX_i32_1x256(%dst_ptr: !pto.ptr<i32>, %src_ptr: !pto.ptr<i32>) {
+  func.func @TCOLMAX_i32_1x256(%dst_ptr: !pto.ptr<i32>, %src_ptr: !pto.ptr<i32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c256  = arith.constant 256  : index
@@ -566,7 +566,7 @@ module {
   }
 
   // Case 13: i32 16x128 (input: 16x128, output: 1x128)
-  func.func @TCOLMAX_i32_16x128(%dst_ptr: !pto.ptr<i32>, %src_ptr: !pto.ptr<i32>) {
+  func.func @TCOLMAX_i32_16x128(%dst_ptr: !pto.ptr<i32>, %src_ptr: !pto.ptr<i32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c16   = arith.constant 16   : index
@@ -609,7 +609,7 @@ module {
   }
 
   // Case 14: i32 16x256 (input: 16x256, output: 1x256)
-  func.func @TCOLMAX_i32_16x256(%dst_ptr: !pto.ptr<i32>, %src_ptr: !pto.ptr<i32>) {
+  func.func @TCOLMAX_i32_16x256(%dst_ptr: !pto.ptr<i32>, %src_ptr: !pto.ptr<i32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c15   = arith.constant 15   : index
@@ -653,7 +653,7 @@ module {
   }
 
   // Case 15: ui8 1x256 (input: 1x256, output: 1x256)
-  func.func @TCOLMAX_ui8_1x256(%dst_ptr: !pto.ptr<ui8>, %src_ptr: !pto.ptr<ui8>) {
+  func.func @TCOLMAX_ui8_1x256(%dst_ptr: !pto.ptr<ui8>, %src_ptr: !pto.ptr<ui8>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c256  = arith.constant 256  : index
@@ -694,7 +694,7 @@ module {
   }
 
   // Case 16: ui8 16x128 (input: 16x128, output: 1x128)
-  func.func @TCOLMAX_ui8_16x128(%dst_ptr: !pto.ptr<ui8>, %src_ptr: !pto.ptr<ui8>) {
+  func.func @TCOLMAX_ui8_16x128(%dst_ptr: !pto.ptr<ui8>, %src_ptr: !pto.ptr<ui8>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c16   = arith.constant 16   : index
@@ -737,7 +737,7 @@ module {
   }
 
   // Case 17: ui8 16x256 (input: 16x256, output: 1x256)
-  func.func @TCOLMAX_ui8_16x256(%dst_ptr: !pto.ptr<ui8>, %src_ptr: !pto.ptr<ui8>) {
+  func.func @TCOLMAX_ui8_16x256(%dst_ptr: !pto.ptr<ui8>, %src_ptr: !pto.ptr<ui8>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c15   = arith.constant 15   : index
@@ -781,7 +781,7 @@ module {
   }
 
   // Case 18: ui16 1x256 (input: 1x256, output: 1x256)
-  func.func @TCOLMAX_ui16_1x256(%dst_ptr: !pto.ptr<ui16>, %src_ptr: !pto.ptr<ui16>) {
+  func.func @TCOLMAX_ui16_1x256(%dst_ptr: !pto.ptr<ui16>, %src_ptr: !pto.ptr<ui16>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c256  = arith.constant 256  : index
@@ -822,7 +822,7 @@ module {
   }
 
   // Case 19: ui16 16x128 (input: 16x128, output: 1x128)
-  func.func @TCOLMAX_ui16_16x128(%dst_ptr: !pto.ptr<ui16>, %src_ptr: !pto.ptr<ui16>) {
+  func.func @TCOLMAX_ui16_16x128(%dst_ptr: !pto.ptr<ui16>, %src_ptr: !pto.ptr<ui16>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c16   = arith.constant 16   : index
@@ -865,7 +865,7 @@ module {
   }
 
   // Case 20: ui16 16x256 (input: 16x256, output: 1x256)
-  func.func @TCOLMAX_ui16_16x256(%dst_ptr: !pto.ptr<ui16>, %src_ptr: !pto.ptr<ui16>) {
+  func.func @TCOLMAX_ui16_16x256(%dst_ptr: !pto.ptr<ui16>, %src_ptr: !pto.ptr<ui16>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c15   = arith.constant 15   : index
@@ -909,7 +909,7 @@ module {
   }
 
   // Case 21: ui32 1x256 (input: 1x256, output: 1x256)
-  func.func @TCOLMAX_ui32_1x256(%dst_ptr: !pto.ptr<ui32>, %src_ptr: !pto.ptr<ui32>) {
+  func.func @TCOLMAX_ui32_1x256(%dst_ptr: !pto.ptr<ui32>, %src_ptr: !pto.ptr<ui32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c256  = arith.constant 256  : index
@@ -950,7 +950,7 @@ module {
   }
 
   // Case 22: ui32 16x128 (input: 16x128, output: 1x128)
-  func.func @TCOLMAX_ui32_16x128(%dst_ptr: !pto.ptr<ui32>, %src_ptr: !pto.ptr<ui32>) {
+  func.func @TCOLMAX_ui32_16x128(%dst_ptr: !pto.ptr<ui32>, %src_ptr: !pto.ptr<ui32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c16   = arith.constant 16   : index
@@ -993,7 +993,7 @@ module {
   }
 
   // Case 23: ui32 16x256 (input: 16x256, output: 1x256)
-  func.func @TCOLMAX_ui32_16x256(%dst_ptr: !pto.ptr<ui32>, %src_ptr: !pto.ptr<ui32>) {
+  func.func @TCOLMAX_ui32_16x256(%dst_ptr: !pto.ptr<ui32>, %src_ptr: !pto.ptr<ui32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c15   = arith.constant 15   : index

@@ -23,6 +23,13 @@ import numpy as np
 ROWS = 32
 COLS = 32
 SEED = 19
+F16_MAX_FINITE = np.float32(65504.0)
+
+
+def sat_cast_f32_to_f16(values: np.ndarray) -> np.ndarray:
+    values = np.where(np.isnan(values), np.float32(0.0), values)
+    values = np.clip(values, -F16_MAX_FINITE, F16_MAX_FINITE)
+    return values.astype(np.float16)
 
 
 def generate(output_dir: Path, seed: int) -> None:
@@ -54,8 +61,8 @@ def generate(output_dir: Path, seed: int) -> None:
     golden_flat = np.zeros(ROWS * COLS, dtype=np.float16)
 
     for offset in range(0, ROWS * COLS, 128):
-        lower = flat[offset : offset + 64].astype(np.float16)
-        upper = flat[offset + 64 : offset + 128].astype(np.float16)
+        lower = sat_cast_f32_to_f16(flat[offset : offset + 64])
+        upper = sat_cast_f32_to_f16(flat[offset + 64 : offset + 128])
         merged = np.empty(128, dtype=np.float16)
         merged[0::2] = lower
         merged[1::2] = upper

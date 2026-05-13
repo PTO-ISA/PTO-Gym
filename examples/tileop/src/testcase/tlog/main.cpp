@@ -26,6 +26,10 @@ void LaunchTLOG_f32_16x64(void *a, void *b, void *stream);
 void LaunchTLOG_f32_32x32(void *a, void *b, void *stream);
 void LaunchTLOG_f16_16x64(void *a, void *b, void *stream);
 void LaunchTLOG_f16_32x32(void *a, void *b, void *stream);
+void LaunchTLOG_f32_16x64_hp(void *a, void *b, void *stream);
+void LaunchTLOG_f32_32x32_hp(void *a, void *b, void *stream);
+void LaunchTLOG_f16_16x64_hp(void *a, void *b, void *stream);
+void LaunchTLOG_f16_32x32_hp(void *a, void *b, void *stream);
 
 using LaunchFn = void (*)(void *, void *, void *);
 
@@ -44,6 +48,10 @@ static const TestCase kCases[] = {
     {"f32_32x32", LaunchTLOG_f32_32x32, 32, 32, 32, 32, sizeof(float)},
     {"f16_16x64", LaunchTLOG_f16_16x64, 16, 64, 16, 64, sizeof(uint16_t)},
     {"f16_32x32", LaunchTLOG_f16_32x32, 32, 32, 32, 32, sizeof(uint16_t)},
+    {"f32_16x64_hp", LaunchTLOG_f32_16x64_hp, 16, 64, 16, 64, sizeof(float)},
+    {"f32_32x32_hp", LaunchTLOG_f32_32x32_hp, 32, 32, 32, 32, sizeof(float)},
+    {"f16_16x64_hp", LaunchTLOG_f16_16x64_hp, 16, 64, 16, 64, sizeof(uint16_t)},
+    {"f16_32x32_hp", LaunchTLOG_f16_32x32_hp, 32, 32, 32, 32, sizeof(uint16_t)},
 };
 static constexpr size_t kNumCases = sizeof(kCases) / sizeof(kCases[0]);
 

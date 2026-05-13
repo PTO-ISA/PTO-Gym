@@ -4,9 +4,9 @@
 // target_ops: pto.vaddcs
 // scenarios: core-u32-unsigned, full-mask, carry-chain
 // -----------------------------------------------------------------------------
-module attributes {pto.target_arch = "a5"} {
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
   func.func @vaddcs_kernel(%arg0: !pto.ptr<ui32, gm>, %arg1: !pto.ptr<ui32, gm>,
-                           %arg2: !pto.ptr<ui32, gm>, %arg3: !pto.ptr<ui8, gm>) {
+                           %arg2: !pto.ptr<ui32, gm>, %arg3: !pto.ptr<ui8, gm>) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c0_i64 = arith.constant 0 : i64
     %c1_i64 = arith.constant 1 : i64
@@ -21,10 +21,10 @@ module attributes {pto.target_arch = "a5"} {
     %ub_rhs = pto.castptr %c4096_i64 : i64 -> !pto.ptr<ui32, ub>
     %ub_out = pto.castptr %c8192_i64 : i64 -> !pto.ptr<ui32, ub>
     %ub_carry = pto.castptr %c12288_i64 : i64 -> !pto.ptr<ui8, ub>
-    pto.dma_load %arg0, %ub_lhs, %c0_i64, %c256_i64
+    pto.mte_gm_ub %arg0, %ub_lhs, %c0_i64, %c256_i64
       nburst(%c1_i64, %c256_i64, %c256_i64)
       : !pto.ptr<ui32, gm>, !pto.ptr<ui32, ub>, i64, i64, i64, i64, i64
-    pto.dma_load %arg1, %ub_rhs, %c0_i64, %c256_i64
+    pto.mte_gm_ub %arg1, %ub_rhs, %c0_i64, %c256_i64
       nburst(%c1_i64, %c256_i64, %c256_i64)
       : !pto.ptr<ui32, gm>, !pto.ptr<ui32, ub>, i64, i64, i64, i64, i64
 
@@ -43,10 +43,10 @@ module attributes {pto.target_arch = "a5"} {
 
     pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
     pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
-    pto.dma_store %ub_out, %arg2, %c256_i64
+    pto.mte_ub_gm %ub_out, %arg2, %c256_i64
       nburst(%c1_i64, %c256_i64, %c256_i64)
       : !pto.ptr<ui32, ub>, !pto.ptr<ui32, gm>, i64, i64, i64, i64
-    pto.dma_store %ub_carry, %arg3, %c128_i64
+    pto.mte_ub_gm %ub_carry, %arg3, %c128_i64
       nburst(%c1_i64, %c256_i64, %c256_i64)
       : !pto.ptr<ui8, ub>, !pto.ptr<ui8, gm>, i64, i64, i64, i64
     pto.barrier #pto.pipe<PIPE_ALL>

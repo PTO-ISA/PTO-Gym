@@ -8,12 +8,12 @@
 
 // TileLang ST kernels for pto.tsel: packed mask tload + tload(src0) + tload(src1) + tsel(mask,src0,src1,tmp,dst) + tstore(dst).
 // Multiple cases with different shapes in a single module.
-// Compiled by ptoas --enable-insert-sync --enable-tile-op-expand --vpto-emit-hivm-llvm
-// to produce LLVM IR.
+// Compiled by ptoas --enable-insert-sync --enable-tile-op-expand
+// to produce a fatobj object.
 
-module {
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
   // Case: f32 2x128
-  func.func @TSEL_f32_2x128(%mask_ptr: !pto.ptr<i8>, %src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TSEL_f32_2x128(%mask_ptr: !pto.ptr<i8>, %src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c2 = arith.constant 2 : index
@@ -86,7 +86,7 @@ module {
   }
 
   // Case: f32 2x32
-  func.func @TSEL_f32_2x32(%mask_ptr: !pto.ptr<i8>, %src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TSEL_f32_2x32(%mask_ptr: !pto.ptr<i8>, %src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c2 = arith.constant 2 : index
@@ -159,7 +159,7 @@ module {
   }
 
   // Case: f32 2x160
-  func.func @TSEL_f32_2x160(%mask_ptr: !pto.ptr<i8>, %src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TSEL_f32_2x160(%mask_ptr: !pto.ptr<i8>, %src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c2 = arith.constant 2 : index
@@ -232,7 +232,7 @@ module {
   }
 
   // Case: f32 2x512
-  func.func @TSEL_f32_2x512(%mask_ptr: !pto.ptr<i8>, %src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TSEL_f32_2x512(%mask_ptr: !pto.ptr<i8>, %src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c2 = arith.constant 2 : index
@@ -305,7 +305,7 @@ module {
   }
 
   // Case: f16 2x128
-  func.func @TSEL_f16_2x128(%mask_ptr: !pto.ptr<i8>, %src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) {
+  func.func @TSEL_f16_2x128(%mask_ptr: !pto.ptr<i8>, %src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c2 = arith.constant 2 : index
@@ -378,7 +378,7 @@ module {
   }
 
   // Case: f16 2x32
-  func.func @TSEL_f16_2x32(%mask_ptr: !pto.ptr<i8>, %src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) {
+  func.func @TSEL_f16_2x32(%mask_ptr: !pto.ptr<i8>, %src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c2 = arith.constant 2 : index
@@ -451,7 +451,7 @@ module {
   }
 
   // Case: f16 2x160
-  func.func @TSEL_f16_2x160(%mask_ptr: !pto.ptr<i8>, %src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) {
+  func.func @TSEL_f16_2x160(%mask_ptr: !pto.ptr<i8>, %src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c2 = arith.constant 2 : index
@@ -524,7 +524,7 @@ module {
   }
 
   // Case: i8 2x128
-  func.func @TSEL_i8_2x128(%mask_ptr: !pto.ptr<i8>, %src0_ptr: !pto.ptr<i8>, %src1_ptr: !pto.ptr<i8>, %dst_ptr: !pto.ptr<i8>) {
+  func.func @TSEL_i8_2x128(%mask_ptr: !pto.ptr<i8>, %src0_ptr: !pto.ptr<i8>, %src1_ptr: !pto.ptr<i8>, %dst_ptr: !pto.ptr<i8>) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c2 = arith.constant 2 : index
@@ -597,7 +597,7 @@ module {
   }
 
   // Case: i8 2x32
-  func.func @TSEL_i8_2x32(%mask_ptr: !pto.ptr<i8>, %src0_ptr: !pto.ptr<i8>, %src1_ptr: !pto.ptr<i8>, %dst_ptr: !pto.ptr<i8>) {
+  func.func @TSEL_i8_2x32(%mask_ptr: !pto.ptr<i8>, %src0_ptr: !pto.ptr<i8>, %src1_ptr: !pto.ptr<i8>, %dst_ptr: !pto.ptr<i8>) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c2 = arith.constant 2 : index
@@ -670,7 +670,7 @@ module {
   }
 
   // Case: i8 2x160
-  func.func @TSEL_i8_2x160(%mask_ptr: !pto.ptr<i8>, %src0_ptr: !pto.ptr<i8>, %src1_ptr: !pto.ptr<i8>, %dst_ptr: !pto.ptr<i8>) {
+  func.func @TSEL_i8_2x160(%mask_ptr: !pto.ptr<i8>, %src0_ptr: !pto.ptr<i8>, %src1_ptr: !pto.ptr<i8>, %dst_ptr: !pto.ptr<i8>) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c2 = arith.constant 2 : index

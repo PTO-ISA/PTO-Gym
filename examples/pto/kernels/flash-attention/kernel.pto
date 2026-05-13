@@ -1,0 +1,178 @@
+// Copyright (c) 2026 Huawei Technologies Co., Ltd.
+// This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+// CANN Open Software License Agreement Version 2.0 (the "License").
+// Please refer to the License for details. You may not use this file except in compliance with the License.
+// THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+// INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+// See LICENSE in the root of the software repository for the full text of the License.
+
+// -----------------------------------------------------------------------------
+// case: kernels/flash-attention
+// family: kernels
+// target_ops: pto.mte_gm_l1_frac, pto.mte_l1_l0a, pto.mte_l1_l0b, pto.mad,
+//   pto.mte_l0c_ub, pto.mte_gm_ub, pto.mte_ub_gm, pto.vlds, pto.vcmax,
+//   pto.vdup, pto.vmax, pto.vexpdif, pto.vcadd, pto.vadd, pto.vmul, pto.vdiv,
+//   pto.vsts, pto.sync.set, pto.sync.wait
+// scenarios: flash-attention, cube-qk, tiled-online-softmax, q32-k32-d8
+// -----------------------------------------------------------------------------
+module attributes {pto.target_arch = "a5"} {
+  func.func @flash_attention_kernel_2d(%q_gm: !pto.ptr<f32, gm>,
+                                       %k_gm: !pto.ptr<f32, gm>,
+                                       %vt_gm: !pto.ptr<f32, gm>,
+                                       %out_gm: !pto.ptr<f32, gm>,
+                                       %seq: i32,
+                                       %rows: i32) attributes {pto.aicore} {
+    %c0 = arith.constant 0 : index
+    %c1 = arith.constant 1 : index
+    %c8 = arith.constant 8 : index
+    %c16 = arith.constant 16 : index
+    %c32 = arith.constant 32 : index
+    %c128 = arith.constant 128 : index
+    %c256 = arith.constant 256 : index
+
+    %c0_i32 = arith.constant 0 : i32
+    %c1_i32 = arith.constant 1 : i32
+    %c16_i32 = arith.constant 16 : i32
+
+    %c0_i64 = arith.constant 0 : i64
+    %c1_i64 = arith.constant 1 : i64
+    %c8_i64 = arith.constant 8 : i64
+    %c16_i64 = arith.constant 16 : i64
+    %c32_i64 = arith.constant 32 : i64
+    %c64_i64 = arith.constant 64 : i64
+    %c128_i64 = arith.constant 128 : i64
+    %c256_i64 = arith.constant 256 : i64
+    %c512_i64 = arith.constant 512 : i64
+    %c1024_i64 = arith.constant 1024 : i64
+    %c2048_i64 = arith.constant 2048 : i64
+    %c4096_i64 = arith.constant 4096 : i64
+    %c8192_i64 = arith.constant 8192 : i64
+    %c16384_i64 = arith.constant 16384 : i64
+    %c32768_i64 = arith.constant 32768 : i64
+    %false = arith.constant false
+
+    %block = pto.get_block_idx
+    %block_idx = arith.index_cast %block : i64 to index
+    %q_block_offset = arith.muli %block_idx, %c256 : index
+    %out_block_offset = arith.muli %block_idx, %c128 : index
+    %q_block_gm = pto.addptr %q_gm, %q_block_offset : !pto.ptr<f32, gm> -> !pto.ptr<f32, gm>
+    %out_block_gm = pto.addptr %out_gm, %out_block_offset : !pto.ptr<f32, gm> -> !pto.ptr<f32, gm>
+
+    %l1_q = pto.castptr %c0_i64 : i64 -> !pto.ptr<f32, l1>
+    %l1_k0 = pto.castptr %c1024_i64 : i64 -> !pto.ptr<f32, l1>
+    %l0a = pto.castptr %c0_i64 : i64 -> !pto.ptr<f32, l0a>
+    %l0b = pto.castptr %c0_i64 : i64 -> !pto.ptr<f32, l0b>
+    %l0c = pto.castptr %c0_i64 : i64 -> !pto.ptr<f32, l0c>
+
+    %ub_score = pto.castptr %c0_i64 : i64 -> !pto.ptr<f32, ub>
+    %ub_vt = pto.castptr %c4096_i64 : i64 -> !pto.ptr<f32, ub>
+    %ub_vt_hi = pto.addptr %ub_vt, %c16 : !pto.ptr<f32, ub> -> !pto.ptr<f32, ub>
+    %ub_out = pto.castptr %c32768_i64 : i64 -> !pto.ptr<f32, ub>
+
+    pto.section.cube {
+      pto.mte_gm_l1_frac %q_block_gm, %l1_q, nd2nz,
+          shape(%c16_i64, %c16_i64),
+          src_layout(%c64_i64),
+          dst_group(%c1_i64, %c1_i64, %c16_i64, %c0_i64),
+          ctrl(%c0_i64, %false)
+        : !pto.ptr<f32, gm>, !pto.ptr<f32, l1>, nd2nz,
+          shape i64, i64, src_layout(i64),
+          dst_group i64, i64, i64, i64, ctrl i64, i1
+      pto.mte_gm_l1_frac %k_gm, %l1_k0, nd2nz,
+          shape(%c16_i64, %c32_i64),
+          src_layout(%c128_i64),
+          dst_group(%c1_i64, %c1_i64, %c16_i64, %c0_i64),
+          ctrl(%c0_i64, %false)
+        : !pto.ptr<f32, gm>, !pto.ptr<f32, l1>, nd2nz,
+          shape i64, i64, src_layout(i64),
+          dst_group i64, i64, i64, i64, ctrl i64, i1
+
+      pto.set_flag["PIPE_MTE2", "PIPE_MTE1", "EVENT_ID0"]
+      pto.wait_flag["PIPE_MTE2", "PIPE_MTE1", "EVENT_ID0"]
+
+      pto.mte_l1_l0a %l1_q, %l0a, %c16_i64, %c16_i64
+        : !pto.ptr<f32, l1>, !pto.ptr<f32, l0a>, i64, i64
+      pto.mte_l1_l0b %l1_k0, %l0b, %c16_i64, %c32_i64 {transpose = true}
+        : !pto.ptr<f32, l1>, !pto.ptr<f32, l0b>, i64, i64
+      pto.set_flag["PIPE_MTE1", "PIPE_M", "EVENT_ID0"]
+      pto.wait_flag["PIPE_MTE1", "PIPE_M", "EVENT_ID0"]
+      pto.mad %l0a, %l0b, %l0c, %c16_i64, %c32_i64, %c16_i64 unit_flag(check_and_set)
+        : !pto.ptr<f32, l0a>, !pto.ptr<f32, l0b>, !pto.ptr<f32, l0c>, i64, i64, i64
+      pto.set_flag["PIPE_M", "PIPE_FIX", "EVENT_ID1"]
+      pto.wait_flag["PIPE_M", "PIPE_FIX", "EVENT_ID1"]
+      pto.set_flag["PIPE_MTE2", "PIPE_FIX", "EVENT_ID0"]
+      pto.wait_flag["PIPE_MTE2", "PIPE_FIX", "EVENT_ID0"]
+      pto.mte_l0c_ub %l0c, %ub_score, %c16_i64, %c32_i64, %c16_i64, %c32_i64, dst_mode(%c0_i64),
+        unit_flag(check_only), nz2nd, loop3(%c1_i64, %c4096_i64, %c1024_i64), sat
+        : !pto.ptr<f32, l0c>, !pto.ptr<f32, ub>, i64, i64, i64, i64, i64, i64, i64, i64
+
+      pto.sync.set <PIPE_FIX>, 1
+    }
+
+    pto.section.vector {
+      %subblock = pto.get_subblock_idx
+      %is_subblock0 = arith.cmpi eq, %subblock, %c0_i64 : i64
+      scf.if %is_subblock0 {
+        pto.sync.wait <PIPE_V>, 1
+        pto.mte_gm_ub %vt_gm, %ub_vt, %c0_i64, %c128_i64
+          nburst(%c8_i64, %c128_i64, %c128_i64)
+          : !pto.ptr<f32, gm>, !pto.ptr<f32, ub>, i64, i64, i64, i64, i64
+        pto.set_flag["PIPE_MTE2", "PIPE_V", "EVENT_ID0"]
+        pto.wait_flag["PIPE_MTE2", "PIPE_V", "EVENT_ID0"]
+
+        pto.vecscope {
+          %active = pto.pset_b32 "PAT_ALL" : !pto.mask<b32>
+          %one_mask, %one_remaining = pto.plt_b32 %c1_i32 : i32 -> !pto.mask<b32>, i32
+          scf.for %row = %c0 to %c16 step %c1 {
+            %row_score = arith.muli %row, %c32 : index
+            %row_out = arith.muli %row, %c8 : index
+            %mask0, %rest0 = pto.plt_b32 %c16_i32 : i32 -> !pto.mask<b32>, i32
+            %score0 = pto.vlds %ub_score[%row_score] : !pto.ptr<f32, ub> -> !pto.vreg<64xf32>
+            %max0 = pto.vcmax %score0, %mask0 : !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
+            %max0_bc = pto.vdup %max0, %active {position = "LOWEST"} : !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
+            %exp0 = pto.vexpdif %score0, %max0_bc, %mask0, "ODD" : !pto.vreg<64xf32>, !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
+            %sum0 = pto.vcadd %exp0, %mask0 : !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
+            %sum0_bc = pto.vdup %sum0, %active {position = "LOWEST"} : !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
+
+            %score1_base = arith.addi %row_score, %c16 : index
+            %score1 = pto.vlds %ub_score[%score1_base] : !pto.ptr<f32, ub> -> !pto.vreg<64xf32>
+            %chunk_max1 = pto.vcmax %score1, %mask0 : !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
+            %chunk_max1_bc = pto.vdup %chunk_max1, %active {position = "LOWEST"} : !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
+            %newmax = pto.vmax %max0_bc, %chunk_max1_bc, %active : !pto.vreg<64xf32>, !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
+            %alpha = pto.vexpdif %max0_bc, %newmax, %active, "ODD" : !pto.vreg<64xf32>, !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
+            %sum0_scaled = pto.vmul %alpha, %sum0_bc, %active : !pto.vreg<64xf32>, !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
+            %exp1 = pto.vexpdif %score1, %newmax, %mask0, "ODD" : !pto.vreg<64xf32>, !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
+            %sum1 = pto.vcadd %exp1, %mask0 : !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
+            %sum1_bc = pto.vdup %sum1, %active {position = "LOWEST"} : !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
+            %final_sum = pto.vadd %sum0_scaled, %sum1_bc, %active : !pto.vreg<64xf32>, !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
+
+            scf.for %dim = %c0 to %c8 step %c1 {
+              %vt_base = arith.muli %dim, %c32 : index
+              %v0 = pto.vlds %ub_vt[%vt_base] : !pto.ptr<f32, ub> -> !pto.vreg<64xf32>
+              %weighted0 = pto.vmul %exp0, %v0, %mask0 : !pto.vreg<64xf32>, !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
+              %acc0 = pto.vcadd %weighted0, %mask0 : !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
+              %acc0_bc = pto.vdup %acc0, %active {position = "LOWEST"} : !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
+              %old_acc_scaled = pto.vmul %alpha, %acc0_bc, %active : !pto.vreg<64xf32>, !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
+              %v1 = pto.vlds %ub_vt_hi[%vt_base] : !pto.ptr<f32, ub> -> !pto.vreg<64xf32>
+              %weighted1 = pto.vmul %exp1, %v1, %mask0 : !pto.vreg<64xf32>, !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
+              %acc1 = pto.vcadd %weighted1, %mask0 : !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
+              %acc1_bc = pto.vdup %acc1, %active {position = "LOWEST"} : !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
+              %acc = pto.vadd %old_acc_scaled, %acc1_bc, %active : !pto.vreg<64xf32>, !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
+              %out = pto.vdiv %acc, %final_sum, %active : !pto.vreg<64xf32>, !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
+              %out_idx = arith.addi %row_out, %dim : index
+              pto.vsts %out, %ub_out[%out_idx], %one_mask {dist = "1PT_B32"} : !pto.vreg<64xf32>, !pto.ptr<f32, ub>, !pto.mask<b32>
+            }
+          }
+        }
+
+        pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+        pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+        pto.mte_ub_gm %ub_out, %out_block_gm, %c32_i64
+          nburst(%c16_i64, %c32_i64, %c32_i64)
+          : !pto.ptr<f32, ub>, !pto.ptr<f32, gm>, i64, i64, i64, i64
+      }
+      pto.barrier #pto.pipe<PIPE_ALL>
+    }
+    return
+  }
+}
