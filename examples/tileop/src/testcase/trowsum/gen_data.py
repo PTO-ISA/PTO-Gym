@@ -29,16 +29,21 @@ for case in CASES:
         if dtype == np.int32:
             input_arr = np.random.randint(low=-100, high=100, size=(row, col)).astype(dtype)
         elif dtype == np.int16:
-            input_arr = np.random.randint(low=-50, high=50, size=(row, col)).astype(dtype)
+            if case.get("overflow"):
+                # Generate values that cause overflow when summed to test NOSAT behavior
+                # 1000 * 64 = 64000 > 32767, wraps to -1536 in int16
+                input_arr = np.full((row, col), 1000, dtype=dtype)
+            else:
+                input_arr = np.random.randint(low=-50, high=50, size=(row, col)).astype(dtype)
         else:
             input_arr = np.random.randint(low=-10, high=10, size=(row, col)).astype(dtype)
     else:
         input_arr = np.random.uniform(low=-1, high=1, size=(row, col)).astype(dtype)
 
-    output_arr = np.zeros((row,))
+    output_arr = np.zeros((row,), dtype=np.int64 if np.issubdtype(dtype, np.integer) else np.float64)
     for i in range(valid_row):
         for j in range(valid_col):
-            output_arr[i] += input_arr[i, j]
+            output_arr[i] += int(input_arr[i, j]) if np.issubdtype(dtype, np.integer) else input_arr[i, j]
     output_arr = output_arr.astype(dtype)
 
     save_case_data(case["name"], {"input": input_arr, "golden": output_arr})

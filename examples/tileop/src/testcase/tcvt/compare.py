@@ -17,6 +17,12 @@ from cases import CASES
 from st_common import result_cmp, style_fail, style_pass, validate_cases
 
 
+_STR_DTYPE_MAP = {"si16": np.int16}
+
+def normalize_dtype(dtype):
+    return _STR_DTYPE_MAP.get(dtype, dtype)
+
+
 def main():
     validate_cases(CASES)
     case_filter = sys.argv[1] if len(sys.argv) > 1 else None
@@ -30,6 +36,7 @@ def main():
         shape = case["shape"]
         vr, vc = case["valid_shape"]
         dst_dtype = case["dst_dtype"]
+        dst_dtype = normalize_dtype(dst_dtype)
 
         golden = np.fromfile(os.path.join(case_dir, "golden.bin"), dtype=dst_dtype).reshape(shape)
         output = np.fromfile(os.path.join(case_dir, "output.bin"), dtype=dst_dtype).reshape(shape)

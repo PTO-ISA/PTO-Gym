@@ -10,9 +10,9 @@
 // dst = exp(src0 - broadcast(src1))
 // Supports f32, f16
 
-module {
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
   // f32_32x64: launchTRowExpandExpdif<float, 32, 64, 32, 1, true>
-  func.func @TROWEXPANDEXPDIF_f32_32x64(%src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TROWEXPANDEXPDIF_f32_32x64(%src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c8    = arith.constant 8    : index
@@ -67,7 +67,7 @@ module {
   }
 
   // f32_16x32: launchTRowExpandExpdif<float, 16, 32, 16, 1, true>
-  func.func @TROWEXPANDEXPDIF_f32_16x32(%src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TROWEXPANDEXPDIF_f32_16x32(%src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0   = arith.constant 0   : index
     %c1   = arith.constant 1   : index
     %c8   = arith.constant 8   : index
@@ -122,7 +122,7 @@ module {
   }
 
   // f16_16x32: launchTRowExpandExpdif<aclFloat16, 16, 32, 16, 1, true>
-  func.func @TROWEXPANDEXPDIF_f16_16x32(%src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) {
+  func.func @TROWEXPANDEXPDIF_f16_16x32(%src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) attributes {pto.aicore} {
     %c0   = arith.constant 0   : index
     %c1   = arith.constant 1   : index
     %c16  = arith.constant 16  : index
@@ -176,7 +176,7 @@ module {
   }
 
   // f16_48x64: launchTRowExpandExpdif<aclFloat16, 48, 64, 48, 1, true>
-  func.func @TROWEXPANDEXPDIF_f16_48x64(%src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) {
+  func.func @TROWEXPANDEXPDIF_f16_48x64(%src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c16   = arith.constant 16   : index
@@ -231,7 +231,7 @@ module {
   }
 
   // f32_16x128_noeq: launchTRowExpandExpdif<float, 16, 128, 16, 1, false>
-  func.func @TROWEXPANDEXPDIF_f32_16x128_noeq(%src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TROWEXPANDEXPDIF_f32_16x128_noeq(%src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c8    = arith.constant 8    : index

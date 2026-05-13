@@ -8,12 +8,12 @@
 
 // TileLang ST kernels for pto.texp: tload(a) + texp(a)->b + tstore(b).
 // Multiple cases with different shapes in a single module.
-// Compiled by ptoas --enable-insert-sync --enable-tile-op-expand --vpto-emit-hivm-llvm
-// to produce LLVM IR.
+// Compiled by ptoas --enable-insert-sync --enable-tile-op-expand
+// to produce a fatobj object.
 
-module {
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
   // Case 0: f32 16x64 (1024 elements)
-  func.func @TEXP_f32_16x64(%a_ptr: !pto.ptr<f32>, %b_ptr: !pto.ptr<f32>) {
+  func.func @TEXP_f32_16x64(%a_ptr: !pto.ptr<f32>, %b_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c16   = arith.constant 16   : index
@@ -55,7 +55,7 @@ module {
   }
 
   // Case 1: f32 32x32 (1024 elements)
-  func.func @TEXP_f32_32x32(%a_ptr: !pto.ptr<f32>, %b_ptr: !pto.ptr<f32>) {
+  func.func @TEXP_f32_32x32(%a_ptr: !pto.ptr<f32>, %b_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c32   = arith.constant 32   : index
@@ -96,7 +96,7 @@ module {
   }
 
   // Case 2: f16 16x64 (1024 elements)
-  func.func @TEXP_f16_16x64(%a_ptr: !pto.ptr<f16>, %b_ptr: !pto.ptr<f16>) {
+  func.func @TEXP_f16_16x64(%a_ptr: !pto.ptr<f16>, %b_ptr: !pto.ptr<f16>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c16   = arith.constant 16   : index
@@ -138,7 +138,7 @@ module {
   }
 
   // Case 3: f16 32x32 (1024 elements)
-  func.func @TEXP_f16_32x32(%a_ptr: !pto.ptr<f16>, %b_ptr: !pto.ptr<f16>) {
+  func.func @TEXP_f16_32x32(%a_ptr: !pto.ptr<f16>, %b_ptr: !pto.ptr<f16>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c32   = arith.constant 32   : index
@@ -175,6 +175,90 @@ module {
 
     pto.tstore ins(%b : !pto.tile_buf<vec, 32x32xf16>)
                outs(%b_part : !pto.partition_tensor_view<1x1x1x32x32xf16>)
+    return
+  }
+
+  // Case 4: f32 64x64 hp1 (4096 elements)
+  func.func @TEXP_f32_64x64_hp1(%a_ptr: !pto.ptr<f32>, %b_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
+    %c0    = arith.constant 0    : index
+    %c1    = arith.constant 1    : index
+    %c64   = arith.constant 64   : index
+    %c4096 = arith.constant 4096 : index
+
+    %a_view = pto.make_tensor_view %a_ptr,
+      shape = [%c1, %c1, %c1, %c64, %c64],
+      strides = [%c4096, %c4096, %c4096, %c64, %c1]
+      : !pto.tensor_view<1x1x1x64x64xf32>
+    %b_view = pto.make_tensor_view %b_ptr,
+      shape = [%c1, %c1, %c1, %c64, %c64],
+      strides = [%c4096, %c4096, %c4096, %c64, %c1]
+      : !pto.tensor_view<1x1x1x64x64xf32>
+
+    %a_part = pto.partition_view %a_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c64, %c64]
+      : !pto.tensor_view<1x1x1x64x64xf32> -> !pto.partition_tensor_view<1x1x1x64x64xf32>
+    %b_part = pto.partition_view %b_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c64, %c64]
+      : !pto.tensor_view<1x1x1x64x64xf32> -> !pto.partition_tensor_view<1x1x1x64x64xf32>
+
+    %a = pto.alloc_tile
+      : !pto.tile_buf<vec, 64x64xf32>
+    %b = pto.alloc_tile
+      : !pto.tile_buf<vec, 64x64xf32>
+
+    pto.tload ins(%a_part : !pto.partition_tensor_view<1x1x1x64x64xf32>)
+              outs(%a : !pto.tile_buf<vec, 64x64xf32>)
+
+    pto.texp ins(%a : !pto.tile_buf<vec, 64x64xf32>)
+              outs(%b : !pto.tile_buf<vec, 64x64xf32>)
+              {precision_mode = #pto<precision_mode HIGH_PRECISION>}
+
+    pto.tstore ins(%b : !pto.tile_buf<vec, 64x64xf32>)
+               outs(%b_part : !pto.partition_tensor_view<1x1x1x64x64xf32>)
+    return
+  }
+
+  // Case 5: f16 64x64 hp2 (4096 elements)
+  func.func @TEXP_f16_64x64_hp2(%a_ptr: !pto.ptr<f16>, %b_ptr: !pto.ptr<f16>) attributes {pto.aicore} {
+    %c0    = arith.constant 0    : index
+    %c1    = arith.constant 1    : index
+    %c64   = arith.constant 64   : index
+    %c4096 = arith.constant 4096 : index
+
+    %a_view = pto.make_tensor_view %a_ptr,
+      shape = [%c1, %c1, %c1, %c64, %c64],
+      strides = [%c4096, %c4096, %c4096, %c64, %c1]
+      : !pto.tensor_view<1x1x1x64x64xf16>
+    %b_view = pto.make_tensor_view %b_ptr,
+      shape = [%c1, %c1, %c1, %c64, %c64],
+      strides = [%c4096, %c4096, %c4096, %c64, %c1]
+      : !pto.tensor_view<1x1x1x64x64xf16>
+
+    %a_part = pto.partition_view %a_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c64, %c64]
+      : !pto.tensor_view<1x1x1x64x64xf16> -> !pto.partition_tensor_view<1x1x1x64x64xf16>
+    %b_part = pto.partition_view %b_view,
+      offsets = [%c0, %c0, %c0, %c0, %c0],
+      sizes = [%c1, %c1, %c1, %c64, %c64]
+      : !pto.tensor_view<1x1x1x64x64xf16> -> !pto.partition_tensor_view<1x1x1x64x64xf16>
+
+    %a = pto.alloc_tile
+      : !pto.tile_buf<vec, 64x64xf16>
+    %b = pto.alloc_tile
+      : !pto.tile_buf<vec, 64x64xf16>
+
+    pto.tload ins(%a_part : !pto.partition_tensor_view<1x1x1x64x64xf16>)
+              outs(%a : !pto.tile_buf<vec, 64x64xf16>)
+
+    pto.texp ins(%a : !pto.tile_buf<vec, 64x64xf16>)
+              outs(%b : !pto.tile_buf<vec, 64x64xf16>)
+              {precision_mode = #pto<precision_mode HIGH_PRECISION>}
+
+    pto.tstore ins(%b : !pto.tile_buf<vec, 64x64xf16>)
+               outs(%b_part : !pto.partition_tensor_view<1x1x1x64x64xf16>)
     return
   }
 }

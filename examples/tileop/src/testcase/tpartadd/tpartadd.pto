@@ -8,12 +8,12 @@
 
 // TileLang ST kernels for pto.tpartadd: partial elementwise add with valid region handling.
 // Multiple cases with different valid_shape combinations in a single module.
-// Compiled by ptoas --enable-insert-sync --enable-tile-op-expand --vpto-emit-hivm-llvm
-// to produce LLVM IR.
+// Compiled by ptoas --enable-insert-sync --enable-tile-op-expand
+// to produce a fatobj object.
 
-module {
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
   // Case 0: f32 64x64 full (src0/src1/dst all have same valid_shape 64x64)
-  func.func @TPARTADD_f32_64x64_full(%a_ptr: !pto.ptr<f32>, %b_ptr: !pto.ptr<f32>, %c_ptr: !pto.ptr<f32>) {
+  func.func @TPARTADD_f32_64x64_full(%a_ptr: !pto.ptr<f32>, %b_ptr: !pto.ptr<f32>, %c_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c64   = arith.constant 64   : index
@@ -67,7 +67,7 @@ module {
   }
 
   // Case 1: f32 64x64 src0 row less (src0 valid 8x64, src1/dst valid 64x64)
-  func.func @TPARTADD_f32_64x64_src0_row_less(%a_ptr: !pto.ptr<f32>, %b_ptr: !pto.ptr<f32>, %c_ptr: !pto.ptr<f32>) {
+  func.func @TPARTADD_f32_64x64_src0_row_less(%a_ptr: !pto.ptr<f32>, %b_ptr: !pto.ptr<f32>, %c_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c8    = arith.constant 8    : index
@@ -125,7 +125,7 @@ module {
   }
 
   // Case 2: f32 64x64 src0 col less (src0 valid 64x8, src1/dst valid 64x64)
-  func.func @TPARTADD_f32_64x64_src0_col_less(%a_ptr: !pto.ptr<f32>, %b_ptr: !pto.ptr<f32>, %c_ptr: !pto.ptr<f32>) {
+  func.func @TPARTADD_f32_64x64_src0_col_less(%a_ptr: !pto.ptr<f32>, %b_ptr: !pto.ptr<f32>, %c_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c8    = arith.constant 8    : index
@@ -183,7 +183,7 @@ module {
   }
 
   // Case 3: f32 64x64 src1 row less (src0/dst valid 64x64, src1 valid 8x64)
-  func.func @TPARTADD_f32_64x64_src1_row_less(%a_ptr: !pto.ptr<f32>, %b_ptr: !pto.ptr<f32>, %c_ptr: !pto.ptr<f32>) {
+  func.func @TPARTADD_f32_64x64_src1_row_less(%a_ptr: !pto.ptr<f32>, %b_ptr: !pto.ptr<f32>, %c_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c8    = arith.constant 8    : index
@@ -241,7 +241,7 @@ module {
   }
 
   // Case 4: f32 64x64 src1 col less (src0/dst valid 64x64, src1 valid 64x8)
-  func.func @TPARTADD_f32_64x64_src1_col_less(%a_ptr: !pto.ptr<f32>, %b_ptr: !pto.ptr<f32>, %c_ptr: !pto.ptr<f32>) {
+  func.func @TPARTADD_f32_64x64_src1_col_less(%a_ptr: !pto.ptr<f32>, %b_ptr: !pto.ptr<f32>, %c_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c8    = arith.constant 8    : index
@@ -299,7 +299,7 @@ module {
   }
 
   // Case 5: f16 8x48 src0 col less (src0 valid 8x16, src1/dst valid 8x48)
-  func.func @TPARTADD_f16_8x48_src0_col_less(%a_ptr: !pto.ptr<f16>, %b_ptr: !pto.ptr<f16>, %c_ptr: !pto.ptr<f16>) {
+  func.func @TPARTADD_f16_8x48_src0_col_less(%a_ptr: !pto.ptr<f16>, %b_ptr: !pto.ptr<f16>, %c_ptr: !pto.ptr<f16>) attributes {pto.aicore} {
     %c0   = arith.constant 0   : index
     %c1   = arith.constant 1   : index
     %c8   = arith.constant 8   : index
@@ -358,7 +358,7 @@ module {
   }
 
   // Case 6: f16 8x768 src0 col less (src0 valid 8x512, src1/dst valid 8x768)
-  func.func @TPARTADD_f16_8x768_src0_col_less(%a_ptr: !pto.ptr<f16>, %b_ptr: !pto.ptr<f16>, %c_ptr: !pto.ptr<f16>) {
+  func.func @TPARTADD_f16_8x768_src0_col_less(%a_ptr: !pto.ptr<f16>, %b_ptr: !pto.ptr<f16>, %c_ptr: !pto.ptr<f16>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c8    = arith.constant 8    : index
@@ -417,7 +417,7 @@ module {
   }
 
   // Case 7: i16 8x48 src1 col less (src0/dst valid 8x48, src1 valid 8x16)
-  func.func @TPARTADD_i16_8x48_src1_col_less(%a_ptr: !pto.ptr<i16>, %b_ptr: !pto.ptr<i16>, %c_ptr: !pto.ptr<i16>) {
+  func.func @TPARTADD_i16_8x48_src1_col_less(%a_ptr: !pto.ptr<i16>, %b_ptr: !pto.ptr<i16>, %c_ptr: !pto.ptr<i16>) attributes {pto.aicore} {
     %c0   = arith.constant 0   : index
     %c1   = arith.constant 1   : index
     %c8   = arith.constant 8   : index
@@ -476,7 +476,7 @@ module {
   }
 
   // Case 8: i32 64x64 src0 row less (src0 valid 8x64, src1/dst valid 64x64)
-  func.func @TPARTADD_i32_64x64_src0_row_less(%a_ptr: !pto.ptr<i32>, %b_ptr: !pto.ptr<i32>, %c_ptr: !pto.ptr<i32>) {
+  func.func @TPARTADD_i32_64x64_src0_row_less(%a_ptr: !pto.ptr<i32>, %b_ptr: !pto.ptr<i32>, %c_ptr: !pto.ptr<i32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c8    = arith.constant 8    : index

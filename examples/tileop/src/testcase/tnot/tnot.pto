@@ -8,12 +8,12 @@
 
 // TileLang ST kernels for pto.tnot: tload(a) + tnot(a)->b + tstore(b).
 // Multiple cases with different shapes in a single module.
-// Compiled by ptoas --enable-insert-sync --enable-tile-op-expand --vpto-emit-hivm-llvm
-// to produce LLVM IR.
+// Compiled by ptoas --enable-insert-sync --enable-tile-op-expand
+// to produce a fatobj object.
 
-module {
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
   // Case 0: int8 64x64 (valid 64x64)
-  func.func @TNOT_int8_64x64(%a_ptr: !pto.ptr<i8>, %b_ptr: !pto.ptr<i8>) {
+  func.func @TNOT_int8_64x64(%a_ptr: !pto.ptr<i8>, %b_ptr: !pto.ptr<i8>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c64   = arith.constant 64   : index
@@ -54,7 +54,7 @@ module {
   }
 
   // Case 1: uint8 64x64 (valid 60x60) - partition_view sizes = valid_shape
-  func.func @TNOT_uint8_60x60(%a_ptr: !pto.ptr<ui8>, %b_ptr: !pto.ptr<ui8>) {
+  func.func @TNOT_uint8_60x60(%a_ptr: !pto.ptr<ui8>, %b_ptr: !pto.ptr<ui8>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c60   = arith.constant 60   : index
@@ -96,7 +96,7 @@ module {
   }
 
   // Case 2: int16 64x64 (valid 64x64)
-  func.func @TNOT_int16_64x64(%a_ptr: !pto.ptr<i16>, %b_ptr: !pto.ptr<i16>) {
+  func.func @TNOT_int16_64x64(%a_ptr: !pto.ptr<i16>, %b_ptr: !pto.ptr<i16>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c64   = arith.constant 64   : index
@@ -137,7 +137,7 @@ module {
   }
 
   // Case 3: uint16 64x64 (valid 60x60) - partition_view sizes = valid_shape
-  func.func @TNOT_uint16_60x60(%a_ptr: !pto.ptr<ui16>, %b_ptr: !pto.ptr<ui16>) {
+  func.func @TNOT_uint16_60x60(%a_ptr: !pto.ptr<ui16>, %b_ptr: !pto.ptr<ui16>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c60   = arith.constant 60   : index
@@ -179,7 +179,7 @@ module {
   }
 
   // Case 4: int32 64x64 (valid 64x64)
-  func.func @TNOT_int32_64x64(%a_ptr: !pto.ptr<i32>, %b_ptr: !pto.ptr<i32>) {
+  func.func @TNOT_int32_64x64(%a_ptr: !pto.ptr<i32>, %b_ptr: !pto.ptr<i32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c64   = arith.constant 64   : index
@@ -220,7 +220,7 @@ module {
   }
 
   // Case 5: uint32 64x64 (valid 60x60) - partition_view sizes = valid_shape
-  func.func @TNOT_uint32_60x60(%a_ptr: !pto.ptr<ui32>, %b_ptr: !pto.ptr<ui32>) {
+  func.func @TNOT_uint32_60x60(%a_ptr: !pto.ptr<ui32>, %b_ptr: !pto.ptr<ui32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c60   = arith.constant 60   : index

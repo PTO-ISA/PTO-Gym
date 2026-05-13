@@ -9,12 +9,12 @@
 // TileLang ST kernels for pto.trecip: 1/x (reciprocal)
 // trecip = vdiv(1.0, x)
 // Multiple cases with different shapes in a single module.
-// Compiled by ptoas --enable-insert-sync --enable-tile-op-expand --vpto-emit-hivm-llvm
-// to produce LLVM IR.
+// Compiled by ptoas --enable-insert-sync --enable-tile-op-expand
+// to produce a fatobj object.
 
-module {
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
   // Case 0: f32 16x64
-  func.func @TRECIP_f32_16x64(%a_ptr: !pto.ptr<f32>, %b_ptr: !pto.ptr<f32>) {
+  func.func @TRECIP_f32_16x64(%a_ptr: !pto.ptr<f32>, %b_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c16   = arith.constant 16   : index
@@ -56,7 +56,7 @@ module {
   }
 
   // Case 1: f32 32x32
-  func.func @TRECIP_f32_32x32(%a_ptr: !pto.ptr<f32>, %b_ptr: !pto.ptr<f32>) {
+  func.func @TRECIP_f32_32x32(%a_ptr: !pto.ptr<f32>, %b_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c32   = arith.constant 32   : index
@@ -97,7 +97,7 @@ module {
   }
 
   // Case 2: f16 16x64
-  func.func @TRECIP_f16_16x64(%a_ptr: !pto.ptr<f16>, %b_ptr: !pto.ptr<f16>) {
+  func.func @TRECIP_f16_16x64(%a_ptr: !pto.ptr<f16>, %b_ptr: !pto.ptr<f16>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c16   = arith.constant 16   : index
@@ -139,7 +139,7 @@ module {
   }
 
   // Case 3: f16 32x32
-  func.func @TRECIP_f16_32x32(%a_ptr: !pto.ptr<f16>, %b_ptr: !pto.ptr<f16>) {
+  func.func @TRECIP_f16_32x32(%a_ptr: !pto.ptr<f16>, %b_ptr: !pto.ptr<f16>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c32   = arith.constant 32   : index
@@ -180,7 +180,7 @@ module {
   }
 
   // Case 4: f32 66x72, valid 64x64 (pad case)
-  func.func @TRECIP_f32_64x64_pad(%a_ptr: !pto.ptr<f32>, %b_ptr: !pto.ptr<f32>) {
+  func.func @TRECIP_f32_64x64_pad(%a_ptr: !pto.ptr<f32>, %b_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c64   = arith.constant 64   : index
@@ -223,7 +223,7 @@ module {
   }
 
   // Case 5: f32 66x72, valid 58x70 (non-square valid)
-  func.func @TRECIP_f32_58x70(%a_ptr: !pto.ptr<f32>, %b_ptr: !pto.ptr<f32>) {
+  func.func @TRECIP_f32_58x70(%a_ptr: !pto.ptr<f32>, %b_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c58   = arith.constant 58   : index

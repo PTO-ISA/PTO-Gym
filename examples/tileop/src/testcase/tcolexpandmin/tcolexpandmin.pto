@@ -9,9 +9,9 @@
 // TileLang ST kernels for pto.tcolexpandmin: elementwise minimum of src0 and tiled src1.
 // Matches PTO-ISA testcase parameters.
 
-module {
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
   // Case 1: fp32_16_128_1_128 (float32, src0=(16,128), src1=(1,128), dst=(16,128))
-  func.func @TCOLEXPANDMIN_fp32_16_128_1_128(%src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TCOLEXPANDMIN_fp32_16_128_1_128(%src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c16   = arith.constant 16   : index
@@ -73,7 +73,7 @@ module {
   }
 
   // Case 2: fp32_32_32_1_32 (float32, src0=(32,32), src1=(1,32), dst=(32,32))
-  func.func @TCOLEXPANDMIN_fp32_32_32_1_32(%src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TCOLEXPANDMIN_fp32_32_32_1_32(%src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c32   = arith.constant 32   : index
@@ -134,7 +134,7 @@ module {
   }
 
   // Case 3: fp16_4_256_1_256 (float16, src0=(4,256), src1=(1,256), dst=(4,256))
-  func.func @TCOLEXPANDMIN_fp16_4_256_1_256(%src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) {
+  func.func @TCOLEXPANDMIN_fp16_4_256_1_256(%src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c4    = arith.constant 4    : index
@@ -196,7 +196,7 @@ module {
   }
 
   // Case 4: fp16_10_64_1_64 (float16, src0=(10,64), src1=(1,64), dst=(10,64))
-  func.func @TCOLEXPANDMIN_fp16_10_64_1_64(%src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) {
+  func.func @TCOLEXPANDMIN_fp16_10_64_1_64(%src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c10   = arith.constant 10   : index
@@ -258,7 +258,7 @@ pto.tstore ins(%dst_tile : !pto.tile_buf<vec, 10x64xf16>)
   }
 
   // Case 5: int32_16_32_1_32 (int32, src0=(16,32), src1=(1,32), dst=(16,32))
-  func.func @TCOLEXPANDMIN_int32_16_32_1_32(%src0_ptr: !pto.ptr<i32>, %src1_ptr: !pto.ptr<i32>, %dst_ptr: !pto.ptr<i32>) {
+  func.func @TCOLEXPANDMIN_int32_16_32_1_32(%src0_ptr: !pto.ptr<i32>, %src1_ptr: !pto.ptr<i32>, %dst_ptr: !pto.ptr<i32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c16   = arith.constant 16   : index
@@ -320,7 +320,7 @@ pto.tstore ins(%dst_tile : !pto.tile_buf<vec, 10x64xf16>)
   }
 
   // Case 6: int16_16_64_1_64 (int16, src0=(16,64), src1=(1,64), dst=(16,64))
-  func.func @TCOLEXPANDMIN_int16_16_64_1_64(%src0_ptr: !pto.ptr<i16>, %src1_ptr: !pto.ptr<i16>, %dst_ptr: !pto.ptr<i16>) {
+  func.func @TCOLEXPANDMIN_int16_16_64_1_64(%src0_ptr: !pto.ptr<i16>, %src1_ptr: !pto.ptr<i16>, %dst_ptr: !pto.ptr<i16>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c16   = arith.constant 16   : index

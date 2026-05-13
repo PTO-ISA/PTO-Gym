@@ -9,9 +9,9 @@
 // TileLang ST kernels for pto.trowexpandmin: row-wise broadcast minimum.
 // Supports f32, f16, i32, i16
 
-module {
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
   // f32_16x32: launchTRowExpandMin<float, 16, 32, 16, 1, true>
-  func.func @TROWEXPANDMIN_f32_16x32(%src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TROWEXPANDMIN_f32_16x32(%src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0   = arith.constant 0   : index
     %c1   = arith.constant 1   : index
     %c8   = arith.constant 8   : index
@@ -66,7 +66,7 @@ module {
   }
 
   // f32_56x128: launchTRowExpandMin<float, 56, 128, 56, 1, true>
-  func.func @TROWEXPANDMIN_f32_56x128(%src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TROWEXPANDMIN_f32_56x128(%src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c8    = arith.constant 8    : index
@@ -121,7 +121,7 @@ module {
   }
 
   // f16_48x64: launchTRowExpandMin<aclFloat16, 48, 64, 48, 1, true>
-  func.func @TROWEXPANDMIN_f16_48x64(%src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) {
+  func.func @TROWEXPANDMIN_f16_48x64(%src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c16   = arith.constant 16   : index
@@ -176,7 +176,7 @@ module {
   }
 
   // f16_16x128: launchTRowExpandMin<aclFloat16, 16, 128, 16, 1, true>
-  func.func @TROWEXPANDMIN_f16_16x128(%src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) {
+  func.func @TROWEXPANDMIN_f16_16x128(%src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c16   = arith.constant 16   : index
@@ -230,7 +230,7 @@ module {
   }
 
   // f16_32x64_noeq: launchTRowExpandMin<aclFloat16, 32, 64, 32, 1, false>
-  func.func @TROWEXPANDMIN_f16_32x64_noeq(%src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) {
+  func.func @TROWEXPANDMIN_f16_32x64_noeq(%src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c16   = arith.constant 16   : index
@@ -285,7 +285,7 @@ module {
   }
 
   // i32_16x32: launchTRowExpandMin<int32_t, 16, 32, 16, 1, true>
-  func.func @TROWEXPANDMIN_i32_16x32(%src0_ptr: !pto.ptr<i32>, %src1_ptr: !pto.ptr<i32>, %dst_ptr: !pto.ptr<i32>) {
+  func.func @TROWEXPANDMIN_i32_16x32(%src0_ptr: !pto.ptr<i32>, %src1_ptr: !pto.ptr<i32>, %dst_ptr: !pto.ptr<i32>) attributes {pto.aicore} {
     %c0   = arith.constant 0   : index
     %c1   = arith.constant 1   : index
     %c8   = arith.constant 8   : index
@@ -340,7 +340,7 @@ module {
   }
 
   // i16_16x64: launchTRowExpandMin<int16_t, 16, 64, 16, 1, true>
-  func.func @TROWEXPANDMIN_i16_16x64(%src0_ptr: !pto.ptr<i16>, %src1_ptr: !pto.ptr<i16>, %dst_ptr: !pto.ptr<i16>) {
+  func.func @TROWEXPANDMIN_i16_16x64(%src0_ptr: !pto.ptr<i16>, %src1_ptr: !pto.ptr<i16>, %dst_ptr: !pto.ptr<i16>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c16   = arith.constant 16   : index

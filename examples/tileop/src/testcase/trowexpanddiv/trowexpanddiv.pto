@@ -11,9 +11,9 @@
 // src1Col=1: broadcast single column value to all dst columns
 // src1Col>1: each src1 column broadcasts to dstCol/src1Col columns
 
-module {
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
   // f32_40x64: launchTRowExpandDiv<float, 40, 64, 40, 1, true, false>
-  func.func @TROWEXPANDDIV_f32_40x64(%src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TROWEXPANDDIV_f32_40x64(%src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c8    = arith.constant 8    : index
@@ -68,7 +68,7 @@ module {
   }
 
   // f32_16x256: launchTRowExpandDiv<float, 16, 256, 16, 1, true, false>
-  func.func @TROWEXPANDDIV_f32_16x256(%src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TROWEXPANDDIV_f32_16x256(%src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c8    = arith.constant 8    : index
@@ -123,7 +123,7 @@ module {
   }
 
   // f16_16x32: launchTRowExpandDiv<aclFloat16, 16, 32, 16, 1, true, false>
-  func.func @TROWEXPANDDIV_f16_16x32(%src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) {
+  func.func @TROWEXPANDDIV_f16_16x32(%src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) attributes {pto.aicore} {
     %c0   = arith.constant 0   : index
     %c1   = arith.constant 1   : index
     %c16  = arith.constant 16  : index
@@ -177,7 +177,7 @@ module {
   }
 
   // f16_32x512: launchTRowExpandDiv<aclFloat16, 32, 512, 32, 1, true, false>
-  func.func @TROWEXPANDDIV_f16_32x512(%src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) {
+  func.func @TROWEXPANDDIV_f16_32x512(%src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) attributes {pto.aicore} {
     %c0     = arith.constant 0     : index
     %c1     = arith.constant 1     : index
     %c16    = arith.constant 16    : index
@@ -232,7 +232,7 @@ module {
   }
 
   // f32_16x128_noeq: launchTRowExpandDiv<float, 16, 128, 16, 1, false, false>
-  func.func @TROWEXPANDDIV_f32_16x128_noeq(%src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TROWEXPANDDIV_f32_16x128_noeq(%src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c8    = arith.constant 8    : index
@@ -287,7 +287,7 @@ module {
   }
 
   // f16_32x64_noeq: launchTRowExpandDiv<aclFloat16, 32, 64, 32, 1, false, false>
-  func.func @TROWEXPANDDIV_f16_32x64_noeq(%src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) {
+  func.func @TROWEXPANDDIV_f16_32x64_noeq(%src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c16   = arith.constant 16   : index
@@ -342,7 +342,7 @@ module {
   }
 
   // f32_40x32_hp: launchTRowExpandDiv<float, 40, 32, 40, 1, true, true> (highPrecision)
-  func.func @TROWEXPANDDIV_f32_40x32_hp(%src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TROWEXPANDDIV_f32_40x32_hp(%src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c8    = arith.constant 8    : index
@@ -397,7 +397,7 @@ module {
   }
 
   // f16_16x128_hp: launchTRowExpandDiv<aclFloat16, 16, 128, 16, 1, true, true> (highPrecision)
-  func.func @TROWEXPANDDIV_f16_16x128_hp(%src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) {
+  func.func @TROWEXPANDDIV_f16_16x128_hp(%src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c16   = arith.constant 16   : index
@@ -451,7 +451,7 @@ module {
   }
 
   // f32_24x64_v2: launchTRowExpandDiv2<float, 24, 64, 24, 8, true, false>
-  func.func @TROWEXPANDDIV_f32_24x64_v2(%src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TROWEXPANDDIV_f32_24x64_v2(%src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c8    = arith.constant 8    : index
@@ -506,7 +506,7 @@ module {
   }
 
   // f16_32x32_v2: launchTRowExpandDiv2<aclFloat16, 32, 32, 32, 16, true, false>
-  func.func @TROWEXPANDDIV_f16_32x32_v2(%src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) {
+  func.func @TROWEXPANDDIV_f16_32x32_v2(%src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c16   = arith.constant 16   : index
@@ -559,7 +559,7 @@ module {
   }
 
   // f32_20x64_v2_noeq: launchTRowExpandDiv2<float, 20, 64, 20, 8, false, false>
-  func.func @TROWEXPANDDIV_f32_20x64_v2_noeq(%src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TROWEXPANDDIV_f32_20x64_v2_noeq(%src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c8    = arith.constant 8    : index
@@ -614,7 +614,7 @@ module {
   }
 
   // f16_16x64_v2_noeq: launchTRowExpandDiv2<aclFloat16, 16, 64, 16, 16, false, false>
-  func.func @TROWEXPANDDIV_f16_16x64_v2_noeq(%src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) {
+  func.func @TROWEXPANDDIV_f16_16x64_v2_noeq(%src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c16   = arith.constant 16   : index
@@ -668,7 +668,7 @@ module {
   }
 
   // f32_8x32_v2_hp: launchTRowExpandDiv2<float, 8, 32, 8, 8, true, true>
-  func.func @TROWEXPANDDIV_f32_8x32_v2_hp(%src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TROWEXPANDDIV_f32_8x32_v2_hp(%src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0   = arith.constant 0   : index
     %c1   = arith.constant 1   : index
     %c8   = arith.constant 8   : index
@@ -721,7 +721,7 @@ module {
   }
 
   // f16_8x128_v2_hp: launchTRowExpandDiv2<aclFloat16, 8, 128, 8, 16, true, true>
-  func.func @TROWEXPANDDIV_f16_8x128_v2_hp(%src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) {
+  func.func @TROWEXPANDDIV_f16_8x128_v2_hp(%src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c8    = arith.constant 8    : index

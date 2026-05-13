@@ -8,13 +8,13 @@
 
 // TileLang ST kernels for pto.texpands: broadcast a scalar to a tile.
 // Multiple cases with different shapes, data types, and scalar values.
-// Compiled by ptoas --enable-insert-sync --enable-tile-op-expand --vpto-emit-hivm-llvm
+// Compiled by ptoas --enable-insert-sync --enable-tile-op-expand
 
-module {
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
   // ========== float32 cases ==========
 
   // Case: f32 16x64, scalar=5.0 (full valid shape)
-  func.func @TEXPANDS_f32_16x64_scalar5(%dst_ptr: !pto.ptr<f32>) {
+  func.func @TEXPANDS_f32_16x64_scalar5(%dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c16   = arith.constant 16   : index
@@ -44,7 +44,7 @@ module {
   }
 
   // Case: f32 32x32, scalar=3.0 (full valid shape)
-  func.func @TEXPANDS_f32_32x32_scalar3(%dst_ptr: !pto.ptr<f32>) {
+  func.func @TEXPANDS_f32_32x32_scalar3(%dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c32   = arith.constant 32   : index
@@ -73,7 +73,7 @@ module {
   }
 
   // Case: f32 64x64, scalar=2.0 (full valid shape)
-  func.func @TEXPANDS_f32_64x64_scalar2(%dst_ptr: !pto.ptr<f32>) {
+  func.func @TEXPANDS_f32_64x64_scalar2(%dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c64   = arith.constant 64   : index
@@ -102,7 +102,7 @@ module {
   }
 
   // Case: f32 16x64, scalar=7.0 (partial valid shape: 12x48)
-  func.func @TEXPANDS_f32_16x64_partial(%dst_ptr: !pto.ptr<f32>) {
+  func.func @TEXPANDS_f32_16x64_partial(%dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c12   = arith.constant 12   : index
@@ -134,7 +134,7 @@ module {
   }
 
   // Case: f32 64x64, valid 60x60, scalar=42.0
-  func.func @TEXPANDS_f32_64x64_valid_60x60(%dst_ptr: !pto.ptr<f32>) {
+  func.func @TEXPANDS_f32_64x64_valid_60x60(%dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c60   = arith.constant 60   : index
@@ -167,7 +167,7 @@ module {
   // ========== int32 cases ==========
 
   // Case: i32 64x64, scalar=100 (full valid shape)
-  func.func @TEXPANDS_i32_64x64_scalar100(%dst_ptr: !pto.ptr<i32>) {
+  func.func @TEXPANDS_i32_64x64_scalar100(%dst_ptr: !pto.ptr<i32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c64   = arith.constant 64   : index
@@ -196,7 +196,7 @@ module {
   }
 
   // Case: i32 64x64, valid 60x60, scalar=99
-  func.func @TEXPANDS_i32_64x64_valid_60x60(%dst_ptr: !pto.ptr<i32>) {
+  func.func @TEXPANDS_i32_64x64_valid_60x60(%dst_ptr: !pto.ptr<i32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c60   = arith.constant 60   : index
@@ -229,7 +229,7 @@ module {
   // ========== half (fp16) cases ==========
 
   // Case: f16 64x64, scalar=1.5 (full valid shape)
-  func.func @TEXPANDS_f16_64x64_scalar1_5(%dst_ptr: !pto.ptr<f16>) {
+  func.func @TEXPANDS_f16_64x64_scalar1_5(%dst_ptr: !pto.ptr<f16>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c64   = arith.constant 64   : index
@@ -258,7 +258,7 @@ module {
   }
 
   // Case: f16 2x4096, valid 1x3600, scalar=2.5 (wide column shape)
-  func.func @TEXPANDS_f16_2x4096_valid_1x3600(%dst_ptr: !pto.ptr<f16>) {
+  func.func @TEXPANDS_f16_2x4096_valid_1x3600(%dst_ptr: !pto.ptr<f16>) attributes {pto.aicore} {
     %c0    = arith.constant 0     : index
     %c1    = arith.constant 1     : index
     %c2    = arith.constant 2     : index
@@ -291,7 +291,7 @@ module {
   // ========== int16 cases ==========
 
   // Case: i16 64x64, scalar=50 (full valid shape)
-  func.func @TEXPANDS_i16_64x64_scalar50(%dst_ptr: !pto.ptr<i16>) {
+  func.func @TEXPANDS_i16_64x64_scalar50(%dst_ptr: !pto.ptr<i16>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c64   = arith.constant 64   : index
@@ -320,7 +320,7 @@ module {
   }
 
   // Case: i16 20x512, valid 16x200, scalar=25
-  func.func @TEXPANDS_i16_20x512_valid_16x200(%dst_ptr: !pto.ptr<i16>) {
+  func.func @TEXPANDS_i16_20x512_valid_16x200(%dst_ptr: !pto.ptr<i16>) attributes {pto.aicore} {
     %c0    = arith.constant 0     : index
     %c1    = arith.constant 1     : index
     %c16   = arith.constant 16    : index

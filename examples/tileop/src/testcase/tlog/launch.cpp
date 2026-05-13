@@ -39,3 +39,31 @@ extern "C" __global__ AICORE void TLOG_f16_32x32(__gm__ uint16_t *a, __gm__ uint
 void LaunchTLOG_f16_32x32(void *a, void *b, void *stream) {
     TLOG_f16_32x32<<<1, nullptr, stream>>>((__gm__ uint16_t *)a, (__gm__ uint16_t *)b);
 }
+
+// Case 5: f32 16x64 high precision
+extern "C" __global__ AICORE void TLOG_f32_16x64_hp(__gm__ float *a, __gm__ float *b);
+
+void LaunchTLOG_f32_16x64_hp(void *a, void *b, void *stream) {
+    TLOG_f32_16x64_hp<<<1, nullptr, stream>>>((__gm__ float *)a, (__gm__ float *)b);
+}
+
+// Case 6: f32 32x32 high precision
+extern "C" __global__ AICORE void TLOG_f32_32x32_hp(__gm__ float *a, __gm__ float *b);
+
+void LaunchTLOG_f32_32x32_hp(void *a, void *b, void *stream) {
+    TLOG_f32_32x32_hp<<<1, nullptr, stream>>>((__gm__ float *)a, (__gm__ float *)b);
+}
+
+// Case 7: f16 16x64 high precision
+extern "C" __global__ AICORE void TLOG_f16_16x64_hp(__gm__ uint16_t *a, __gm__ uint16_t *b);
+
+void LaunchTLOG_f16_16x64_hp(void *a, void *b, void *stream) {
+    TLOG_f16_16x64_hp<<<1, nullptr, stream>>>((__gm__ uint16_t *)a, (__gm__ uint16_t *)b);
+}
+
+// Case 8: f16 32x32 high precision
+extern "C" __global__ AICORE void TLOG_f16_32x32_hp(__gm__ uint16_t *a, __gm__ uint16_t *b);
+
+void LaunchTLOG_f16_32x32_hp(void *a, void *b, void *stream) {
+    TLOG_f16_32x32_hp<<<1, nullptr, stream>>>((__gm__ uint16_t *)a, (__gm__ uint16_t *)b);
+}

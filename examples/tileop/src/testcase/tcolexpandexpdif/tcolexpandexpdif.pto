@@ -10,9 +10,9 @@
 // Matches PTO-ISA testcase parameters.
 // Key: tile_buf cols = full tensor width, v_col = valid portion
 
-module {
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
   // Case 1: fp32_32_16_1_16 (float32, src0=(32,16), src1=(1,16), dst=(32,16))
-  func.func @TCOLEXPANDEXPDIF_fp32_32_16_1_16(%src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TCOLEXPANDEXPDIF_fp32_32_16_1_16(%src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0   = arith.constant 0   : index
     %c1   = arith.constant 1   : index
     %c16  = arith.constant 16  : index
@@ -74,7 +74,7 @@ module {
   }
 
   // Case 2: fp32_16_32_1_32 (float32, src0=(16,32), src1=(1,32), dst=(16,32))
-  func.func @TCOLEXPANDEXPDIF_fp32_16_32_1_32(%src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TCOLEXPANDEXPDIF_fp32_16_32_1_32(%src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0   = arith.constant 0   : index
     %c1   = arith.constant 1   : index
     %c16  = arith.constant 16  : index
@@ -136,7 +136,7 @@ module {
   }
 
   // Case 3: fp16_32_32_1_32 (float16, src0=(32,32), src1=(1,32), dst=(32,32))
-  func.func @TCOLEXPANDEXPDIF_fp16_32_32_1_32(%src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) {
+  func.func @TCOLEXPANDEXPDIF_fp16_32_32_1_32(%src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c32   = arith.constant 32   : index
@@ -197,7 +197,7 @@ module {
   }
 
   // Case 4: fp16_16_128_1_128 (float16, src0=(16,128), src1=(1,128), dst=(16,128))
-  func.func @TCOLEXPANDEXPDIF_fp16_16_128_1_128(%src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) {
+  func.func @TCOLEXPANDEXPDIF_fp16_16_128_1_128(%src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c16   = arith.constant 16   : index

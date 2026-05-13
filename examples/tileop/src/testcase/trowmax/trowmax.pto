@@ -8,10 +8,10 @@
 
 // TileLang ST kernels for pto.trowmax: tload(src) + trowmax(src, tmp)->dst + tstore(dst).
 
-module {
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
 
   // Case 0: f32 127x64 (valid=127x63)
-  func.func @TROWMAX_f32_127x64_valid127x63(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TROWMAX_f32_127x64_valid127x63(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1   = arith.constant 1      : index
     %c8   = arith.constant 8      : index
@@ -58,7 +58,7 @@ module {
   }
 
   // Case 1: f32 63x64 (valid=63x64)
-  func.func @TROWMAX_f32_63x64(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TROWMAX_f32_63x64(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1   = arith.constant 1      : index
     %c8   = arith.constant 8      : index
@@ -104,7 +104,7 @@ module {
   }
 
   // Case 2: f32 31x128 (valid=31x127)
-  func.func @TROWMAX_f32_31x128_valid31x127(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TROWMAX_f32_31x128_valid31x127(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1   = arith.constant 1      : index
     %c8   = arith.constant 8      : index
@@ -151,7 +151,7 @@ module {
   }
 
   // Case 3: f32 15x192 (valid=15x192)
-  func.func @TROWMAX_f32_15x192(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TROWMAX_f32_15x192(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1   = arith.constant 1      : index
     %c8   = arith.constant 8      : index
@@ -197,7 +197,7 @@ module {
   }
 
   // Case 4: f32 7x448 (valid=7x447)
-  func.func @TROWMAX_f32_7x448_valid7x447(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TROWMAX_f32_7x448_valid7x447(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1   = arith.constant 1      : index
     %c7   = arith.constant 7      : index
@@ -244,7 +244,7 @@ module {
   }
 
   // Case 5: f16 256x16 (valid=256x15)
-  func.func @TROWMAX_f16_256x16_valid256x15(%src_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) {
+  func.func @TROWMAX_f16_256x16_valid256x15(%src_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1   = arith.constant 1      : index
     %c15   = arith.constant 15     : index
@@ -290,7 +290,7 @@ module {
   }
 
   // Case 6: f32 30x216 (valid=30x216)
-  func.func @TROWMAX_f32_30x216(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TROWMAX_f32_30x216(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1   = arith.constant 1      : index
     %c8   = arith.constant 8      : index
@@ -336,7 +336,7 @@ module {
   }
 
   // Case 7: f32 30x216 (valid=30x24)
-  func.func @TROWMAX_f32_30x216_valid30x24(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TROWMAX_f32_30x216_valid30x24(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1   = arith.constant 1      : index
     %c8   = arith.constant 8      : index
@@ -383,7 +383,7 @@ module {
   }
 
   // Case 8: f32 30x216 (valid=11x216)
-  func.func @TROWMAX_f32_30x216_valid11x216(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TROWMAX_f32_30x216_valid11x216(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1   = arith.constant 1      : index
     %c8   = arith.constant 8      : index
@@ -430,7 +430,7 @@ module {
   }
 
   // Case 9: f32 30x216 (valid=11x24)
-  func.func @TROWMAX_f32_30x216_valid11x24(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TROWMAX_f32_30x216_valid11x24(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1   = arith.constant 1      : index
     %c8   = arith.constant 8      : index
@@ -478,7 +478,7 @@ module {
   }
 
   // Case 10: f32 238x40 (valid=238x40)
-  func.func @TROWMAX_f32_238x40(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TROWMAX_f32_238x40(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1   = arith.constant 1      : index
     %c8   = arith.constant 8      : index
@@ -524,7 +524,7 @@ module {
   }
 
   // Case 11: f32 238x40 (valid=238x16)
-  func.func @TROWMAX_f32_238x40_valid238x16(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TROWMAX_f32_238x40_valid238x16(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1   = arith.constant 1      : index
     %c8   = arith.constant 8      : index
@@ -571,7 +571,7 @@ module {
   }
 
   // Case 12: f32 238x40 (valid=121x40)
-  func.func @TROWMAX_f32_238x40_valid121x40(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TROWMAX_f32_238x40_valid121x40(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1   = arith.constant 1      : index
     %c8   = arith.constant 8      : index
@@ -618,7 +618,7 @@ module {
   }
 
   // Case 13: f32 238x40 (valid=121x16)
-  func.func @TROWMAX_f32_238x40_valid121x16(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TROWMAX_f32_238x40_valid121x16(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1   = arith.constant 1      : index
     %c8   = arith.constant 8      : index
@@ -666,7 +666,7 @@ module {
   }
 
   // Case 14: f32 64x128 (valid=64x128)
-  func.func @TROWMAX_f32_64x128(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TROWMAX_f32_64x128(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1   = arith.constant 1      : index
     %c8   = arith.constant 8      : index
@@ -712,7 +712,7 @@ module {
   }
 
   // Case 15: f32 32x256 (valid=32x256)
-  func.func @TROWMAX_f32_32x256(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TROWMAX_f32_32x256(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1   = arith.constant 1      : index
     %c8   = arith.constant 8      : index
@@ -758,7 +758,7 @@ module {
   }
 
   // Case 16: f32 16x512 (valid=16x512)
-  func.func @TROWMAX_f32_16x512(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TROWMAX_f32_16x512(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1   = arith.constant 1      : index
     %c8   = arith.constant 8      : index
@@ -804,7 +804,7 @@ module {
   }
 
   // Case 17: f32 8x1024 (valid=8x1024)
-  func.func @TROWMAX_f32_8x1024(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TROWMAX_f32_8x1024(%src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1   = arith.constant 1      : index
     %c8   = arith.constant 8      : index
@@ -853,7 +853,7 @@ module {
   // ========================================================================
 
   // case19: i32 127x64 valid=127x63
-  func.func @TROWMAX_i32_127x64_valid127x63(%src_ptr: !pto.ptr<i32>, %dst_ptr: !pto.ptr<i32>) {
+  func.func @TROWMAX_i32_127x64_valid127x63(%src_ptr: !pto.ptr<i32>, %dst_ptr: !pto.ptr<i32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c8    = arith.constant 8    : index
@@ -900,7 +900,7 @@ module {
   }
 
   // case20: i32 63x64 valid=63x64
-  func.func @TROWMAX_i32_63x64(%src_ptr: !pto.ptr<i32>, %dst_ptr: !pto.ptr<i32>) {
+  func.func @TROWMAX_i32_63x64(%src_ptr: !pto.ptr<i32>, %dst_ptr: !pto.ptr<i32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c8    = arith.constant 8    : index
@@ -946,7 +946,7 @@ module {
   }
 
   // case21: i32 31x128 valid=31x127
-  func.func @TROWMAX_i32_31x128_valid31x127(%src_ptr: !pto.ptr<i32>, %dst_ptr: !pto.ptr<i32>) {
+  func.func @TROWMAX_i32_31x128_valid31x127(%src_ptr: !pto.ptr<i32>, %dst_ptr: !pto.ptr<i32>) attributes {pto.aicore} {
     %c0    = arith.constant 0     : index
     %c1    = arith.constant 1     : index
     %c8    = arith.constant 8     : index
@@ -993,7 +993,7 @@ module {
   }
 
   // case22: i32 15x192 valid=15x192
-  func.func @TROWMAX_i32_15x192(%src_ptr: !pto.ptr<i32>, %dst_ptr: !pto.ptr<i32>) {
+  func.func @TROWMAX_i32_15x192(%src_ptr: !pto.ptr<i32>, %dst_ptr: !pto.ptr<i32>) attributes {pto.aicore} {
     %c0    = arith.constant 0     : index
     %c1    = arith.constant 1     : index
     %c8    = arith.constant 8     : index
@@ -1039,7 +1039,7 @@ module {
   }
 
   // case23: i32 7x448 valid=7x447
-  func.func @TROWMAX_i32_7x448_valid7x447(%src_ptr: !pto.ptr<i32>, %dst_ptr: !pto.ptr<i32>) {
+  func.func @TROWMAX_i32_7x448_valid7x447(%src_ptr: !pto.ptr<i32>, %dst_ptr: !pto.ptr<i32>) attributes {pto.aicore} {
     %c0    = arith.constant 0     : index
     %c1    = arith.constant 1     : index
     %c8    = arith.constant 8     : index
@@ -1090,7 +1090,7 @@ module {
   // ========================================================================
 
   // case24: i16 128x64 valid=128x64
-  func.func @TROWMAX_i16_128x64(%src_ptr: !pto.ptr<i16>, %dst_ptr: !pto.ptr<i16>) {
+  func.func @TROWMAX_i16_128x64(%src_ptr: !pto.ptr<i16>, %dst_ptr: !pto.ptr<i16>) attributes {pto.aicore} {
     %c0    = arith.constant 0     : index
     %c1    = arith.constant 1     : index
     %c16   = arith.constant 16    : index
@@ -1136,7 +1136,7 @@ module {
   }
 
   // case25: i16 64x64 valid=64x64
-  func.func @TROWMAX_i16_64x64(%src_ptr: !pto.ptr<i16>, %dst_ptr: !pto.ptr<i16>) {
+  func.func @TROWMAX_i16_64x64(%src_ptr: !pto.ptr<i16>, %dst_ptr: !pto.ptr<i16>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c16   = arith.constant 16   : index
@@ -1181,7 +1181,7 @@ module {
   }
 
   // case26: i16 32x128 valid=32x128
-  func.func @TROWMAX_i16_32x128(%src_ptr: !pto.ptr<i16>, %dst_ptr: !pto.ptr<i16>) {
+  func.func @TROWMAX_i16_32x128(%src_ptr: !pto.ptr<i16>, %dst_ptr: !pto.ptr<i16>) attributes {pto.aicore} {
     %c0    = arith.constant 0     : index
     %c1    = arith.constant 1     : index
     %c16   = arith.constant 16    : index
@@ -1227,7 +1227,7 @@ module {
   }
 
   // case27: i16 16x192 valid=16x192
-  func.func @TROWMAX_i16_16x192(%src_ptr: !pto.ptr<i16>, %dst_ptr: !pto.ptr<i16>) {
+  func.func @TROWMAX_i16_16x192(%src_ptr: !pto.ptr<i16>, %dst_ptr: !pto.ptr<i16>) attributes {pto.aicore} {
     %c0    = arith.constant 0     : index
     %c1    = arith.constant 1     : index
     %c16   = arith.constant 16    : index
@@ -1273,7 +1273,7 @@ module {
   }
 
   // case28: i16 8x448 valid=8x448
-  func.func @TROWMAX_i16_8x448(%src_ptr: !pto.ptr<i16>, %dst_ptr: !pto.ptr<i16>) {
+  func.func @TROWMAX_i16_8x448(%src_ptr: !pto.ptr<i16>, %dst_ptr: !pto.ptr<i16>) attributes {pto.aicore} {
     %c0    = arith.constant 0     : index
     %c1    = arith.constant 1     : index
     %c16   = arith.constant 16    : index

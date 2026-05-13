@@ -8,12 +8,12 @@
 
 // TileLang ST kernels for pto.tmin: tload(a) + tload(b) + tmin(a,b)->c + tstore(c).
 // Multiple cases with different shapes in a single module.
-// Compiled by ptoas --enable-insert-sync --enable-tile-op-expand --vpto-emit-hivm-llvm
-// to produce LLVM IR.
+// Compiled by ptoas --enable-insert-sync --enable-tile-op-expand
+// to produce a fatobj object.
 
-module {
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
   // Case 0: f32 64x64 (4096 elements)
-  func.func @TMIN_f32_64x64(%a_ptr: !pto.ptr<f32>, %b_ptr: !pto.ptr<f32>, %c_ptr: !pto.ptr<f32>) {
+  func.func @TMIN_f32_64x64(%a_ptr: !pto.ptr<f32>, %b_ptr: !pto.ptr<f32>, %c_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c64   = arith.constant 64   : index
@@ -67,7 +67,7 @@ module {
   }
 
   // Case 1: i32 64x64 (4096 elements)
-  func.func @TMIN_i32_64x64(%a_ptr: !pto.ptr<i32>, %b_ptr: !pto.ptr<i32>, %c_ptr: !pto.ptr<i32>) {
+  func.func @TMIN_i32_64x64(%a_ptr: !pto.ptr<i32>, %b_ptr: !pto.ptr<i32>, %c_ptr: !pto.ptr<i32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c64   = arith.constant 64   : index
@@ -121,7 +121,7 @@ module {
   }
 
   // Case 2: i16 64x64 (4096 elements)
-  func.func @TMIN_i16_64x64(%a_ptr: !pto.ptr<i16>, %b_ptr: !pto.ptr<i16>, %c_ptr: !pto.ptr<i16>) {
+  func.func @TMIN_i16_64x64(%a_ptr: !pto.ptr<i16>, %b_ptr: !pto.ptr<i16>, %c_ptr: !pto.ptr<i16>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c64   = arith.constant 64   : index
@@ -175,7 +175,7 @@ module {
   }
 
   // Case 3: f16 64x64 (4096 elements)
-  func.func @TMIN_f16_64x64(%a_ptr: !pto.ptr<f16>, %b_ptr: !pto.ptr<f16>, %c_ptr: !pto.ptr<f16>) {
+  func.func @TMIN_f16_64x64(%a_ptr: !pto.ptr<f16>, %b_ptr: !pto.ptr<f16>, %c_ptr: !pto.ptr<f16>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c64   = arith.constant 64   : index
@@ -229,7 +229,7 @@ module {
   }
 
   // Case 4: f32 64x64 tile with 60x60 valid region (padding with MAX for tmin)
-  func.func @TMIN_f32_64x64_v60x60(%a_ptr: !pto.ptr<f32>, %b_ptr: !pto.ptr<f32>, %c_ptr: !pto.ptr<f32>) {
+  func.func @TMIN_f32_64x64_v60x60(%a_ptr: !pto.ptr<f32>, %b_ptr: !pto.ptr<f32>, %c_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c60   = arith.constant 60   : index
@@ -284,7 +284,7 @@ module {
   }
 
   // Case 5: i32 64x64 tile with 60x60 valid region (padding with MAX for tmin)
-  func.func @TMIN_i32_64x64_v60x60(%a_ptr: !pto.ptr<i32>, %b_ptr: !pto.ptr<i32>, %c_ptr: !pto.ptr<i32>) {
+  func.func @TMIN_i32_64x64_v60x60(%a_ptr: !pto.ptr<i32>, %b_ptr: !pto.ptr<i32>, %c_ptr: !pto.ptr<i32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c60   = arith.constant 60   : index
@@ -339,7 +339,7 @@ module {
   }
 
   // Case 6: f16 2x4096 tile with 1x3600 valid region (padding with MAX for tmin)
-  func.func @TMIN_f16_2x4096_v1x3600(%a_ptr: !pto.ptr<f16>, %b_ptr: !pto.ptr<f16>, %c_ptr: !pto.ptr<f16>) {
+  func.func @TMIN_f16_2x4096_v1x3600(%a_ptr: !pto.ptr<f16>, %b_ptr: !pto.ptr<f16>, %c_ptr: !pto.ptr<f16>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c3600 = arith.constant 3600 : index
@@ -393,7 +393,7 @@ module {
   }
 
   // Case 7: i16 20x512 tile with 16x200 valid region (padding with MAX for tmin)
-  func.func @TMIN_i16_20x512_v16x200(%a_ptr: !pto.ptr<i16>, %b_ptr: !pto.ptr<i16>, %c_ptr: !pto.ptr<i16>) {
+  func.func @TMIN_i16_20x512_v16x200(%a_ptr: !pto.ptr<i16>, %b_ptr: !pto.ptr<i16>, %c_ptr: !pto.ptr<i16>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c16   = arith.constant 16   : index

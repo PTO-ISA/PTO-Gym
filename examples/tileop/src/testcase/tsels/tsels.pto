@@ -9,8 +9,8 @@
 // TileLang ST kernels for pto.tsels: tload(mask) + tload(src) + tsels(mask,src,tmp,scalar)->dst + tstore(dst)
 // 22 cases from pto-isa tests.
 
-module {
-  func.func @TSELS_uint8_uint8_2x32_2x32_2x32_2x32(%mask_ptr: !pto.ptr<i8>, %src_ptr: !pto.ptr<i8>, %dst_ptr: !pto.ptr<i8>, %scalar: i32) {
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
+  func.func @TSELS_uint8_uint8_2x32_2x32_2x32_2x32(%mask_ptr: !pto.ptr<i8>, %src_ptr: !pto.ptr<i8>, %dst_ptr: !pto.ptr<i8>, %scalar: i32) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c2 = arith.constant 2 : index
@@ -38,7 +38,7 @@ module {
     return
   }
 
-  func.func @TSELS_uint8_uint16_2x32_2x16_2x32_2x32(%mask_ptr: !pto.ptr<i16>, %src_ptr: !pto.ptr<i8>, %dst_ptr: !pto.ptr<i8>, %scalar: i32) {
+  func.func @TSELS_uint8_uint16_2x32_2x16_2x32_2x32(%mask_ptr: !pto.ptr<i16>, %src_ptr: !pto.ptr<i8>, %dst_ptr: !pto.ptr<i8>, %scalar: i32) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c2 = arith.constant 2 : index
@@ -67,7 +67,7 @@ module {
     return
   }
 
-  func.func @TSELS_uint8_uint32_2x32_2x8_2x32_2x32(%mask_ptr: !pto.ptr<i32>, %src_ptr: !pto.ptr<i8>, %dst_ptr: !pto.ptr<i8>, %scalar: i32) {
+  func.func @TSELS_uint8_uint32_2x32_2x8_2x32_2x32(%mask_ptr: !pto.ptr<i32>, %src_ptr: !pto.ptr<i8>, %dst_ptr: !pto.ptr<i8>, %scalar: i32) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c2 = arith.constant 2 : index
@@ -97,7 +97,7 @@ module {
     return
   }
 
-  func.func @TSELS_uint16_uint8_2x16_2x32_2x16_2x16(%mask_ptr: !pto.ptr<i8>, %src_ptr: !pto.ptr<i16>, %dst_ptr: !pto.ptr<i16>, %scalar: i32) {
+  func.func @TSELS_uint16_uint8_2x16_2x32_2x16_2x16(%mask_ptr: !pto.ptr<i8>, %src_ptr: !pto.ptr<i16>, %dst_ptr: !pto.ptr<i16>, %scalar: i32) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c2 = arith.constant 2 : index
@@ -126,7 +126,7 @@ module {
     return
   }
 
-  func.func @TSELS_uint16_uint16_2x16_2x16_2x16_2x16(%mask_ptr: !pto.ptr<i16>, %src_ptr: !pto.ptr<i16>, %dst_ptr: !pto.ptr<i16>, %scalar: i32) {
+  func.func @TSELS_uint16_uint16_2x16_2x16_2x16_2x16(%mask_ptr: !pto.ptr<i16>, %src_ptr: !pto.ptr<i16>, %dst_ptr: !pto.ptr<i16>, %scalar: i32) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c2 = arith.constant 2 : index
@@ -154,7 +154,7 @@ module {
     return
   }
 
-  func.func @TSELS_uint16_uint32_2x16_2x8_2x16_2x16(%mask_ptr: !pto.ptr<i32>, %src_ptr: !pto.ptr<i16>, %dst_ptr: !pto.ptr<i16>, %scalar: i32) {
+  func.func @TSELS_uint16_uint32_2x16_2x8_2x16_2x16(%mask_ptr: !pto.ptr<i32>, %src_ptr: !pto.ptr<i16>, %dst_ptr: !pto.ptr<i16>, %scalar: i32) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c2 = arith.constant 2 : index
@@ -183,7 +183,7 @@ module {
     return
   }
 
-  func.func @TSELS_uint32_uint8_2x8_2x32_2x8_2x8(%mask_ptr: !pto.ptr<i8>, %src_ptr: !pto.ptr<i32>, %dst_ptr: !pto.ptr<i32>, %scalar: i32) {
+  func.func @TSELS_uint32_uint8_2x8_2x32_2x8_2x8(%mask_ptr: !pto.ptr<i8>, %src_ptr: !pto.ptr<i32>, %dst_ptr: !pto.ptr<i32>, %scalar: i32) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c2 = arith.constant 2 : index
@@ -212,7 +212,7 @@ module {
     return
   }
 
-  func.func @TSELS_uint32_uint16_2x8_2x16_2x8_2x8(%mask_ptr: !pto.ptr<i16>, %src_ptr: !pto.ptr<i32>, %dst_ptr: !pto.ptr<i32>, %scalar: i32) {
+  func.func @TSELS_uint32_uint16_2x8_2x16_2x8_2x8(%mask_ptr: !pto.ptr<i16>, %src_ptr: !pto.ptr<i32>, %dst_ptr: !pto.ptr<i32>, %scalar: i32) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c2 = arith.constant 2 : index
@@ -240,7 +240,7 @@ module {
     return
   }
 
-  func.func @TSELS_uint32_uint32_2x8_2x8_2x8_2x8(%mask_ptr: !pto.ptr<i32>, %src_ptr: !pto.ptr<i32>, %dst_ptr: !pto.ptr<i32>, %scalar: i32) {
+  func.func @TSELS_uint32_uint32_2x8_2x8_2x8_2x8(%mask_ptr: !pto.ptr<i32>, %src_ptr: !pto.ptr<i32>, %dst_ptr: !pto.ptr<i32>, %scalar: i32) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c2 = arith.constant 2 : index
@@ -267,7 +267,7 @@ module {
     return
   }
 
-  func.func @TSELS_f16_uint8_2x16_2x32_2x16_2x16(%mask_ptr: !pto.ptr<i8>, %src_ptr: !pto.ptr<i16>, %dst_ptr: !pto.ptr<i16>, %scalar: i32) {
+  func.func @TSELS_f16_uint8_2x16_2x32_2x16_2x16(%mask_ptr: !pto.ptr<i8>, %src_ptr: !pto.ptr<i16>, %dst_ptr: !pto.ptr<i16>, %scalar: i32) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c2 = arith.constant 2 : index
@@ -296,7 +296,7 @@ module {
     return
   }
 
-  func.func @TSELS_f16_uint16_2x16_2x16_2x16_2x16(%mask_ptr: !pto.ptr<i16>, %src_ptr: !pto.ptr<i16>, %dst_ptr: !pto.ptr<i16>, %scalar: i32) {
+  func.func @TSELS_f16_uint16_2x16_2x16_2x16_2x16(%mask_ptr: !pto.ptr<i16>, %src_ptr: !pto.ptr<i16>, %dst_ptr: !pto.ptr<i16>, %scalar: i32) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c2 = arith.constant 2 : index
@@ -324,7 +324,7 @@ module {
     return
   }
 
-  func.func @TSELS_f16_uint32_2x16_2x8_2x16_2x16(%mask_ptr: !pto.ptr<i32>, %src_ptr: !pto.ptr<i16>, %dst_ptr: !pto.ptr<i16>, %scalar: i32) {
+  func.func @TSELS_f16_uint32_2x16_2x8_2x16_2x16(%mask_ptr: !pto.ptr<i32>, %src_ptr: !pto.ptr<i16>, %dst_ptr: !pto.ptr<i16>, %scalar: i32) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c2 = arith.constant 2 : index
@@ -353,7 +353,7 @@ module {
     return
   }
 
-  func.func @TSELS_f32_uint8_2x8_2x32_2x8_2x8(%mask_ptr: !pto.ptr<i8>, %src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>, %scalar: i32) {
+  func.func @TSELS_f32_uint8_2x8_2x32_2x8_2x8(%mask_ptr: !pto.ptr<i8>, %src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>, %scalar: i32) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c2 = arith.constant 2 : index
@@ -383,7 +383,7 @@ module {
     return
   }
 
-  func.func @TSELS_f32_uint16_2x8_2x16_2x8_2x8(%mask_ptr: !pto.ptr<i16>, %src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>, %scalar: i32) {
+  func.func @TSELS_f32_uint16_2x8_2x16_2x8_2x8(%mask_ptr: !pto.ptr<i16>, %src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>, %scalar: i32) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c2 = arith.constant 2 : index
@@ -412,7 +412,7 @@ module {
     return
   }
 
-  func.func @TSELS_f32_uint32_2x8_2x8_2x8_2x8(%mask_ptr: !pto.ptr<i32>, %src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>, %scalar: i32) {
+  func.func @TSELS_f32_uint32_2x8_2x8_2x8_2x8(%mask_ptr: !pto.ptr<i32>, %src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>, %scalar: i32) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c2 = arith.constant 2 : index
@@ -440,7 +440,7 @@ module {
     return
   }
 
-  func.func @TSELS_uint8_uint8_2x32_2x64_2x128_2x31(%mask_ptr: !pto.ptr<i8>, %src_ptr: !pto.ptr<i8>, %dst_ptr: !pto.ptr<i8>, %scalar: i32) {
+  func.func @TSELS_uint8_uint8_2x32_2x64_2x128_2x31(%mask_ptr: !pto.ptr<i8>, %src_ptr: !pto.ptr<i8>, %dst_ptr: !pto.ptr<i8>, %scalar: i32) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c2 = arith.constant 2 : index
@@ -470,7 +470,7 @@ module {
     return
   }
 
-  func.func @TSELS_uint16_uint8_2x32_2x64_2x128_2x31(%mask_ptr: !pto.ptr<i8>, %src_ptr: !pto.ptr<i16>, %dst_ptr: !pto.ptr<i16>, %scalar: i32) {
+  func.func @TSELS_uint16_uint8_2x32_2x64_2x128_2x31(%mask_ptr: !pto.ptr<i8>, %src_ptr: !pto.ptr<i16>, %dst_ptr: !pto.ptr<i16>, %scalar: i32) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c2 = arith.constant 2 : index
@@ -501,7 +501,7 @@ module {
     return
   }
 
-  func.func @TSELS_f32_uint8_2x32_2x64_2x128_2x31(%mask_ptr: !pto.ptr<i8>, %src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>, %scalar: i32) {
+  func.func @TSELS_f32_uint8_2x32_2x64_2x128_2x31(%mask_ptr: !pto.ptr<i8>, %src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>, %scalar: i32) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c2 = arith.constant 2 : index
@@ -533,7 +533,7 @@ module {
     return
   }
 
-  func.func @TSELS_uint8_uint8_32x672_32x96_32x672_32x666(%mask_ptr: !pto.ptr<i8>, %src_ptr: !pto.ptr<i8>, %dst_ptr: !pto.ptr<i8>, %scalar: i32) {
+  func.func @TSELS_uint8_uint8_32x672_32x96_32x672_32x666(%mask_ptr: !pto.ptr<i8>, %src_ptr: !pto.ptr<i8>, %dst_ptr: !pto.ptr<i8>, %scalar: i32) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c32 = arith.constant 32 : index
@@ -562,7 +562,7 @@ module {
     return
   }
 
-  func.func @TSELS_f16_uint8_32x672_32x96_32x672_32x666(%mask_ptr: !pto.ptr<i8>, %src_ptr: !pto.ptr<i16>, %dst_ptr: !pto.ptr<i16>, %scalar: i32) {
+  func.func @TSELS_f16_uint8_32x672_32x96_32x672_32x666(%mask_ptr: !pto.ptr<i8>, %src_ptr: !pto.ptr<i16>, %dst_ptr: !pto.ptr<i16>, %scalar: i32) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c2 = arith.constant 2 : index
@@ -593,7 +593,7 @@ module {
     return
   }
 
-  func.func @TSELS_f32_uint8_32x672_32x96_32x672_32x666(%mask_ptr: !pto.ptr<i8>, %src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>, %scalar: i32) {
+  func.func @TSELS_f32_uint8_32x672_32x96_32x672_32x666(%mask_ptr: !pto.ptr<i8>, %src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>, %scalar: i32) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c4 = arith.constant 4 : index
@@ -624,7 +624,7 @@ module {
     return
   }
 
-  func.func @TSELS_f32_uint8_1x8192_1x4096_1x8192_1x8192(%mask_ptr: !pto.ptr<i8>, %src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>, %scalar: i32) {
+  func.func @TSELS_f32_uint8_1x8192_1x4096_1x8192_1x8192(%mask_ptr: !pto.ptr<i8>, %src_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>, %scalar: i32) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c4 = arith.constant 4 : index

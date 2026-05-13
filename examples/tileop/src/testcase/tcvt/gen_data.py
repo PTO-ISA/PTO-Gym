@@ -10,22 +10,47 @@
 # coding=utf-8
 
 import numpy as np
+import ml_dtypes
 
 from cases import CASES
+from compare import normalize_dtype
 from st_common import save_case_data, setup_case_rng, validate_cases
 
 
-def make_f32_input(shape):
-    total = int(np.prod(shape))
-    base = (np.arange(total, dtype=np.float32) % 17) - 8.0
-    frac_table = np.array([0.2, 0.5, 0.8, -0.2, -0.5, -0.8], dtype=np.float32)
-    frac = frac_table[np.arange(total) % frac_table.size]
-    return (base + frac).reshape(shape)
+def is_sub_float(dtype):
+    return np.issubdtype(dtype, np.floating) or dtype == ml_dtypes.bfloat16
 
 
-def make_i32_input(shape):
+def is_sub_int(dtype):
+    return np.issubdtype(dtype, np.integer)
+
+
+def _make_input_inner(src_dtype, shape):
     total = int(np.prod(shape))
-    return (((np.arange(total, dtype=np.int32) * 37) % 257) - 128).reshape(shape)
+    float_types = (np.float32, np.float16, ml_dtypes.bfloat16)
+    int8_like_types = (np.int8, )
+
+    # Generate input data
+    if src_dtype in float_types:
+        return (np.random.random([total]) * 200 - 100)
+    elif src_dtype in int8_like_types:
+        return np.random.randint(-128, 128, [total])
+    elif src_dtype == np.uint8:
+        return np.random.randint(0, 256, [total])
+    elif src_dtype == np.int16:
+        return np.random.randint(-1000, 1000, [total])
+    elif src_dtype == np.uint16:
+        return np.random.randint(0, 10000, [total])
+    elif src_dtype in (np.int32, np.int64):
+        return np.random.randint(-10000, 10000, [total])
+    elif src_dtype == np.uint32:
+        return np.random.randint(0, 10000, [total])
+    else:
+        return np.random.randint(-10000, 10000, [total])
+
+
+def make_input(src_dtype, shape):
+    return _make_input_inner(src_dtype, shape).astype(normalize_dtype(src_dtype)).reshape(shape)
 
 
 def round_half_away_from_zero(values):
@@ -55,64 +80,101 @@ def apply_round_mode(values, round_mode):
     return rounding_funcs.get(round_mode, np.rint)(values)
 
 
-def convert_with_default_saturation(values, src_dtype, dst_dtype):
-    if np.issubdtype(dst_dtype, np.integer):
+def convert(values: np.ndarray, src_dtype, dst_dtype, round_mode=None):
+    is_float_src = is_sub_float(src_dtype)
+    is_int_dst = is_sub_int(dst_dtype)
+    is_f32_to_f32 = src_dtype == np.float32 and dst_dtype == np.float32
+    needs_rounding = is_float_src and (is_int_dst or is_f32_to_f32)
+
+    if needs_rounding:
+        values = apply_round_mode(values, round_mode or "RINT")
+    
+    if is_int_dst:
+        # Determine if this conversion has default saturation OFF (truncation) or ON (clamping)
         if default_saturation_off(src_dtype, dst_dtype):
-            # For currently supported ST cases this branch is not taken, but keep
-            # the structure aligned with pto-isa's A5 tcvt golden generator.
-            if dst_dtype is np.int32:
-                widened = values.astype(np.int64, copy=False)
-                wrapped = np.where(widened < 0, (widened + (1 << 32)) & 0xFFFFFFFF, widened & 0xFFFFFFFF)
-                signed = np.where(wrapped < (1 << 31), wrapped, wrapped - (1 << 32))
-                return signed.astype(np.int32, copy=False)
-            return values.astype(dst_dtype, copy=False)
-        info = np.iinfo(dst_dtype)
-        widened = values.astype(np.float64, copy=False)
-        return np.clip(widened, info.min, info.max).astype(dst_dtype)
+            # OFF (truncation): bit extraction - wrap around using modulo
+            return truncate_to_int(values, dst_dtype)
+        else:
+            # Saturation ON: clamp to range (widen to int64/float64 to preserve sign)
+            return clamp_to_range_int(values, dst_dtype)
+    elif is_sub_float(dst_dtype):
+        return clamp_to_range_float(values, dst_dtype)
+    else:
+        return values.astype(dst_dtype)
 
-    if np.issubdtype(dst_dtype, np.floating):
-        info = np.finfo(dst_dtype)
-        return np.clip(values.astype(np.float64, copy=False), info.min, info.max).astype(dst_dtype)
 
-    return values.astype(dst_dtype, copy=False)
+def truncate_to_int(values: np.ndarray, dst_dtype):
+    golden_list = []
+    for val in values.flat:
+        int_val = 0 if np.isnan(val) or np.isinf(val) else int(np.int64(val))
 
+        if dst_dtype == np.int8:
+            byte_val = int_val & 0xFF
+            truncated_val = byte_val if byte_val < 128 else byte_val - 256
+        elif dst_dtype == np.uint8:
+            truncated_val = int_val & 0xFF
+        elif dst_dtype == np.int16:
+            word_val = int_val & 0xFFFF
+            truncated_val = word_val if word_val < 32768 else word_val - 65536
+        elif dst_dtype == np.int32:
+            dword_val = int_val & 0xFFFFFFFF
+            truncated_val = dword_val if dword_val < 2147483648 else dword_val - 4294967296
+        else:
+            truncated_val = int_val
+        golden_list.append(truncated_val)
+    return np.array(golden_list, dtype=dst_dtype).reshape(values.shape)
+
+
+def clamp_to_range_int(values: np.ndarray, dst_dtype):
+    info = ml_dtypes.iinfo(dst_dtype)
+    is_int_type = is_sub_int(values.dtype)
+    temp_dtype = np.int64 if is_int_type else np.float64
+    widened = values.astype(temp_dtype, copy=False)
+    return np.clip(widened, info.min, info.max).astype(dst_dtype)
+
+
+def clamp_to_range_float(values: np.ndarray, dst_dtype):
+    info = ml_dtypes.finfo(dst_dtype)
+    return np.clip(values, info.min, info.max).astype(dst_dtype)
+
+
+def apply_valid_shape(values: np.ndarray, valid_shape, dst_dtype):
+    vr, vc = valid_shape
+    masked = np.zeros_like(values, dtype=dst_dtype)
+    masked[:vr, :vc] = values[:vr, :vc]
+    return masked
 
 def generate_golden(case):
     src_dtype = case["src_dtype"]
     dst_dtype = case["dst_dtype"]
+    src_dtype_norm = normalize_dtype(src_dtype)
+    dst_dtype_norm = normalize_dtype(dst_dtype)
     shape = case["shape"]
-    vr, vc = case["valid_shape"]
+    round_mode = case.get("round_mode")
 
-    if src_dtype is np.float32 and dst_dtype is np.int32:
-        input_arr = make_f32_input(shape).astype(src_dtype)
-        rounded = apply_round_mode(input_arr[:vr, :vc], case["round_mode"])
-        converted = convert_with_default_saturation(rounded, src_dtype, dst_dtype)
-    elif src_dtype is np.float32 and dst_dtype is np.float16:
-        input_arr = make_f32_input(shape).astype(src_dtype)
-        converted = convert_with_default_saturation(input_arr[:vr, :vc], src_dtype, dst_dtype)
-    elif src_dtype is np.int32:
-        input_arr = make_i32_input(shape).astype(src_dtype)
-        converted = convert_with_default_saturation(input_arr[:vr, :vc], src_dtype, dst_dtype)
-    elif src_dtype is np.float16:
-        input_arr = make_f32_input(shape).astype(src_dtype)
-        converted = convert_with_default_saturation(input_arr[:vr, :vc], src_dtype, dst_dtype)
-    else:
-        raise TypeError(f"unsupported tcvt ST source dtype: {src_dtype}")
+    input_arr = make_input(src_dtype, shape)
+    converted = convert(input_arr, src_dtype_norm, dst_dtype_norm, round_mode)
+    golden = apply_valid_shape(converted, case["valid_shape"], dst_dtype_norm)
 
-    golden = np.zeros(shape, dtype=dst_dtype)
-    golden[:vr, :vc] = converted
     return input_arr, golden
 
 
-validate_cases(CASES)
+if __name__ == "__main__":
+    np.random.seed(19)
 
-for case in CASES:
-    setup_case_rng(case)
-    input_arr, golden = generate_golden(case)
+    validate_cases(CASES)
 
-    save_case_data(case["name"], {"input": input_arr, "golden": golden})
-    print(
-        f"[INFO] gen_data: {case['name']} shape={case['shape']} "
-        f"src_dtype={case['src_dtype'].__name__} dst_dtype={case['dst_dtype'].__name__} "
-        f"round_mode={case['round_mode']}"
-    )
+    for case in CASES:
+        setup_case_rng(case)
+        input_arr, golden = generate_golden(case)
+
+        save_case_data(case["name"], {"input": input_arr, "golden": golden})
+        src_dtype = case["src_dtype"]
+        dst_dtype = case["dst_dtype"]
+        src_name = src_dtype.__name__ if isinstance(src_dtype, type) else src_dtype
+        dst_name = dst_dtype.__name__ if isinstance(dst_dtype, type) else dst_dtype
+        print(
+            f"[INFO] gen_data: {case['name']} shape={case['shape']} "
+            f"src_dtype={src_name} dst_dtype={dst_name} "
+            f"round_mode={case.get('round_mode')}"
+        )
