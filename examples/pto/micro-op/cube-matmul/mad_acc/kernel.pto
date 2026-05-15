@@ -21,6 +21,8 @@ module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<cu
     %c1536_i64 = arith.constant 1536 : i64
     %false = arith.constant false
 
+    // L1 is split into four 16x16 f16 tiles: the first pair computes the
+    // initial C = A * B, and the second pair is accumulated with mad_acc.
     %l1_a = pto.castptr %c0_i64 : i64 -> !pto.ptr<f16, l1>
     %l1_b = pto.castptr %c512_i64 : i64 -> !pto.ptr<f16, l1>
     %l1_a_acc = pto.castptr %c1024_i64 : i64 -> !pto.ptr<f16, l1>
@@ -29,6 +31,8 @@ module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<cu
     %l0b = pto.castptr %c0_i64 : i64 -> !pto.ptr<f16, l0b>
     %l0c = pto.castptr %c0_i64 : i64 -> !pto.ptr<f32, l0c>
 
+    // Step 1: load all four source matrices from GM to L1. nd2nz converts
+    // normal row-major GM tiles into the cube-friendly NZ layout.
     pto.mte_gm_l1_frac %a_gm, %l1_a, nd2nz,
         shape(%c16_i64, %c16_i64),
         src_layout(%c32_i64),
@@ -65,29 +69,41 @@ module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<cu
     pto.set_flag["PIPE_MTE2", "PIPE_MTE1", "EVENT_ID0"]
     pto.wait_flag["PIPE_MTE2", "PIPE_MTE1", "EVENT_ID0"]
 
+    // Step 2: feed the first A/B pair into L0A/L0B. B is transposed because
+    // the MAD instruction consumes the right-hand operand from L0B in that form.
     pto.mte_l1_l0a %l1_a, %l0a, %c16_i64, %c16_i64
       : !pto.ptr<f16, l1>, !pto.ptr<f16, l0a>, i64, i64
     pto.mte_l1_l0b %l1_b, %l0b, %c16_i64, %c16_i64 {transpose = true}
       : !pto.ptr<f16, l1>, !pto.ptr<f16, l0b>, i64, i64
     pto.set_flag["PIPE_MTE1", "PIPE_M", "EVENT_ID0"]
     pto.wait_flag["PIPE_MTE1", "PIPE_M", "EVENT_ID0"]
+    // Step 3: compute the base product in L0C:
+    //   L0C = f32(A * B)
+    // check_only leaves the accumulation buffer available for the next MAD.
     pto.mad %l0a, %l0b, %l0c, %c16_i64, %c16_i64, %c16_i64 unit_flag(check_only) disable_gemv n_dir
       : !pto.ptr<f16, l0a>, !pto.ptr<f16, l0b>, !pto.ptr<f32, l0c>, i64, i64, i64
 
     pto.set_flag["PIPE_M", "PIPE_MTE1", "EVENT_ID1"]
     pto.wait_flag["PIPE_M", "PIPE_MTE1", "EVENT_ID1"]
+    // Step 4: load the second A/B pair into L0A/L0B after the first MAD has
+    // produced L0C, so the next instruction can accumulate into the same L0C.
     pto.mte_l1_l0a %l1_a_acc, %l0a, %c16_i64, %c16_i64
       : !pto.ptr<f16, l1>, !pto.ptr<f16, l0a>, i64, i64
     pto.mte_l1_l0b %l1_b_acc, %l0b, %c16_i64, %c16_i64 {transpose = true}
       : !pto.ptr<f16, l1>, !pto.ptr<f16, l0b>, i64, i64
     pto.set_flag["PIPE_MTE1", "PIPE_M", "EVENT_ID1"]
     pto.wait_flag["PIPE_MTE1", "PIPE_M", "EVENT_ID1"]
+    // Step 5: accumulate the second product:
+    //   L0C += f32(A_acc * B_acc)
+    // check_and_set marks the accumulated result ready for FIX/writeback.
     pto.mad_acc %l0a, %l0b, %l0c, %c16_i64, %c16_i64, %c16_i64 unit_flag(check_and_set) disable_gemv n_dir
       : !pto.ptr<f16, l0a>, !pto.ptr<f16, l0b>, !pto.ptr<f32, l0c>, i64, i64, i64
 
     pto.set_flag["PIPE_M", "PIPE_FIX", "EVENT_ID1"]
     pto.wait_flag["PIPE_M", "PIPE_FIX", "EVENT_ID1"]
 
+    // Step 6: convert L0C back from NZ to normal layout and store the final
+    // f32 matrix C to GM.
     pto.mte_l0c_gm %l0c, %c_gm, %c16_i64, %c16_i64, %c16_i64, %c16_i64,
       %c0_i64, %c0_i64,
       nz2nd
