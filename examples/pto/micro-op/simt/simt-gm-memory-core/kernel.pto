@@ -1,0 +1,38 @@
+module attributes {pto.target_arch = "a5"} {
+  func.func @simt_gm_memory_core_kernel(%arg0: !pto.ptr<i32, gm>) attributes {pto.aicore} {
+    %dim_z = arith.constant 1 : i32
+    %dim_y = arith.constant 1 : i32
+    %dim_x = arith.constant 32 : i32
+
+    pto.section.vector {
+      pto.simt_launch @simt_gm_memory_core_body<<<%dim_x, %dim_y, %dim_z>>>(%arg0) : (!pto.ptr<i32, gm>) -> ()
+
+      pto.barrier #pto.pipe<PIPE_ALL>
+    }
+    pto.section.cube {
+      pto.barrier #pto.pipe<PIPE_ALL>
+    }
+    return
+  }
+
+  func.func @simt_gm_memory_core_body(%gm: !pto.ptr<i32, gm>) attributes {pto.simt_entry} {
+    %tx = pto.get_tid_x : i32
+    %c32_i32 = arith.constant 32 : i32
+    %c64_i32 = arith.constant 64 : i32
+    %c1000_i32 = arith.constant 1000 : i32
+
+    %src_idx = arith.index_castui %tx : i32 to index
+    %loaded = pto.load %gm[%src_idx] : !pto.ptr<i32, gm> -> i32
+    %sum = arith.addi %loaded, %tx : i32
+    %with_bias = arith.addi %sum, %c1000_i32 : i32
+
+    %dst_i32 = arith.addi %tx, %c32_i32 : i32
+    %dst_idx = arith.index_castui %dst_i32 : i32 to index
+    pto.store %with_bias, %gm[%dst_idx] : !pto.ptr<i32, gm>, i32
+
+    %lane_dst_i32 = arith.addi %tx, %c64_i32 : i32
+    %lane_dst_idx = arith.index_castui %lane_dst_i32 : i32 to index
+    pto.store %tx, %gm[%lane_dst_idx] : !pto.ptr<i32, gm>, i32
+    return
+  }
+}

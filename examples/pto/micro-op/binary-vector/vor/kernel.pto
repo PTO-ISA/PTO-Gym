@@ -1,55 +1,137 @@
-// -----------------------------------------------------------------------------
-// case: micro-op/binary-vector/vor
-// family: binary-vector
-// target_ops: pto.vor
-// scenarios: core-i16-unsigned, full-mask
-// NOTE: bulk-generated coverage skeleton. Parser/verifier/lowering failure is
-// still a valid test conclusion in the current coverage-first phase.
-// -----------------------------------------------------------------------------
 module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
-  func.func @vor_i16_unsigned_kernel(%arg0: !pto.ptr<ui16, gm>, %arg1: !pto.ptr<ui16, gm>,
-                                     %arg2: !pto.ptr<ui16, gm>) attributes {pto.aicore} {
-    %c0 = arith.constant 0 : index
-    %c1024 = arith.constant 1024 : index
-    %c128 = arith.constant 128 : index
-    %c0_i64 = arith.constant 0 : i64
-    %c1_i64 = arith.constant 1 : i64
-    %c32_i64 = arith.constant 32 : i64
-    %c64_i64 = arith.constant 64 : i64
-    %c2048_i64 = arith.constant 2048 : i64
-    %c4096_i64 = arith.constant 4096 : i64
+    func.func @vor_deep_merged_kernel(%arg0: !pto.ptr<ui16, gm>, %arg1: !pto.ptr<ui16, gm>, %arg2: !pto.ptr<ui16, gm>, %arg3: !pto.ptr<f16, gm>, %arg4: !pto.ptr<f16, gm>, %arg5: !pto.ptr<f16, gm>, %arg6: !pto.ptr<ui16, gm>, %arg7: !pto.ptr<ui16, gm>, %arg8: !pto.ptr<ui16, gm>) attributes {pto.kernel} {
+    // merged from vor_i16_unsigned_kernel via LaunchVor_i16_unsigned_kernel
 
-    %ub_lhs = pto.castptr %c0_i64 : i64 -> !pto.ptr<ui16, ub>
-    %ub_rhs = pto.castptr %c2048_i64 : i64 -> !pto.ptr<ui16, ub>
-    %ub_out = pto.castptr %c4096_i64 : i64 -> !pto.ptr<ui16, ub>
+    %c0_m0 = arith.constant 0 : index
+    %c1024_m0 = arith.constant 1024 : index
+    %c128_m0 = arith.constant 128 : index
+    %c0_i64_m0 = arith.constant 0 : i64
+    %c1_i64_m0 = arith.constant 1 : i64
+    %c32_i64_m0 = arith.constant 32 : i64
+    %c64_i64_m0 = arith.constant 64 : i64
+    %c2048_i64_m0 = arith.constant 2048 : i64
+    %c4096_i64_m0 = arith.constant 4096 : i64
 
-    %false = arith.constant false
-    pto.mte_gm_ub %arg0, %ub_lhs, %c0_i64, %c64_i64
-      nburst(%c32_i64, %c64_i64, %c64_i64)
+    %ub_lhs_m0 = pto.castptr %c0_i64_m0 : i64 -> !pto.ptr<ui16, ub>
+    %ub_rhs_m0 = pto.castptr %c2048_i64_m0 : i64 -> !pto.ptr<ui16, ub>
+    %ub_out_m0 = pto.castptr %c4096_i64_m0 : i64 -> !pto.ptr<ui16, ub>
+
+    %false_m0 = arith.constant false
+    pto.mte_gm_ub %arg0, %ub_lhs_m0, %c0_i64_m0, %c64_i64_m0
+      nburst(%c32_i64_m0, %c64_i64_m0, %c64_i64_m0)
       : !pto.ptr<ui16, gm>, !pto.ptr<ui16, ub>, i64, i64, i64, i64, i64
-    pto.mte_gm_ub %arg1, %ub_rhs, %c0_i64, %c64_i64
-      nburst(%c32_i64, %c64_i64, %c64_i64)
+    pto.mte_gm_ub %arg1, %ub_rhs_m0, %c0_i64_m0, %c64_i64_m0
+      nburst(%c32_i64_m0, %c64_i64_m0, %c64_i64_m0)
       : !pto.ptr<ui16, gm>, !pto.ptr<ui16, ub>, i64, i64, i64, i64, i64
 
     pto.set_flag["PIPE_MTE2", "PIPE_V", "EVENT_ID0"]
     pto.wait_flag["PIPE_MTE2", "PIPE_V", "EVENT_ID0"]
 
     pto.vecscope {
-      %mask = pto.pset_b16 "PAT_ALL" : !pto.mask<b16>
-      scf.for %offset = %c0 to %c1024 step %c128 {
-        %lhs = pto.vlds %ub_lhs[%offset] : !pto.ptr<ui16, ub> -> !pto.vreg<128xui16>
-        %rhs = pto.vlds %ub_rhs[%offset] : !pto.ptr<ui16, ub> -> !pto.vreg<128xui16>
-        %out = pto.vor %lhs, %rhs, %mask : !pto.vreg<128xui16>, !pto.vreg<128xui16>, !pto.mask<b16> -> !pto.vreg<128xui16>
-        pto.vsts %out, %ub_out[%offset], %mask : !pto.vreg<128xui16>, !pto.ptr<ui16, ub>, !pto.mask<b16>
+      %mask_m0 = pto.pset_b16 "PAT_ALL" : !pto.mask<b16>
+      scf.for %offset_m0 = %c0_m0 to %c1024_m0 step %c128_m0 {
+        %lhs_m0 = pto.vlds %ub_lhs_m0[%offset_m0] : !pto.ptr<ui16, ub> -> !pto.vreg<128xui16>
+        %rhs_m0 = pto.vlds %ub_rhs_m0[%offset_m0] : !pto.ptr<ui16, ub> -> !pto.vreg<128xui16>
+        %out_m0 = pto.vor %lhs_m0, %rhs_m0, %mask_m0 : !pto.vreg<128xui16>, !pto.vreg<128xui16>, !pto.mask<b16> -> !pto.vreg<128xui16>
+        pto.vsts %out_m0, %ub_out_m0[%offset_m0], %mask_m0 : !pto.vreg<128xui16>, !pto.ptr<ui16, ub>, !pto.mask<b16>
       }
     }
 
     pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
     pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
-    pto.mte_ub_gm %ub_out, %arg2, %c64_i64
-      nburst(%c32_i64, %c64_i64, %c64_i64)
+    pto.mte_ub_gm %ub_out_m0, %arg2, %c64_i64_m0
+      nburst(%c32_i64_m0, %c64_i64_m0, %c64_i64_m0)
       : !pto.ptr<ui16, ub>, !pto.ptr<ui16, gm>, i64, i64, i64, i64
     pto.barrier #pto.pipe<PIPE_ALL>
+
+    // merged from vor_f16_kernel via LaunchVor_f16_kernel
+
+    %c0_m1 = arith.constant 0 : index
+    %c1024_m1 = arith.constant 1024 : index
+    %c128_m1 = arith.constant 128 : index
+    %c0_i64_m1 = arith.constant 0 : i64
+    %c1_i64_m1 = arith.constant 1 : i64
+    %c32_i64_m1 = arith.constant 32 : i64
+    %c64_i64_m1 = arith.constant 64 : i64
+    %c2048_i64_m1 = arith.constant 2048 : i64
+    %c4096_i64_m1 = arith.constant 4096 : i64
+
+    %ub_lhs_m1 = pto.castptr %c0_i64_m1 : i64 -> !pto.ptr<f16, ub>
+    %ub_rhs_m1 = pto.castptr %c2048_i64_m1 : i64 -> !pto.ptr<f16, ub>
+    %ub_out_m1 = pto.castptr %c4096_i64_m1 : i64 -> !pto.ptr<f16, ub>
+
+    %false_m1 = arith.constant false
+    pto.mte_gm_ub %arg3, %ub_lhs_m1, %c0_i64_m1, %c64_i64_m1
+      nburst(%c32_i64_m1, %c64_i64_m1, %c64_i64_m1)
+      : !pto.ptr<f16, gm>, !pto.ptr<f16, ub>, i64, i64, i64, i64, i64
+    pto.mte_gm_ub %arg4, %ub_rhs_m1, %c0_i64_m1, %c64_i64_m1
+      nburst(%c32_i64_m1, %c64_i64_m1, %c64_i64_m1)
+      : !pto.ptr<f16, gm>, !pto.ptr<f16, ub>, i64, i64, i64, i64, i64
+
+    pto.set_flag["PIPE_MTE2", "PIPE_V", "EVENT_ID0"]
+    pto.wait_flag["PIPE_MTE2", "PIPE_V", "EVENT_ID0"]
+
+    pto.vecscope {
+      %mask_m1 = pto.pset_b16 "PAT_ALL" : !pto.mask<b16>
+      scf.for %offset_m1 = %c0_m1 to %c1024_m1 step %c128_m1 {
+        %lhs_m1 = pto.vlds %ub_lhs_m1[%offset_m1] : !pto.ptr<f16, ub> -> !pto.vreg<128xf16>
+        %rhs_m1 = pto.vlds %ub_rhs_m1[%offset_m1] : !pto.ptr<f16, ub> -> !pto.vreg<128xf16>
+        %out_m1 = pto.vor %lhs_m1, %rhs_m1, %mask_m1 : !pto.vreg<128xf16>, !pto.vreg<128xf16>, !pto.mask<b16> -> !pto.vreg<128xf16>
+        pto.vsts %out_m1, %ub_out_m1[%offset_m1], %mask_m1 : !pto.vreg<128xf16>, !pto.ptr<f16, ub>, !pto.mask<b16>
+      }
+    }
+
+    pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+    pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+    pto.mte_ub_gm %ub_out_m1, %arg5, %c64_i64_m1
+      nburst(%c32_i64_m1, %c64_i64_m1, %c64_i64_m1)
+      : !pto.ptr<f16, ub>, !pto.ptr<f16, gm>, i64, i64, i64, i64
+    pto.barrier #pto.pipe<PIPE_ALL>
+
+    // merged from vor_mask_edge_kernel via LaunchVor_mask_edge_kernel
+
+    %c0_m2 = arith.constant 0 : index
+    %c0_i64_m2 = arith.constant 0 : i64
+    %c1_i64_m2 = arith.constant 1 : i64
+    %c32_i64_m2 = arith.constant 32 : i64
+    %c64_i64_m2 = arith.constant 64 : i64
+    %c1024_m2 = arith.constant 1024 : index
+    %c128_m2 = arith.constant 128 : index
+    %c2048_i64_m2 = arith.constant 2048 : i64
+    %c4096_i64_m2 = arith.constant 4096 : i64
+
+    %ub_lhs_m2 = pto.castptr %c0_i64_m2 : i64 -> !pto.ptr<ui16, ub>
+    %ub_rhs_m2 = pto.castptr %c2048_i64_m2 : i64 -> !pto.ptr<ui16, ub>
+    %ub_out_m2 = pto.castptr %c4096_i64_m2 : i64 -> !pto.ptr<ui16, ub>
+
+    %false_m2 = arith.constant false
+    pto.mte_gm_ub %arg6, %ub_lhs_m2, %c0_i64_m2, %c64_i64_m2
+      nburst(%c32_i64_m2, %c64_i64_m2, %c64_i64_m2)
+      : !pto.ptr<ui16, gm>, !pto.ptr<ui16, ub>, i64, i64, i64, i64, i64
+    pto.mte_gm_ub %arg7, %ub_rhs_m2, %c0_i64_m2, %c64_i64_m2
+      nburst(%c32_i64_m2, %c64_i64_m2, %c64_i64_m2)
+      : !pto.ptr<ui16, gm>, !pto.ptr<ui16, ub>, i64, i64, i64, i64, i64
+
+    pto.set_flag["PIPE_MTE2", "PIPE_V", "EVENT_ID0"]
+    pto.wait_flag["PIPE_MTE2", "PIPE_V", "EVENT_ID0"]
+
+    pto.vecscope {
+      %mask_m2 = pto.pset_b16 "PAT_ALL" : !pto.mask<b16>
+      scf.for %offset_m2 = %c0_m2 to %c1024_m2 step %c128_m2 {
+        %lhs_m2 = pto.vlds %ub_lhs_m2[%offset_m2] : !pto.ptr<ui16, ub> -> !pto.vreg<128xui16>
+        %rhs_m2 = pto.vlds %ub_rhs_m2[%offset_m2] : !pto.ptr<ui16, ub> -> !pto.vreg<128xui16>
+        %out_m2 = pto.vor %lhs_m2, %rhs_m2, %mask_m2 : !pto.vreg<128xui16>, !pto.vreg<128xui16>, !pto.mask<b16> -> !pto.vreg<128xui16>
+        pto.vsts %out_m2, %ub_out_m2[%offset_m2], %mask_m2 : !pto.vreg<128xui16>, !pto.ptr<ui16, ub>, !pto.mask<b16>
+      }
+    }
+
+    pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+    pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+    pto.mte_ub_gm %ub_out_m2, %arg8, %c64_i64_m2
+      nburst(%c32_i64_m2, %c64_i64_m2, %c64_i64_m2)
+      : !pto.ptr<ui16, ub>, !pto.ptr<ui16, gm>, i64, i64, i64, i64
+    pto.barrier #pto.pipe<PIPE_ALL>
+
     return
   }
 }

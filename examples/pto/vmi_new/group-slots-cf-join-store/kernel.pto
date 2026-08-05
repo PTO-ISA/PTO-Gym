@@ -1,0 +1,97 @@
+// Copyright (c) 2026 Huawei Technologies Co., Ltd.
+// This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+// CANN Open Software License Agreement Version 2.0 (the "License").
+// Please refer to the License for details. You may not use this file except in compliance with the License.
+// THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+// INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+// See LICENSE in the root of the software repository for the full text of the License.
+
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
+  func.func @vmi_group_slots_cf_join_store_kernel(%src_gm: !pto.ptr<f32, gm>,
+                                                  %rhs_gm: !pto.ptr<f32, gm>,
+                                                  %dst_reduce_gm: !pto.ptr<f32, gm>,
+                                                  %dst_slot_gm: !pto.ptr<f32, gm>) attributes {pto.kernel} {
+    %c0 = arith.constant 0 : index
+    %c1 = arith.constant 1 : index
+    %c128 = arith.constant 128 : index
+    %c0_i64 = arith.constant 0 : i64
+    %c1_i64 = arith.constant 1 : i64
+    %c32_i64 = arith.constant 32 : i64
+    %c512_i64 = arith.constant 512 : i64
+    %c4096_i64 = arith.constant 4096 : i64
+    %c8192_i64 = arith.constant 8192 : i64
+    %c12288_i64 = arith.constant 12288 : i64
+
+    %ub_src = pto.castptr %c0_i64 : i64 -> !pto.ptr<f32, ub>
+    %ub_rhs = pto.castptr %c4096_i64 : i64 -> !pto.ptr<f32, ub>
+    %ub_dst_reduce = pto.castptr %c8192_i64 : i64 -> !pto.ptr<f32, ub>
+    %ub_dst_slot = pto.castptr %c12288_i64 : i64 -> !pto.ptr<f32, ub>
+
+    pto.mte_gm_ub %src_gm, %ub_src, %c0_i64, %c512_i64
+      nburst(%c1_i64, %c512_i64, %c512_i64)
+      : !pto.ptr<f32, gm>, !pto.ptr<f32, ub>, i64, i64, i64, i64, i64
+    pto.mte_gm_ub %rhs_gm, %ub_rhs, %c0_i64, %c32_i64
+      nburst(%c1_i64, %c32_i64, %c32_i64)
+      : !pto.ptr<f32, gm>, !pto.ptr<f32, ub>, i64, i64, i64, i64, i64
+
+    pto.set_flag["PIPE_MTE2", "PIPE_V", "EVENT_ID0"]
+    pto.wait_flag["PIPE_MTE2", "PIPE_V", "EVENT_ID0"]
+
+    pto.vecscope {
+      %cond_true = arith.cmpi eq, %c0, %c0 : index
+      %cond_false = arith.cmpi ne, %c0, %c0 : index
+      %mask = pto.vmi.create_mask %c128 : index -> !pto.vmi.mask<128xpred>
+
+      %reduce_join = scf.if %cond_true -> !pto.vmi.vreg<8xf32> {
+        %x = pto.vmi.vload %ub_src[%c0]
+            : !pto.ptr<f32, ub> -> !pto.vmi.vreg<128xf32>
+        %sum = pto.vmi.vcadd %x, %mask {group = 8, reassoc}
+            : !pto.vmi.vreg<128xf32>, !pto.vmi.mask<128xpred>
+            -> !pto.vmi.vreg<8xf32>
+        scf.yield %sum : !pto.vmi.vreg<8xf32>
+      } else {
+        %slot = pto.vmi.vload %ub_rhs[%c0], %c1 {group = 8}
+            : !pto.ptr<f32, ub> -> !pto.vmi.vreg<8xf32>
+        scf.yield %slot : !pto.vmi.vreg<8xf32>
+      }
+      %bias0 = pto.vmi.vload %ub_rhs[%c0], %c1 {group = 8}
+          : !pto.ptr<f32, ub> -> !pto.vmi.vreg<8xf32>
+      %reduce_out = pto.vmi.vadd %reduce_join, %bias0
+          : !pto.vmi.vreg<8xf32>, !pto.vmi.vreg<8xf32>
+          -> !pto.vmi.vreg<8xf32>
+      pto.vmi.vstore %reduce_out, %ub_dst_reduce[%c0], %c1 {group = 8}
+          : !pto.vmi.vreg<8xf32>, !pto.ptr<f32, ub>
+
+      %slot_join = scf.if %cond_false -> !pto.vmi.vreg<8xf32> {
+        %x = pto.vmi.vload %ub_src[%c0]
+            : !pto.ptr<f32, ub> -> !pto.vmi.vreg<128xf32>
+        %sum = pto.vmi.vcadd %x, %mask {group = 8, reassoc}
+            : !pto.vmi.vreg<128xf32>, !pto.vmi.mask<128xpred>
+            -> !pto.vmi.vreg<8xf32>
+        scf.yield %sum : !pto.vmi.vreg<8xf32>
+      } else {
+        %slot = pto.vmi.vload %ub_rhs[%c0], %c1 {group = 8}
+            : !pto.ptr<f32, ub> -> !pto.vmi.vreg<8xf32>
+        scf.yield %slot : !pto.vmi.vreg<8xf32>
+      }
+      %bias1 = pto.vmi.vload %ub_rhs[%c0], %c1 {group = 8}
+          : !pto.ptr<f32, ub> -> !pto.vmi.vreg<8xf32>
+      %slot_out = pto.vmi.vadd %slot_join, %bias1
+          : !pto.vmi.vreg<8xf32>, !pto.vmi.vreg<8xf32>
+          -> !pto.vmi.vreg<8xf32>
+      pto.vmi.vstore %slot_out, %ub_dst_slot[%c0], %c1 {group = 8}
+          : !pto.vmi.vreg<8xf32>, !pto.ptr<f32, ub>
+    }
+
+    pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+    pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+    pto.mte_ub_gm %ub_dst_reduce, %dst_reduce_gm, %c32_i64
+      nburst(%c1_i64, %c32_i64, %c32_i64)
+      : !pto.ptr<f32, ub>, !pto.ptr<f32, gm>, i64, i64, i64, i64
+    pto.mte_ub_gm %ub_dst_slot, %dst_slot_gm, %c32_i64
+      nburst(%c1_i64, %c32_i64, %c32_i64)
+      : !pto.ptr<f32, ub>, !pto.ptr<f32, gm>, i64, i64, i64, i64
+    pto.barrier #pto.pipe<PIPE_ALL>
+    return
+  }
+}

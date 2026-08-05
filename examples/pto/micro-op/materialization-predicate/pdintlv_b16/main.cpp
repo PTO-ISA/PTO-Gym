@@ -40,8 +40,8 @@ struct MrgSortExecutedNumList {
 
 #define ACL_CHECK(expr)                                                                              do {                                                                                                 const aclError _ret = (expr);                                                                    if (_ret != ACL_SUCCESS) {                                                                           std::fprintf(stderr, "[ERROR] %s failed: %d (%s:%d)\n", #expr, (int)_ret, __FILE__, __LINE__);             const char *_recent = aclGetRecentErrMsg();                                                      if (_recent != nullptr && _recent[0] != '\0') {                                                      std::fprintf(stderr, "[ERROR] RecentErrMsg: %s\n", _recent);                                 }                                                                                                rc = 1;                                                                                          goto cleanup;                                                                                }                                                                                            } while (0)
 
-void LaunchPdintlvB16(uint32_t *v1, void *stream);
 
+void LaunchPdintlvB16DeepMerged(uint32_t * p0, void *stream);
 int main() {
     size_t elemCount_v1 = 32;
     size_t fileSize_v1 = elemCount_v1 * sizeof(uint32_t);
@@ -68,7 +68,7 @@ int main() {
 
     ReadFile("./v1.bin", fileSize_v1, v1Host, fileSize_v1);
     ACL_CHECK(aclrtMemcpy(v1Device, fileSize_v1, v1Host, fileSize_v1, ACL_MEMCPY_HOST_TO_DEVICE));
-    LaunchPdintlvB16(v1Device, stream);
+        LaunchPdintlvB16DeepMerged(v1Device, stream);
 
     ACL_CHECK(aclrtSynchronizeStream(stream));
     ACL_CHECK(aclrtMemcpy(v1Host, fileSize_v1, v1Device, fileSize_v1, ACL_MEMCPY_DEVICE_TO_HOST));

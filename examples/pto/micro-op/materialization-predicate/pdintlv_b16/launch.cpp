@@ -5,18 +5,9 @@
 // THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
 // INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 // See LICENSE in the root of the software repository for the full text of the License.
-
-// -----------------------------------------------------------------------------
-// case: micro-op/materialization-predicate/pdintlv_b16
-// family: materialization-predicate
-// target_ops: pto.pdintlv_b16
-// scenarios: predicate-transform, lane-order
-// ---------------------------------------------------------------------------
-// PTOAS compatibility layer
 #ifndef __VEC_SCOPE__
 #define __VEC_SCOPE__
 #endif
-
 #if defined(__CCE_AICORE__) && defined(__NPU_ARCH__) && (__NPU_ARCH__ == 2201)
 typedef struct { unsigned char v; } hifloat8_t;
 typedef struct { unsigned char v; } float8_e4m3_t;
@@ -30,19 +21,18 @@ typedef struct { unsigned char v; } float4_e2m1x2_t;
 #include <ccelib/print/print.h>
 #endif
 #if !defined(__CCE_AICORE__) && !defined(TMRGSORT_HPP)
-struct MrgSortExecutedNumList {
-    uint16_t mrgSortList0;
-    uint16_t mrgSortList1;
-    uint16_t mrgSortList2;
-    uint16_t mrgSortList3;
-};
+struct MrgSortExecutedNumList { uint16_t mrgSortList0,mrgSortList1,mrgSortList2,mrgSortList3; };
 #endif
 #ifndef __CPU_SIM
 #include "acl/acl.h"
 #endif
 
-extern "C" __global__ [aicore] void pdintlv_b16_kernel_2d(__gm__ uint32_t *v1);
+extern "C" __global__ [aicore] void pdintlv_b16_deep_merged_kernel(
+    __gm__ uint32_t * arg0,
+    __gm__ uint32_t * arg1);
 
-void LaunchPdintlvB16(uint32_t *v1, void *stream) {
-  pdintlv_b16_kernel_2d<<<1, nullptr, stream>>>((__gm__ uint32_t *)v1);
+void LaunchPdintlvB16DeepMerged(uint32_t * p0, void *stream) {
+  pdintlv_b16_deep_merged_kernel<<<1, nullptr, stream>>>(
+      (__gm__ uint32_t *)p0,
+      (__gm__ uint32_t *)p0);
 }

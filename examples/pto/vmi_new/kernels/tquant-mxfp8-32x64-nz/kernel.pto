@@ -1,0 +1,170 @@
+// Copyright (c) 2026 Huawei Technologies Co., Ltd.
+// This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+// CANN Open Software License Agreement Version 2.0 (the "License").
+// Please refer to the License for details. You may not use this file except in compliance with the License.
+// THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+// INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+// See LICENSE in the root of the software repository for the full text of the License.
+
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
+  func.func @vmi_tquant_mxfp8_32x64_nz_kernel(%src_gm: !pto.ptr<f32, gm>,
+                                              %idx_gm: !pto.ptr<ui16, gm>,
+                                              %out_fp8_gm: !pto.ptr<ui8, gm>,
+                                              %out_e8m0_gm: !pto.ptr<ui8, gm>) attributes {pto.kernel} {
+    %c0 = arith.constant 0 : index
+    %c1 = arith.constant 1 : index
+    %c2 = arith.constant 2 : index
+    %c4 = arith.constant 4 : index
+    %c8 = arith.constant 8 : index
+    %c32 = arith.constant 32 : index
+    %c64 = arith.constant 64 : index
+    %c128 = arith.constant 128 : index
+    %c256 = arith.constant 256 : index
+    %c1056 = arith.constant 1056 : index
+    %c1024 = arith.constant 1024 : index
+    %c0_i16 = arith.constant 0 : i16
+    %c1_i16 = arith.constant 1 : i16
+    %c0_i64 = arith.constant 0 : i64
+    %c1_i64 = arith.constant 1 : i64
+    %c2_i64 = arith.constant 2 : i64
+    %c8_i64 = arith.constant 8 : i64
+    %c32_i64 = arith.constant 32 : i64
+    %c64_i64 = arith.constant 64 : i64
+    %c256_i64 = arith.constant 256 : i64
+    %c1024_i64 = arith.constant 1024 : i64
+    %c8192_i64 = arith.constant 8192 : i64
+    %c131328_i64 = arith.constant 131328 : i64
+    %c131584_i64 = arith.constant 131584 : i64
+    %c196864_i64 = arith.constant 196864 : i64
+    %c197120_i64 = arith.constant 197120 : i64
+    %exp_mask_i32 = arith.constant 2139095040 : i32
+    %shift_i32 = arith.constant 23 : i32
+    %emax_i32 = arith.constant 8 : i32
+    %scale_exp_bias_i32 = arith.constant 254 : i32
+
+    %ub_src = pto.castptr %c0_i64 : i64 -> !pto.ptr<f32, ub>
+    %ub_fp8_nd_f8 = pto.castptr %c8192_i64 : i64 -> !pto.ptr<f8E4M3FN, ub>
+    %ub_max = pto.castptr %c131328_i64 : i64 -> !pto.ptr<f32, ub>
+    %ub_e8m0_nd_u8 = pto.castptr %c131584_i64 : i64 -> !pto.ptr<ui8, ub>
+    %ub_e8m0_nd_u16 = pto.castptr %c131584_i64 : i64 -> !pto.ptr<ui16, ub>
+    %ub_e8m0_zz_u8 = pto.castptr %c196864_i64 : i64 -> !pto.ptr<ui8, ub>
+    %ub_e8m0_zz_u16 = pto.castptr %c196864_i64 : i64 -> !pto.ptr<ui16, ub>
+    %ub_idx_u16 = pto.castptr %c197120_i64 : i64 -> !pto.ptr<ui16, ub>
+    %out_fp8_hi_gm = pto.addptr %out_fp8_gm, %c1024
+        : !pto.ptr<ui8, gm> -> !pto.ptr<ui8, gm>
+
+    pto.mte_gm_ub %src_gm, %ub_src, %c0_i64, %c8192_i64
+      nburst(%c1_i64, %c8192_i64, %c8192_i64)
+      : !pto.ptr<f32, gm>, !pto.ptr<f32, ub>, i64, i64, i64, i64, i64
+    pto.mte_gm_ub %idx_gm, %ub_idx_u16, %c0_i64, %c64_i64
+      nburst(%c1_i64, %c64_i64, %c64_i64)
+      : !pto.ptr<ui16, gm>, !pto.ptr<ui16, ub>, i64, i64, i64, i64, i64
+    pto.set_flag["PIPE_MTE2", "PIPE_V", "EVENT_ID0"]
+    pto.wait_flag["PIPE_MTE2", "PIPE_V", "EVENT_ID0"]
+
+    pto.vecscope {
+      %mask_f32 = pto.vmi.create_mask %c256 : index -> !pto.vmi.mask<256xpred>
+      scf.for %row = %c0 to %c32 step %c4 {
+        %src_off = arith.muli %row, %c64 : index
+        %scale_off = arith.muli %row, %c2 : index
+        %nd_off = arith.muli %row, %c64 : index
+
+        %x = pto.vmi.vload %ub_src[%src_off]
+            : !pto.ptr<f32, ub> -> !pto.vmi.vreg<256xf32>
+        %abs = pto.vmi.vabs %x
+            : !pto.vmi.vreg<256xf32> -> !pto.vmi.vreg<256xf32>
+        %amax = pto.vmi.vcmax %abs, %mask_f32 {group = 8}
+            : !pto.vmi.vreg<256xf32>, !pto.vmi.mask<256xpred>
+            -> !pto.vmi.vreg<8xf32>
+        %amax_bits = pto.vmi.vinterpret_cast %amax
+            : !pto.vmi.vreg<8xf32> -> !pto.vmi.vreg<8xi32>
+        %exp_mask = pto.vmi.vbrc %exp_mask_i32
+            : i32 -> !pto.vmi.vreg<8xi32>
+        %shift = pto.vmi.vbrc %shift_i32
+            : i32 -> !pto.vmi.vreg<8xi32>
+        %emax = pto.vmi.vbrc %emax_i32
+            : i32 -> !pto.vmi.vreg<8xi32>
+        %scale_exp_bias = pto.vmi.vbrc %scale_exp_bias_i32
+            : i32 -> !pto.vmi.vreg<8xi32>
+        %exp_bits = pto.vmi.vand %amax_bits, %exp_mask
+            : !pto.vmi.vreg<8xi32>, !pto.vmi.vreg<8xi32>
+            -> !pto.vmi.vreg<8xi32>
+        %exp = pto.vmi.vshr %exp_bits, %shift
+            : !pto.vmi.vreg<8xi32>, !pto.vmi.vreg<8xi32>
+            -> !pto.vmi.vreg<8xi32>
+        %e8m0_i32 = pto.vmi.vsub %exp, %emax
+            : !pto.vmi.vreg<8xi32>, !pto.vmi.vreg<8xi32>
+            -> !pto.vmi.vreg<8xi32>
+        pto.vmi.vstore %amax, %ub_max[%scale_off], %c1 {group = 8}
+            : !pto.vmi.vreg<8xf32>, !pto.ptr<f32, ub>
+        %scale_exp = pto.vmi.vsub %scale_exp_bias, %e8m0_i32
+            : !pto.vmi.vreg<8xi32>, !pto.vmi.vreg<8xi32>
+            -> !pto.vmi.vreg<8xi32>
+        %scale_bits = pto.vmi.vshl %scale_exp, %shift
+            : !pto.vmi.vreg<8xi32>, !pto.vmi.vreg<8xi32>
+            -> !pto.vmi.vreg<8xi32>
+        %scaling = pto.vmi.vinterpret_cast %scale_bits
+            : !pto.vmi.vreg<8xi32> -> !pto.vmi.vreg<8xf32>
+        %scaling_vec = pto.vmi.vbrc %scaling {group = 8}
+            : !pto.vmi.vreg<8xf32> -> !pto.vmi.vreg<256xf32>
+        %scaled = pto.vmi.vmul %x, %scaling_vec
+            : !pto.vmi.vreg<256xf32>, !pto.vmi.vreg<256xf32>
+            -> !pto.vmi.vreg<256xf32>
+        %q8 = pto.vmi.vcvt %scaled {saturate = "SAT"}
+            : !pto.vmi.vreg<256xf32> -> !pto.vmi.vreg<256xf8E4M3FN>
+        pto.vmi.vstore %q8, %ub_fp8_nd_f8[%nd_off]
+            : !pto.vmi.vreg<256xf8E4M3FN>, !pto.ptr<f8E4M3FN, ub>
+      }
+
+      %max256 = pto.vmi.vload %ub_max[%c0]
+          : !pto.ptr<f32, ub> -> !pto.vmi.vreg<256xf32>
+      %max256_bits = pto.vmi.vinterpret_cast %max256
+          : !pto.vmi.vreg<256xf32> -> !pto.vmi.vreg<256xi32>
+      %exp_mask256 = pto.vmi.vbrc %exp_mask_i32
+          : i32 -> !pto.vmi.vreg<256xi32>
+      %shift256 = pto.vmi.vbrc %shift_i32
+          : i32 -> !pto.vmi.vreg<256xi32>
+      %emax256 = pto.vmi.vbrc %emax_i32
+          : i32 -> !pto.vmi.vreg<256xi32>
+      %exp256_bits = pto.vmi.vand %max256_bits, %exp_mask256
+          : !pto.vmi.vreg<256xi32>, !pto.vmi.vreg<256xi32>
+          -> !pto.vmi.vreg<256xi32>
+      %exp256 = pto.vmi.vshr %exp256_bits, %shift256
+          : !pto.vmi.vreg<256xi32>, !pto.vmi.vreg<256xi32>
+          -> !pto.vmi.vreg<256xi32>
+      %e8m0_256_i32 = pto.vmi.vsub %exp256, %emax256
+          : !pto.vmi.vreg<256xi32>, !pto.vmi.vreg<256xi32>
+          -> !pto.vmi.vreg<256xi32>
+      %e8m0_256_u8 = pto.vmi.vcvt %e8m0_256_i32 {saturate = "SAT"}
+          : !pto.vmi.vreg<256xi32> -> !pto.vmi.vreg<256xui8>
+      pto.vmi.vstore %e8m0_256_u8, %ub_e8m0_nd_u8[%c0]
+          : !pto.vmi.vreg<256xui8>, !pto.ptr<ui8, ub>
+
+      %idx_mask = pto.vmi.create_mask %c32 : index -> !pto.vmi.mask<128xpred>
+      %idx_vec = pto.vmi.vload %ub_idx_u16[%c0]
+          : !pto.ptr<ui16, ub> -> !pto.vmi.vreg<128xui16>
+      %e8m0_zz = pto.vmi.vgather %ub_e8m0_nd_u16, %idx_vec, %idx_mask
+          : !pto.ptr<ui16, ub>, !pto.vmi.vreg<128xui16>,
+            !pto.vmi.mask<128xpred>
+          -> !pto.vmi.vreg<128xui16>
+      pto.vmi.vstore %e8m0_zz, %ub_e8m0_zz_u16[%c0]
+          : !pto.vmi.vreg<128xui16>, !pto.ptr<ui16, ub>
+    }
+
+    pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+    pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+    pto.mte_ub_gm %ub_fp8_nd_f8, %out_fp8_gm, %c32_i64
+      nburst(%c32_i64, %c64_i64, %c32_i64)
+      : !pto.ptr<f8E4M3FN, ub>, !pto.ptr<ui8, gm>, i64, i64, i64, i64
+    %ub_fp8_nd_hi_f8 = pto.addptr %ub_fp8_nd_f8, %c32
+        : !pto.ptr<f8E4M3FN, ub> -> !pto.ptr<f8E4M3FN, ub>
+    pto.mte_ub_gm %ub_fp8_nd_hi_f8, %out_fp8_hi_gm, %c32_i64
+      nburst(%c32_i64, %c64_i64, %c32_i64)
+      : !pto.ptr<f8E4M3FN, ub>, !pto.ptr<ui8, gm>, i64, i64, i64, i64
+    pto.mte_ub_gm %ub_e8m0_zz_u8, %out_e8m0_gm, %c64_i64
+      nburst(%c1_i64, %c64_i64, %c64_i64)
+      : !pto.ptr<ui8, ub>, !pto.ptr<ui8, gm>, i64, i64, i64, i64
+    pto.barrier #pto.pipe<PIPE_ALL>
+    return
+  }
+}

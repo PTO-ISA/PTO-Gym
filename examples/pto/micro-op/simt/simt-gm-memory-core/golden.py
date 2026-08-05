@@ -1,0 +1,38 @@
+#!/usr/bin/env python3
+# Copyright (c) 2026 Huawei Technologies Co., Ltd.
+# This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+# CANN Open Software License Agreement Version 2.0 (the "License").
+# Please refer to the License for details. You may not use this file except in compliance with the License.
+# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+# See LICENSE in the root of the software repository for the full text of the License.
+
+import argparse
+from pathlib import Path
+
+import numpy as np
+
+ELEMS = 128
+
+
+def generate(output_dir: Path) -> None:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    lanes = np.arange(32, dtype=np.int32)
+    v1 = np.full(ELEMS, -1, dtype=np.int32)
+    v1[:32] = 100 + lanes
+    golden_v1 = v1.copy()
+    golden_v1[32:64] = v1[:32] + lanes + 1000
+    golden_v1[64:96] = lanes
+    v1.tofile(output_dir / "v1.bin")
+    golden_v1.tofile(output_dir / "golden_v1.bin")
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--output-dir", type=Path, default=Path("."))
+    args = parser.parse_args()
+    generate(args.output_dir)
+
+
+if __name__ == "__main__":
+    main()

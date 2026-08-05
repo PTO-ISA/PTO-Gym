@@ -29,28 +29,6 @@ die() {
   exit 1
 }
 
-clean_tmp_inode_hotspots() {
-  local -a targets=(
-    /tmp/pto-microop-full
-    /tmp/pto-microop-full-redownload
-  )
-
-  log "tmp inode usage before cleanup"
-  df -ih /tmp
-
-  for dir in "${targets[@]}"; do
-    if [[ -e "${dir}" ]]; then
-      log "remove ${dir}"
-      rm -rf "${dir}"
-    fi
-  done
-
-  log "tmp inode usage after cleanup"
-  df -ih /tmp
-}
-
-clean_tmp_inode_hotspots
-
 [[ -x "${SERIAL_SCRIPT}" ]] || die "missing serial validation script: ${SERIAL_SCRIPT}"
 [[ -d "${CASES_ROOT}" ]] || die "missing cases root: ${CASES_ROOT}"
 [[ -n "${WORK_SPACE}" ]] || die "WORK_SPACE is required"
@@ -75,6 +53,7 @@ SUMMARY_FILE="${WORK_SPACE}/parallel-summary.tsv"
 RUNNER_LOG="${WORK_SPACE}/parallel-runner.log"
 
 discover_cases() {
+  local onboard_only_prefix="onboard-only/"
   local required_files=(
     launch.cpp
     main.cpp
@@ -83,6 +62,10 @@ discover_cases() {
   )
 
   if [[ -n "${CASE_NAME}" ]]; then
+    if [[ "${DEVICE:-SIM}" == "SIM" && "${COMPILE_ONLY:-0}" != "1" &&
+          "${CASE_NAME}" == "${onboard_only_prefix}"* ]]; then
+      die "case ${CASE_NAME} is onboard-only and cannot run with DEVICE=SIM"
+    fi
     local requested_dir="${CASES_ROOT}/${CASE_NAME}"
     [[ -d "${requested_dir}" ]] || die "unknown case: ${CASE_NAME}"
     for f in "${required_files[@]}"; do
@@ -105,6 +88,10 @@ discover_cases() {
     [[ "${ok}" -eq 1 ]] || continue
     [[ -f "${dir}/kernel.pto" ]] || continue
     local rel="${dir#${CASES_ROOT}/}"
+    if [[ "${DEVICE:-SIM}" == "SIM" && "${COMPILE_ONLY:-0}" != "1" &&
+          "${rel}" == "${onboard_only_prefix}"* ]]; then
+      continue
+    fi
     if [[ -n "${CASE_PREFIX}" && "${rel}" != "${CASE_PREFIX}"* ]]; then
       continue
     fi

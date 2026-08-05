@@ -1,0 +1,49 @@
+// Copyright (c) 2026 Huawei Technologies Co., Ltd.
+// This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+// CANN Open Software License Agreement Version 2.0 (the "License").
+// Please refer to the License for details. You may not use this file except in compliance with the License.
+// THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+// INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+// See LICENSE in the root of the software repository for the full text of the License.
+
+// Test dynamic buf_id operand for pto.get_buf_dyn / pto.rls_buf_dyn in a SIMT kernel.
+// The buf_id is computed from an scf.for loop induction variable (iter & 1),
+// producing a non-constant SSA value that exercises the GET.BUF.mode (register)
+// lowering path. This avoids the bisheng bug triggered by hivm intrinsic results
+// flowing into GET.BUF.mode/RLS.BUF.mode register arguments.
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
+  func.func @simt_bufid_dynamic_core_kernel(%arg0: !pto.ptr<i32, gm>) attributes {pto.aicore} {
+    %c0 = arith.constant 0 : index
+    %c1 = arith.constant 1 : index
+    %c2 = arith.constant 2 : index
+    %dim_z = arith.constant 1 : i32
+    %dim_y = arith.constant 1 : i32
+    %dim_x = arith.constant 32 : i32
+
+    // Double buffering: 2 iterations with dynamic buf_id = iter & 1
+    // The loop induction variable is a standard SSA value, not a hivm intrinsic.
+    scf.for %iter = %c0 to %c2 step %c1 {
+      %buf_id = arith.andi %iter, %c1 : index
+      pto.get_buf_dyn "PIPE_V", %buf_id, 0
+      pto.simt_launch @simt_bufid_dynamic_core_body<<<%dim_x, %dim_y, %dim_z>>>(%arg0) : (!pto.ptr<i32, gm>) -> ()
+      pto.barrier #pto.pipe<PIPE_ALL>
+      pto.rls_buf_dyn "PIPE_V", %buf_id, 0
+    }
+    return
+  }
+
+  func.func @simt_bufid_dynamic_core_body(%gm: !pto.ptr<i32, gm>) attributes {pto.simt_entry} {
+    %tx = pto.get_tid_x : i32
+    %c32_i32 = arith.constant 32 : i32
+    %c100_i32 = arith.constant 100 : i32
+
+    %src_idx = arith.index_castui %tx : i32 to index
+    %loaded = pto.load %gm[%src_idx] : !pto.ptr<i32, gm> -> i32
+    %result = arith.addi %loaded, %c100_i32 : i32
+
+    %dst_i32 = arith.addi %tx, %c32_i32 : i32
+    %dst_idx = arith.index_castui %dst_i32 : i32 to index
+    pto.store %result, %gm[%dst_idx] : !pto.ptr<i32, gm>, i32
+    return
+  }
+}

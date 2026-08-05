@@ -22,7 +22,7 @@ module attributes {pto.target_arch = "a5"} {
                                                  %out_split_m1_gm: !pto.ptr<f32, gm>,
                                                  %out_split_n0_gm: !pto.ptr<f32, gm>,
                                                  %out_split_n1_gm: !pto.ptr<f32, gm>)
-      attributes {pto.aicore} {
+      attributes {pto.kernel} {
     %c0_i64 = arith.constant 0 : i64
     %c1_i64 = arith.constant 1 : i64
     %c2_i64 = arith.constant 2 : i64
@@ -69,10 +69,10 @@ module attributes {pto.target_arch = "a5"} {
 
       pto.set_flag["PIPE_MTE2", "PIPE_MTE1", "EVENT_ID0"]
       pto.wait_flag["PIPE_MTE2", "PIPE_MTE1", "EVENT_ID0"]
-      pto.mte_l1_l0a %mat_src, %l0a, %c40_i64, %c50_i64
-        : !pto.ptr<f16, l1>, !pto.ptr<f16, l0a>, i64, i64
-      pto.mte_l1_l0b %mat_id, %l0b, %c50_i64, %c64b_i64 {transpose = true}
-        : !pto.ptr<f16, l1>, !pto.ptr<f16, l0b>, i64, i64
+      pto.mte_l1_l0a %mat_src, %l0a, %c40_i64, %c50_i64, %c0_i64, %c0_i64
+        : !pto.ptr<f16, l1>, !pto.ptr<f16, l0a>, i64, i64, i64, i64
+      pto.mte_l1_l0b %mat_id, %l0b, %c50_i64, %c64b_i64, %c0_i64, %c0_i64 {transpose = true}
+        : !pto.ptr<f16, l1>, !pto.ptr<f16, l0b>, i64, i64, i64, i64
 
       pto.set_flag["PIPE_MTE1", "PIPE_M", "EVENT_ID0"]
       pto.wait_flag["PIPE_MTE1", "PIPE_M", "EVENT_ID0"]
@@ -111,7 +111,7 @@ module attributes {pto.target_arch = "a5"} {
           : !pto.ptr<f32, ub>, !pto.ptr<f32, gm>, i64, i64, i64, i64
       }
       scf.if %is_subblock1 {
-        pto.sync.wait <PIPE_MTE3>, 1
+        pto.sync.wait <PIPE_MTE3>, 17
         pto.mte_ub_gm %ub_split_m, %out_split_m1_gm, %c256_i64
           nburst(%c20_i64, %c256_i64, %c256_i64)
           : !pto.ptr<f32, ub>, !pto.ptr<f32, gm>, i64, i64, i64, i64

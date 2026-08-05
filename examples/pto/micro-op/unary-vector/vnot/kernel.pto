@@ -6,7 +6,7 @@
 // NOTE: lane-wise bitwise inversion on signed i16 source lanes.
 // -----------------------------------------------------------------------------
 module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
-  func.func @vnot_kernel_2d(%arg0: !pto.ptr<i16, gm>, %arg1: !pto.ptr<i16, gm>) attributes {pto.aicore} {
+  func.func @vnot_kernel_2d(%arg0: !pto.ptr<i16, gm>, %arg1: !pto.ptr<i16, gm>) attributes {pto.kernel} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c128 = arith.constant 128 : index

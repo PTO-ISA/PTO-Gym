@@ -9,7 +9,7 @@
 module attributes {pto.target_arch = "a5"} {
   func.func @cbuf_ubuf_roundtrip_mixed_kernel(
       %src_gm: !pto.ptr<i16, gm>, %dst_gm: !pto.ptr<i16, gm>)
-      attributes {pto.aicore} {
+      attributes {pto.kernel} {
     %c0_i64 = arith.constant 0 : i64
     %c1_i64 = arith.constant 1 : i64
     %c16_i64 = arith.constant 16 : i64

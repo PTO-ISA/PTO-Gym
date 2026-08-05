@@ -8,10 +8,9 @@ module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<ve
   func.func @load_store_scalar_ub_kernel(%arg0: !pto.ptr<i16, gm>, %arg1: !pto.ptr<i16, gm>) attributes {pto.aicore} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
-    %c1024 = arith.constant 1024 : index
+    %c8 = arith.constant 8 : index
     %c0_i64 = arith.constant 0 : i64
     %c1_i64 = arith.constant 1 : i64
-    %c32_i64 = arith.constant 32 : i64
     %c64_i64 = arith.constant 64 : i64
     %c2048_i64 = arith.constant 2048 : i64
     %c7_i16 = arith.constant 7 : i16
@@ -20,16 +19,18 @@ module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<ve
     %ub_in = pto.castptr %c0_i64 : i64 -> !pto.ptr<i16, ub>
     %ub_out = pto.castptr %c2048_i64 : i64 -> !pto.ptr<i16, ub>
 
-    %false = arith.constant false
     pto.mte_gm_ub %arg0, %ub_in, %c0_i64, %c64_i64
-      nburst(%c32_i64, %c64_i64, %c64_i64)
+      nburst(%c1_i64, %c64_i64, %c64_i64)
+      : !pto.ptr<i16, gm>, !pto.ptr<i16, ub>, i64, i64, i64, i64, i64
+    pto.mte_gm_ub %arg0, %ub_out, %c0_i64, %c64_i64
+      nburst(%c1_i64, %c64_i64, %c64_i64)
       : !pto.ptr<i16, gm>, !pto.ptr<i16, ub>, i64, i64, i64, i64, i64
 
     pto.set_flag["PIPE_MTE2", "PIPE_V", "EVENT_ID0"]
     pto.wait_flag["PIPE_MTE2", "PIPE_V", "EVENT_ID0"]
 
     pto.vecscope {
-      scf.for %offset = %c0 to %c1024 step %c1 {
+      scf.for %offset = %c0 to %c8 step %c1 {
         %loaded = pto.load_scalar %ub_in[%offset] : !pto.ptr<i16, ub> -> i16
         %biased = arith.addi %loaded, %c7_i16 : i16
         pto.store_scalar %biased, %ub_out[%offset] : !pto.ptr<i16, ub>, i16
@@ -42,9 +43,12 @@ module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<ve
     pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
     pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
     pto.mte_ub_gm %ub_out, %arg1, %c64_i64
-      nburst(%c32_i64, %c64_i64, %c64_i64)
+      nburst(%c1_i64, %c64_i64, %c64_i64)
       : !pto.ptr<i16, ub>, !pto.ptr<i16, gm>, i64, i64, i64, i64
     pto.barrier #pto.pipe<PIPE_ALL>
+    pto.dcci %arg1 "ENTIRE_DATA_CACHE", "CACHELINE_OUT" : !pto.ptr<i16, gm>
+    pto.dcci %ub_out "SINGLE_CACHE_LINE", "CACHELINE_UB" : !pto.ptr<i16, ub>
+    pto.dsb "ALL"
     return
   }
 }

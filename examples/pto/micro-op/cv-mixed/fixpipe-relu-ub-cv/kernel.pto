@@ -24,7 +24,7 @@ module attributes {pto.target_arch = "a5"} {
                                        %out_gm_clip_gm: !pto.ptr<f16, gm>,
                                        %out_l1_relu_gm: !pto.ptr<f16, gm>,
                                        %out_l1_clip_gm: !pto.ptr<f16, gm>)
-      attributes {pto.aicore} {
+      attributes {pto.kernel} {
     %c0_i64 = arith.constant 0 : i64
     %c1_i64 = arith.constant 1 : i64
     %c40_i64 = arith.constant 40 : i64
@@ -76,10 +76,10 @@ module attributes {pto.target_arch = "a5"} {
 
       pto.set_flag["PIPE_MTE2", "PIPE_MTE1", "EVENT_ID0"]
       pto.wait_flag["PIPE_MTE2", "PIPE_MTE1", "EVENT_ID0"]
-      pto.mte_l1_l0a %mat_src, %l0a, %c40_i64, %c50_i64
-        : !pto.ptr<f16, l1>, !pto.ptr<f16, l0a>, i64, i64
-      pto.mte_l1_l0b %mat_id, %l0b, %c50_i64, %c64_i64 {transpose = true}
-        : !pto.ptr<f16, l1>, !pto.ptr<f16, l0b>, i64, i64
+      pto.mte_l1_l0a %mat_src, %l0a, %c40_i64, %c50_i64, %c0_i64, %c0_i64
+        : !pto.ptr<f16, l1>, !pto.ptr<f16, l0a>, i64, i64, i64, i64
+      pto.mte_l1_l0b %mat_id, %l0b, %c50_i64, %c64_i64, %c0_i64, %c0_i64 {transpose = true}
+        : !pto.ptr<f16, l1>, !pto.ptr<f16, l0b>, i64, i64, i64, i64
 
       pto.set_flag["PIPE_MTE1", "PIPE_M", "EVENT_ID0"]
       pto.wait_flag["PIPE_MTE1", "PIPE_M", "EVENT_ID0"]

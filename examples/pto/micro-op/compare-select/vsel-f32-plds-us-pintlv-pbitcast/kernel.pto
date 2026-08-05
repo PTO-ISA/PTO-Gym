@@ -16,7 +16,7 @@ module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<ve
   func.func @vsel_f32_plds_us_pintlv_pbitcast_kernel_2d(%arg0: !pto.ptr<f32, gm>,
                                                         %arg1: !pto.ptr<f32, gm>,
                                                         %arg2: !pto.ptr<ui8, gm>,
-                                                        %arg3: !pto.ptr<f32, gm>) attributes {pto.aicore} {
+                                                        %arg3: !pto.ptr<f32, gm>) attributes {pto.kernel} {
     %c0 = arith.constant 0 : index
     %c64 = arith.constant 64 : index
     %c0_i64 = arith.constant 0 : i64

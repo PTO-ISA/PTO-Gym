@@ -11,7 +11,7 @@ module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<cu
                             %b_gm: !pto.ptr<f16, gm>,
                             %a_acc_gm: !pto.ptr<f16, gm>,
                             %b_acc_gm: !pto.ptr<f16, gm>,
-                            %c_gm: !pto.ptr<f32, gm>) attributes {pto.aicore} {
+                            %c_gm: !pto.ptr<f32, gm>) attributes {pto.kernel} {
     %c0_i64 = arith.constant 0 : i64
     %c1_i64 = arith.constant 1 : i64
     %c16_i64 = arith.constant 16 : i64
@@ -71,10 +71,10 @@ module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<cu
 
     // Step 2: feed the first A/B pair into L0A/L0B. B is transposed because
     // the MAD instruction consumes the right-hand operand from L0B in that form.
-    pto.mte_l1_l0a %l1_a, %l0a, %c16_i64, %c16_i64
-      : !pto.ptr<f16, l1>, !pto.ptr<f16, l0a>, i64, i64
-    pto.mte_l1_l0b %l1_b, %l0b, %c16_i64, %c16_i64 {transpose = true}
-      : !pto.ptr<f16, l1>, !pto.ptr<f16, l0b>, i64, i64
+    pto.mte_l1_l0a %l1_a, %l0a, %c16_i64, %c16_i64, %c0_i64, %c0_i64
+      : !pto.ptr<f16, l1>, !pto.ptr<f16, l0a>, i64, i64, i64, i64
+    pto.mte_l1_l0b %l1_b, %l0b, %c16_i64, %c16_i64, %c0_i64, %c0_i64 {transpose = true}
+      : !pto.ptr<f16, l1>, !pto.ptr<f16, l0b>, i64, i64, i64, i64
     pto.set_flag["PIPE_MTE1", "PIPE_M", "EVENT_ID0"]
     pto.wait_flag["PIPE_MTE1", "PIPE_M", "EVENT_ID0"]
     // Step 3: compute the base product in L0C:
@@ -87,10 +87,10 @@ module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<cu
     pto.wait_flag["PIPE_M", "PIPE_MTE1", "EVENT_ID1"]
     // Step 4: load the second A/B pair into L0A/L0B after the first MAD has
     // produced L0C, so the next instruction can accumulate into the same L0C.
-    pto.mte_l1_l0a %l1_a_acc, %l0a, %c16_i64, %c16_i64
-      : !pto.ptr<f16, l1>, !pto.ptr<f16, l0a>, i64, i64
-    pto.mte_l1_l0b %l1_b_acc, %l0b, %c16_i64, %c16_i64 {transpose = true}
-      : !pto.ptr<f16, l1>, !pto.ptr<f16, l0b>, i64, i64
+    pto.mte_l1_l0a %l1_a_acc, %l0a, %c16_i64, %c16_i64, %c0_i64, %c0_i64
+      : !pto.ptr<f16, l1>, !pto.ptr<f16, l0a>, i64, i64, i64, i64
+    pto.mte_l1_l0b %l1_b_acc, %l0b, %c16_i64, %c16_i64, %c0_i64, %c0_i64 {transpose = true}
+      : !pto.ptr<f16, l1>, !pto.ptr<f16, l0b>, i64, i64, i64, i64
     pto.set_flag["PIPE_MTE1", "PIPE_M", "EVENT_ID1"]
     pto.wait_flag["PIPE_MTE1", "PIPE_M", "EVENT_ID1"]
     // Step 5: accumulate the second product:

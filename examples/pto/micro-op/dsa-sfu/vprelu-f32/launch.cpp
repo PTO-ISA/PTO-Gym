@@ -5,19 +5,9 @@
 // THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
 // INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 // See LICENSE in the root of the software repository for the full text of the License.
-
-// -----------------------------------------------------------------------------
-// case: micro-op/dsa-sfu/vprelu-f32
-// family: dsa-sfu
-// target_ops: pto.vprelu
-// scenarios: core-f32, vector-alpha
-// NOTE: bulk-generated coverage skeleton. Parser/verifier/lowering failure is
-// still a valid test conclusion in the current coverage-first phase.
-// -----------------------------------------------------------------------------
 #ifndef __VEC_SCOPE__
 #define __VEC_SCOPE__
 #endif
-
 #if defined(__CCE_AICORE__) && defined(__NPU_ARCH__) && (__NPU_ARCH__ == 2201)
 typedef struct { unsigned char v; } hifloat8_t;
 typedef struct { unsigned char v; } float8_e4m3_t;
@@ -30,25 +20,27 @@ typedef struct { unsigned char v; } float4_e2m1x2_t;
 #if defined(__CCE_AICORE__) && defined(PTOAS_ENABLE_CCE_PRINT)
 #include <ccelib/print/print.h>
 #endif
-
 #if !defined(__CCE_AICORE__) && !defined(TMRGSORT_HPP)
-struct MrgSortExecutedNumList {
-  uint16_t mrgSortList0;
-  uint16_t mrgSortList1;
-  uint16_t mrgSortList2;
-  uint16_t mrgSortList3;
-};
+struct MrgSortExecutedNumList { uint16_t mrgSortList0,mrgSortList1,mrgSortList2,mrgSortList3; };
 #endif
 #ifndef __CPU_SIM
 #include "acl/acl.h"
 #endif
 
-extern "C" __global__ [aicore] void vprelu_kernel_2d(__gm__ float *v1,
-                                                   __gm__ float *v2,
-                                                   __gm__ float *v3);
+extern "C" __global__ [aicore] void vprelu_f32_deep_merged_kernel(
+    __gm__ float * arg0,
+    __gm__ float * arg1,
+    __gm__ float * arg2,
+    __gm__ float * arg3,
+    __gm__ float * arg4,
+    __gm__ float * arg5);
 
-void LaunchVprelu_kernel_2d(float *v1, float *v2, float *v3, void *stream) {
-  vprelu_kernel_2d<<<1, nullptr, stream>>>((__gm__ float *)v1,
-                                           (__gm__ float *)v2,
-                                           (__gm__ float *)v3);
+void LaunchVpreluF32DeepMerged(float * p0, float * p1, float * p2, void *stream) {
+  vprelu_f32_deep_merged_kernel<<<1, nullptr, stream>>>(
+      (__gm__ float *)p0,
+      (__gm__ float *)p0,
+      (__gm__ float *)p0,
+      (__gm__ float *)p0,
+      (__gm__ float *)p1,
+      (__gm__ float *)p2);
 }

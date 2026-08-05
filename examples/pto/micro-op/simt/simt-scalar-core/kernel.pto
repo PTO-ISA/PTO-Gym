@@ -1,0 +1,175 @@
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
+  func.func @simt_scalar_core_kernel(%arg0: !pto.ptr<i32, gm>) attributes {pto.aicore} {
+    %c0_i64 = arith.constant 0 : i64
+    %c32_i64 = arith.constant 32 : i64
+    %c128_i64 = arith.constant 128 : i64
+    %dim_z = arith.constant 1 : i32
+    %dim_y = arith.constant 1 : i32
+    %dim_x = arith.constant 32 : i32
+
+    %ub_out = pto.castptr %c0_i64 : i64 -> !pto.ptr<i32, ub>
+
+    pto.simt_launch @simt_scalar_core_body<<<%dim_x, %dim_y, %dim_z>>>(%ub_out) : (!pto.ptr<i32, ub>) -> ()
+
+    pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+    pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+    pto.mte_ub_gm %ub_out, %arg0, %c128_i64
+      nburst(%c32_i64, %c128_i64, %c128_i64)
+      : !pto.ptr<i32, ub>, !pto.ptr<i32, gm>, i64, i64, i64, i64
+    pto.barrier #pto.pipe<PIPE_ALL>
+    return
+  }
+
+  func.func @simt_scalar_core_body(%dst: !pto.ptr<i32, ub>) attributes {pto.simt_entry} {
+    %c0_i32 = arith.constant 0 : i32
+    %c1_i32 = arith.constant 1 : i32
+    %c2_i32 = arith.constant 2 : i32
+    %c3_i32 = arith.constant 3 : i32
+    %c32_i32 = arith.constant 32 : i32
+    %c100_i32 = arith.constant 100 : i32
+    %c_fields_i32 = arith.constant 32 : i32
+
+    %tid_x = pto.get_tid_x : i32
+    %laneid = pto.get_laneid : i32
+    %block_dim_x = pto.get_block_dim_x : i32
+    %block_dim_y = pto.get_block_dim_y : i32
+    %block_dim_z = pto.get_block_dim_z : i32
+    %grid_dim_x = pto.get_grid_dim_x : i32
+    %grid_dim_y = pto.get_grid_dim_y : i32
+    %grid_dim_z = pto.get_grid_dim_z : i32
+    %block_idx_x = pto.get_block_idx_x : i32
+
+    %lanemask_eq = pto.get_lanemask_eq : i32
+    %lanemask_le = pto.get_lanemask_le : i32
+    %lanemask_lt = pto.get_lanemask_lt : i32
+    %lanemask_ge = pto.get_lanemask_ge : i32
+    %lanemask_gt = pto.get_lanemask_gt : i32
+
+    %lane_low_bit = arith.andi %laneid, %c1_i32 : i32
+    %is_even = arith.cmpi eq, %lane_low_bit, %c0_i32 : i32
+    %vote_all = pto.vote_all %is_even : i1 -> i1
+    %vote_any = pto.vote_any %is_even : i1 -> i1
+    %vote_uni = pto.vote_uni %is_even : i1 -> i1
+    %vote_all_i32 = arith.extui %vote_all : i1 to i32
+    %vote_any_i32 = arith.extui %vote_any : i1 to i32
+    %vote_uni_i32 = arith.extui %vote_uni : i1 to i32
+    %ballot = pto.vote_ballot %is_even : i1 -> i32
+
+    %value = arith.addi %laneid, %c100_i32 : i32
+    %shfl_idx = pto.shuffle_idx %value, %c3_i32 : i32, i32 -> i32
+    %shfl_up = pto.shuffle_up %value, %c2_i32 : i32, i32 -> i32
+    %shfl_down = pto.shuffle_down %value, %c2_i32 : i32, i32 -> i32
+    %shfl_bfly = pto.shuffle_bfly %value, %c1_i32 : i32, i32 -> i32
+
+    %lane_plus_one = arith.addi %laneid, %c1_i32 : i32
+    %redux_add = pto.redux_add %lane_plus_one signed : i32 -> i32
+    %redux_max = pto.redux_max %lane_plus_one signed : i32 -> i32
+    %redux_min = pto.redux_min %lane_plus_one signed : i32 -> i32
+    %one_f32 = arith.constant 1.000000e+00 : f32
+    %redux_f32 = pto.redux_add %one_f32 : f32 -> f32
+    %redux_f32_i32 = pto.convert %redux_f32 round(r) sat signed : f32 -> i32
+
+    %base_i32 = arith.muli %laneid, %c_fields_i32 : i32
+    %base = arith.index_castui %base_i32 : i32 to index
+
+    pto.store %tid_x, %dst[%base] : !pto.ptr<i32, ub>, i32
+    %idx1_i32 = arith.addi %base_i32, %c1_i32 : i32
+    %idx1 = arith.index_castui %idx1_i32 : i32 to index
+    pto.store %laneid, %dst[%idx1] : !pto.ptr<i32, ub>, i32
+    %idx2_i32 = arith.addi %base_i32, %c2_i32 : i32
+    %idx2 = arith.index_castui %idx2_i32 : i32 to index
+    pto.store %block_dim_x, %dst[%idx2] : !pto.ptr<i32, ub>, i32
+    %idx3_i32 = arith.addi %base_i32, %c3_i32 : i32
+    %idx3 = arith.index_castui %idx3_i32 : i32 to index
+    pto.store %block_dim_y, %dst[%idx3] : !pto.ptr<i32, ub>, i32
+    %c4_i32 = arith.constant 4 : i32
+    %idx4_i32 = arith.addi %base_i32, %c4_i32 : i32
+    %idx4 = arith.index_castui %idx4_i32 : i32 to index
+    pto.store %block_dim_z, %dst[%idx4] : !pto.ptr<i32, ub>, i32
+    %c5_i32 = arith.constant 5 : i32
+    %idx5_i32 = arith.addi %base_i32, %c5_i32 : i32
+    %idx5 = arith.index_castui %idx5_i32 : i32 to index
+    pto.store %grid_dim_x, %dst[%idx5] : !pto.ptr<i32, ub>, i32
+    %c6_i32 = arith.constant 6 : i32
+    %idx6_i32 = arith.addi %base_i32, %c6_i32 : i32
+    %idx6 = arith.index_castui %idx6_i32 : i32 to index
+    pto.store %grid_dim_y, %dst[%idx6] : !pto.ptr<i32, ub>, i32
+    %c7_i32 = arith.constant 7 : i32
+    %idx7_i32 = arith.addi %base_i32, %c7_i32 : i32
+    %idx7 = arith.index_castui %idx7_i32 : i32 to index
+    pto.store %grid_dim_z, %dst[%idx7] : !pto.ptr<i32, ub>, i32
+    %c8_i32 = arith.constant 8 : i32
+    %idx8_i32 = arith.addi %base_i32, %c8_i32 : i32
+    %idx8 = arith.index_castui %idx8_i32 : i32 to index
+    pto.store %block_idx_x, %dst[%idx8] : !pto.ptr<i32, ub>, i32
+    %c9_i32 = arith.constant 9 : i32
+    %idx9_i32 = arith.addi %base_i32, %c9_i32 : i32
+    %idx9 = arith.index_castui %idx9_i32 : i32 to index
+    pto.store %lanemask_eq, %dst[%idx9] : !pto.ptr<i32, ub>, i32
+    %c10_i32 = arith.constant 10 : i32
+    %idx10_i32 = arith.addi %base_i32, %c10_i32 : i32
+    %idx10 = arith.index_castui %idx10_i32 : i32 to index
+    pto.store %lanemask_le, %dst[%idx10] : !pto.ptr<i32, ub>, i32
+    %c11_i32 = arith.constant 11 : i32
+    %idx11_i32 = arith.addi %base_i32, %c11_i32 : i32
+    %idx11 = arith.index_castui %idx11_i32 : i32 to index
+    pto.store %lanemask_lt, %dst[%idx11] : !pto.ptr<i32, ub>, i32
+    %c12_i32 = arith.constant 12 : i32
+    %idx12_i32 = arith.addi %base_i32, %c12_i32 : i32
+    %idx12 = arith.index_castui %idx12_i32 : i32 to index
+    pto.store %lanemask_ge, %dst[%idx12] : !pto.ptr<i32, ub>, i32
+    %c13_i32 = arith.constant 13 : i32
+    %idx13_i32 = arith.addi %base_i32, %c13_i32 : i32
+    %idx13 = arith.index_castui %idx13_i32 : i32 to index
+    pto.store %lanemask_gt, %dst[%idx13] : !pto.ptr<i32, ub>, i32
+    %c14_i32 = arith.constant 14 : i32
+    %idx14_i32 = arith.addi %base_i32, %c14_i32 : i32
+    %idx14 = arith.index_castui %idx14_i32 : i32 to index
+    pto.store %vote_all_i32, %dst[%idx14] : !pto.ptr<i32, ub>, i32
+    %c15_i32 = arith.constant 15 : i32
+    %idx15_i32 = arith.addi %base_i32, %c15_i32 : i32
+    %idx15 = arith.index_castui %idx15_i32 : i32 to index
+    pto.store %vote_any_i32, %dst[%idx15] : !pto.ptr<i32, ub>, i32
+    %c16_i32 = arith.constant 16 : i32
+    %idx16_i32 = arith.addi %base_i32, %c16_i32 : i32
+    %idx16 = arith.index_castui %idx16_i32 : i32 to index
+    pto.store %vote_uni_i32, %dst[%idx16] : !pto.ptr<i32, ub>, i32
+    %c17_i32 = arith.constant 17 : i32
+    %idx17_i32 = arith.addi %base_i32, %c17_i32 : i32
+    %idx17 = arith.index_castui %idx17_i32 : i32 to index
+    pto.store %ballot, %dst[%idx17] : !pto.ptr<i32, ub>, i32
+    %c18_i32 = arith.constant 18 : i32
+    %idx18_i32 = arith.addi %base_i32, %c18_i32 : i32
+    %idx18 = arith.index_castui %idx18_i32 : i32 to index
+    pto.store %shfl_idx, %dst[%idx18] : !pto.ptr<i32, ub>, i32
+    %c19_i32 = arith.constant 19 : i32
+    %idx19_i32 = arith.addi %base_i32, %c19_i32 : i32
+    %idx19 = arith.index_castui %idx19_i32 : i32 to index
+    pto.store %shfl_up, %dst[%idx19] : !pto.ptr<i32, ub>, i32
+    %c20_i32 = arith.constant 20 : i32
+    %idx20_i32 = arith.addi %base_i32, %c20_i32 : i32
+    %idx20 = arith.index_castui %idx20_i32 : i32 to index
+    pto.store %shfl_down, %dst[%idx20] : !pto.ptr<i32, ub>, i32
+    %c21_i32 = arith.constant 21 : i32
+    %idx21_i32 = arith.addi %base_i32, %c21_i32 : i32
+    %idx21 = arith.index_castui %idx21_i32 : i32 to index
+    pto.store %shfl_bfly, %dst[%idx21] : !pto.ptr<i32, ub>, i32
+    %c22_i32 = arith.constant 22 : i32
+    %idx22_i32 = arith.addi %base_i32, %c22_i32 : i32
+    %idx22 = arith.index_castui %idx22_i32 : i32 to index
+    pto.store %redux_add, %dst[%idx22] : !pto.ptr<i32, ub>, i32
+    %c23_i32 = arith.constant 23 : i32
+    %idx23_i32 = arith.addi %base_i32, %c23_i32 : i32
+    %idx23 = arith.index_castui %idx23_i32 : i32 to index
+    pto.store %redux_max, %dst[%idx23] : !pto.ptr<i32, ub>, i32
+    %c24_i32 = arith.constant 24 : i32
+    %idx24_i32 = arith.addi %base_i32, %c24_i32 : i32
+    %idx24 = arith.index_castui %idx24_i32 : i32 to index
+    pto.store %redux_min, %dst[%idx24] : !pto.ptr<i32, ub>, i32
+    %c25_i32 = arith.constant 25 : i32
+    %idx25_i32 = arith.addi %base_i32, %c25_i32 : i32
+    %idx25 = arith.index_castui %idx25_i32 : i32 to index
+    pto.store %redux_f32_i32, %dst[%idx25] : !pto.ptr<i32, ub>, i32
+    return
+  }
+}

@@ -5,22 +5,9 @@
 // THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
 // INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 // See LICENSE in the root of the software repository for the full text of the License.
-
-// -----------------------------------------------------------------------------
-// case: micro-op/predicate-load-store/pstu
-// family: predicate-load-store
-// target_ops: pto.pstu
-// scenarios: unaligned-predicate-store, state-update, representative-logical-elements
-// NOTE: bulk-generated coverage skeleton. Parser/verifier/lowering failure is
-// still a valid test conclusion in the current coverage-first phase.
-// -----------------------------------------------------------------------------
-// ---------------------------------------------------------------------------
-// PTOAS compatibility layer
-// ---------------------------------------------------------------------------
 #ifndef __VEC_SCOPE__
 #define __VEC_SCOPE__
 #endif
-
 #if defined(__CCE_AICORE__) && defined(__NPU_ARCH__) && (__NPU_ARCH__ == 2201)
 typedef struct { unsigned char v; } hifloat8_t;
 typedef struct { unsigned char v; } float8_e4m3_t;
@@ -30,28 +17,36 @@ typedef struct { unsigned char v; } float4_e1m2x2_t;
 typedef struct { unsigned char v; } float4_e2m1x2_t;
 #endif
 #include <stdint.h>
-
 #if defined(__CCE_AICORE__) && defined(PTOAS_ENABLE_CCE_PRINT)
 #include <ccelib/print/print.h>
 #endif
-
 #if !defined(__CCE_AICORE__) && !defined(TMRGSORT_HPP)
-struct MrgSortExecutedNumList {
-  uint16_t mrgSortList0;
-  uint16_t mrgSortList1;
-  uint16_t mrgSortList2;
-  uint16_t mrgSortList3;
-};
+struct MrgSortExecutedNumList { uint16_t mrgSortList0,mrgSortList1,mrgSortList2,mrgSortList3; };
 #endif
 #ifndef __CPU_SIM
 #include "acl/acl.h"
 #endif
 
-extern "C" __global__ [aicore] void pstu_kernel_2d(__gm__ float *v1,
-                                                 __gm__ float *v2,
-                                                 __gm__ uint32_t *v3);
+extern "C" __global__ [aicore] void pstu_deep_merged_kernel(
+    __gm__ float * arg0,
+    __gm__ float * arg1,
+    __gm__ uint32_t * arg2,
+    __gm__ float * arg3,
+    __gm__ float * arg4,
+    __gm__ uint16_t * arg5,
+    __gm__ float * arg6,
+    __gm__ float * arg7,
+    __gm__ uint32_t * arg8);
 
-void LaunchPstu_kernel_2d(float *v1, float *v2, uint32_t *v3, void *stream) {
-  pstu_kernel_2d<<<1, nullptr, stream>>>((__gm__ float *)v1, (__gm__ float *)v2,
-                                         (__gm__ uint32_t *)v3);
+void LaunchPstuDeepMerged(float * p0, float * p1, uint32_t * p2, void *stream) {
+  pstu_deep_merged_kernel<<<1, nullptr, stream>>>(
+      (__gm__ float *)p0,
+      (__gm__ float *)p0,
+      (__gm__ uint32_t *)p0,
+      (__gm__ float *)p0,
+      (__gm__ float *)p0,
+      (__gm__ uint16_t *)p0,
+      (__gm__ float *)p0,
+      (__gm__ float *)p1,
+      (__gm__ uint32_t *)p2);
 }

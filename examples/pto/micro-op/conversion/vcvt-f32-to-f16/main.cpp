@@ -55,8 +55,8 @@ struct MrgSortExecutedNumList {
         }                                                                                        \
     } while (0)
 
-void LaunchVcvt_f32_to_f16_kernel_2d(float *v1, uint16_t *v2, void *stream);
 
+void LaunchVcvtF32ToF16DeepMerged(float * p0, uint16_t * p1, void *stream);
 int main() {
     size_t elemCount_v1 = 1024;
     size_t fileSize_v1 = elemCount_v1 * sizeof(float);
@@ -91,7 +91,7 @@ int main() {
     ReadFile("./v2.bin", fileSize_v2, v2Host, fileSize_v2);
     ACL_CHECK(aclrtMemcpy(v1Device, fileSize_v1, v1Host, fileSize_v1, ACL_MEMCPY_HOST_TO_DEVICE));
     ACL_CHECK(aclrtMemcpy(v2Device, fileSize_v2, v2Host, fileSize_v2, ACL_MEMCPY_HOST_TO_DEVICE));
-    LaunchVcvt_f32_to_f16_kernel_2d(v1Device, v2Device, stream);
+        LaunchVcvtF32ToF16DeepMerged(v1Device, v2Device, stream);
 
     ACL_CHECK(aclrtSynchronizeStream(stream));
     ACL_CHECK(aclrtMemcpy(v2Host, fileSize_v2, v2Device, fileSize_v2, ACL_MEMCPY_DEVICE_TO_HOST));

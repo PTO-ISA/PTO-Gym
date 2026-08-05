@@ -1,0 +1,30 @@
+#!/usr/bin/env python3
+# Copyright (c) 2026 Huawei Technologies Co., Ltd.
+# This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+# CANN Open Software License Agreement Version 2.0 (the "License").
+# Please refer to the License for details. You may not use this file except in compliance with the License.
+# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+# See LICENSE in the root of the software repository for the full text of the License.
+
+import sys
+
+import numpy as np
+
+
+def main() -> None:
+    golden = np.fromfile("golden_v2.bin", dtype=np.float32)
+    output = np.fromfile("v2.bin", dtype=np.float32)
+    close = np.isclose(golden, output, atol=1e-4, rtol=1e-4)
+    if golden.shape != output.shape or not np.all(close):
+        diff = np.nonzero(~close)[0]
+        idx = int(diff[0]) if diff.size else -1
+        g = golden[idx] if idx >= 0 and idx < golden.size else "n/a"
+        o = output[idx] if idx >= 0 and idx < output.size else "n/a"
+        print(f"[ERROR] compare failed idx={idx} golden={g} output={o}")
+        sys.exit(2)
+    print("[INFO] compare passed")
+
+
+if __name__ == "__main__":
+    main()

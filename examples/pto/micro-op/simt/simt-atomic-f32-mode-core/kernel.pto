@@ -1,0 +1,48 @@
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
+  func.func @simt_atomic_f32_mode_core_kernel(%arg0: !pto.ptr<f32, gm>,
+                                              %arg1: !pto.ptr<f16, gm>,
+                                              %arg2: !pto.ptr<bf16, gm>) attributes {pto.aicore} {
+    %c0 = arith.constant 0 : index
+    %c1 = arith.constant 1 : index
+    %c2 = arith.constant 2 : index
+    %c3 = arith.constant 3 : index
+    %c4 = arith.constant 4 : index
+    %c5 = arith.constant 5 : index
+    %c6 = arith.constant 6 : index
+    %c7 = arith.constant 7 : index
+    %c16 = arith.constant 16 : index
+    %c17 = arith.constant 17 : index
+    %c18 = arith.constant 18 : index
+    %c19 = arith.constant 19 : index
+    %v5 = arith.constant 5.000000e+00 : f32
+    %h1 = arith.constant 1.000000e+00 : f16
+    %h3 = arith.constant 3.000000e+00 : f16
+    %b1 = arith.constant 1.000000e+00 : bf16
+    %b2 = arith.constant 2.000000e+00 : bf16
+
+    %ptr0 = pto.addptr %arg0, %c0 : !pto.ptr<f32, gm> -> !pto.ptr<f32, gm>
+    %old0 = pto.atomic_add %ptr0, %v5 l2cache(nmfv) : !pto.ptr<f32, gm>, f32 -> f32
+    %ptr1 = pto.addptr %arg0, %c1 : !pto.ptr<f32, gm> -> !pto.ptr<f32, gm>
+    %old1 = pto.atomic_add %ptr1, %v5 l2cache(naci) : !pto.ptr<f32, gm>, f32 -> f32
+    %ptr2 = pto.addptr %arg0, %c2 : !pto.ptr<f32, gm> -> !pto.ptr<f32, gm>
+    %old2 = pto.atomic_add %ptr2, %v5 l2cache(wbhred) : !pto.ptr<f32, gm>, f32 -> f32
+    %ptr3 = pto.addptr %arg0, %c3 : !pto.ptr<f32, gm> -> !pto.ptr<f32, gm>
+    %old3 = pto.atomic_add %ptr3, %v5 l2cache(wtsred) : !pto.ptr<f32, gm>, f32 -> f32
+
+    pto.store %old0, %arg0[%c16] : !pto.ptr<f32, gm>, f32
+    pto.store %old1, %arg0[%c17] : !pto.ptr<f32, gm>, f32
+    pto.store %old2, %arg0[%c18] : !pto.ptr<f32, gm>, f32
+    pto.store %old3, %arg0[%c19] : !pto.ptr<f32, gm>, f32
+
+    %h_ptr0 = pto.addptr %arg1, %c0 : !pto.ptr<f16, gm> -> !pto.ptr<f16, gm>
+    %h_ptr1 = pto.addptr %arg1, %c1 : !pto.ptr<f16, gm> -> !pto.ptr<f16, gm>
+    %b_ptr0 = pto.addptr %arg2, %c0 : !pto.ptr<bf16, gm> -> !pto.ptr<bf16, gm>
+    %b_ptr1 = pto.addptr %arg2, %c1 : !pto.ptr<bf16, gm> -> !pto.ptr<bf16, gm>
+    %old_h0 = pto.atomic_add %h_ptr0, %h1 l2cache(nmfv) : !pto.ptr<f16, gm>, f16 -> f16
+    %old_h1 = pto.atomic_max %h_ptr1, %h3 l2cache(nmfv) : !pto.ptr<f16, gm>, f16 -> f16
+    %old_b0 = pto.atomic_add %b_ptr0, %b1 l2cache(nmfv) : !pto.ptr<bf16, gm>, bf16 -> bf16
+    %old_b1 = pto.atomic_min %b_ptr1, %b2 l2cache(nmfv) : !pto.ptr<bf16, gm>, bf16 -> bf16
+    pto.barrier #pto.pipe<PIPE_ALL>
+    return
+  }
+}

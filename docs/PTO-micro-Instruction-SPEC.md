@@ -1,5 +1,6 @@
 # PTO micro Instruction Spec — Draft (A5)
 
+- v0.6: Refresh the micro Instruction reference and add Special Scalar operations
 - v0.5: Add CUBE instruction docs; Rename MTE instruction and address space
 - v0.4: Update DMA instruction docs and add PTO Tile Instruction SPEC
 - v0.3: Add runtime block query and vector-interval legality notes; Normalize load/store distribution families; Update get_buf/rls_buf details
@@ -31,37 +32,40 @@ Within the end-to-end PTO software stack, PTO instructions may appear in three c
 From these PTO instruction forms, the stack can proceed along two main compilation flows:
 
 - **CCE generation flow**: PTO ISA is lowered into a CCE-oriented representation, which is then compiled by the BiSheng toolchain into Ascend device binaries.
-- **Bytecode generation flow**: PTO ISA is emitted as bytecode, which is then compiled by the BiSheng toolchain into Ascend device binaries.
+- **VPTO flow**: PTO ISA is lowered through the VPTO backend for A5 device code generation. PTOAS organizes the device components and invokes the BiSheng compiler internally to produce the final device artifact.
 
 ```text
-High-level frameworks / DSLs / library kernels
-                    |
-                    v
-         +----------------------------------+
-         |          PTO ISA layer           |
-         |                                  |
-         |  (1) PTO Tile Instruction        |
-         |  (2) PTO micro Instruction       |
-         |  (3) PTO Tile+micro Instruction  |
-         +----------------+-----------------+
-                          |
-             +------------+------------+
-             |                         |
-             v                         v
+        High-level frameworks / DSLs / library kernels
+                             |
+                             v
+            +----------------------------------+
+            |          PTO ISA layer           |
+            |                                  |
+            |  (1) PTO Tile Instruction        |
+            |  (2) PTO micro Instruction       |
+            |  (3) PTO Tile+micro Instruction  |
+            +----------------+-----------------+
+                             |
+              +--------------+--------------+
+              |                             |
+              v                             v
  +-------------------------+   +-------------------------+
  | Path A: generate CCE    |   | Path B: generate        |
  | (CCE-oriented form)     |   | bytecode                |
  +------------+------------+   +------------+------------+
               |                             |
               v                             v
-   +-----------------------------------------------+
-   |               BiSheng compiler                |
-   +---------------------------+-------------------+
-                               |
-                               v
-                 +-----------------------------+
-                 |   Ascend device binaries    |
-                 +-----------------------------+
+ +-------------------------+   +-------------------------+
+ | BiSheng compiler        |   | BiSheng compiler        |
+ | invoked explicitly      |   | invoked inside PTOAS    |
+ +------------+------------+   +------------+------------+
+              |                             |
+              +--------------+--------------+
+                             |
+                             v
+              +-----------------------------+
+              |   Ascend device binaries    |
+              +-----------------------------+
 ```
 
 #### Why External Developers Read or Author PTO micro Instruction
@@ -86,6 +90,111 @@ This document is written for compiler engineers, library writers, and advanced p
 ### Getting Started
 
 The PTO micro Instruction is architected as a performance-critical layer within the compiler stack, specifically designed to exploit the **Decoupled Access-Execute** (DAE) nature of the Ascend 950 hardware.
+
+#### Authoring VPTO `.pto` Files
+
+A VPTO source file must make the target architecture, launched device function,
+and cube/vector placement explicit. The recommended authoring form is a single
+outer module with one or more `pto.kernel` functions whose bodies are split by
+`pto.section.vector` and `pto.section.cube`. The Vector section describes the
+Vector-unit program, and the Cube section describes the Cube-unit program.
+Synchronization and communication between the two units are written as normal
+operations in the relevant section bodies.
+
+**Common module attributes:**
+
+| Attribute | Attachment site | Required | Meaning |
+|-----------|-----------------|----------|---------|
+| `pto.target_arch = "a5"` | outer `module` | Recommended in source files | Selects the A5 PTO parser and verifier contract. A command-line `--pto-arch` value overrides the module attribute. |
+| `pto.kernel` | `func.func` | Required for externally launched device kernels | Marks the function as a device kernel entry. Helper functions inside the same module do not need this attribute unless they are launched directly. |
+| `pto.section.vector` | region inside a `pto.kernel` function | Required for vector-core code in the recommended source form | Contains the Vector program. |
+| `pto.section.cube` | region inside a `pto.kernel` function | Required for cube-core code in the recommended source form | Contains the Cube program. |
+| `pto.kernel_kind = #pto.kernel_kind<vector>` | normalized kernel `module` | Advanced/frontend-emitted form only | Marks a normalized submodule as vector-core code. |
+| `pto.kernel_kind = #pto.kernel_kind<cube>` | normalized kernel `module` | Advanced/frontend-emitted form only | Marks a normalized submodule as cube-core code. |
+
+In this source form, every `pto.kernel` function must contain one or both
+sections. A function may contain at most one `pto.section.vector` and at most
+one `pto.section.cube`; nested sections are invalid. Values defined outside the
+sections may be used by both sections, but values defined inside one section
+are local to that section.
+
+For the recommended source form, keep `pto.target_arch` on the outer module,
+mark the launched function with `pto.kernel`, and place core-specific code
+inside `pto.section.vector` and/or `pto.section.cube`:
+
+```mlir
+module attributes {pto.target_arch = "a5"} {
+  func.func @mixed_kernel(%a: !pto.ptr<f16, gm>,
+                          %b: !pto.ptr<f16, gm>,
+                          %out: !pto.ptr<f32, gm>) attributes {pto.kernel} {
+    %c0_i64 = arith.constant 0 : i64
+    %l1 = pto.castptr %c0_i64 : i64 -> !pto.ptr<f16, l1>
+    %ub = pto.castptr %c0_i64 : i64 -> !pto.ptr<f32, ub>
+
+    pto.section.cube {
+      // Cube program body.
+    }
+
+    pto.section.vector {
+      // Vector program body.
+    }
+
+    return
+  }
+}
+```
+
+Vector-only and cube-only kernels use the same structure with only the section
+they need:
+
+```mlir
+module attributes {pto.target_arch = "a5"} {
+  func.func @vadd_kernel(%lhs: !pto.ptr<f32, gm>,
+                         %rhs: !pto.ptr<f32, gm>,
+                         %out: !pto.ptr<f32, gm>) attributes {pto.kernel} {
+    %c0_i64 = arith.constant 0 : i64
+    %ub = pto.castptr %c0_i64 : i64 -> !pto.ptr<f32, ub>
+
+    pto.section.vector {
+      // Vector-core program body.
+    }
+
+    return
+  }
+}
+```
+
+Advanced frontends may emit a normalized container directly. This is not the
+preferred hand-authored source shape, but it is a valid compiler-facing form:
+
+```mlir
+module attributes {pto.target_arch = "a5"} {
+  module attributes {pto.kernel_kind = #pto.kernel_kind<vector>} {
+    func.func @kernel(%in: !pto.ptr<f32, gm>,
+                      %out: !pto.ptr<f32, gm>) attributes {pto.kernel} {
+      return
+    }
+  }
+  module attributes {pto.kernel_kind = #pto.kernel_kind<cube>} {
+    func.func @kernel(%in: !pto.ptr<f32, gm>,
+                      %out: !pto.ptr<f32, gm>) attributes {pto.kernel} {
+      return
+    }
+  }
+}
+```
+
+At the container top level, only kernel submodules are valid. Each kernel
+submodule must carry exactly one `pto.kernel_kind`. Put `pto.target_arch` on
+the outer module so all submodules share the same target contract.
+
+**Compilation:**
+
+```bash
+ptoas --pto-arch=a5 --pto-backend=vpto kernel.pto -o kernel.o
+```
+
+This command emits the final device artifact.
 
 #### Hardware Pipeline Modeling
 
@@ -190,6 +299,8 @@ Within the vector execution scope, the hardware does not track UB address aliasi
 pto.mem_bar "VV_ALL"      // All prior vector ops complete before subsequent
 pto.mem_bar "VST_VLD"     // All prior vector stores visible before subsequent loads
 pto.mem_bar "VLD_VST"     // All prior vector loads complete before subsequent stores
+pto.dcci %gm "ENTIRE_DATA_CACHE", "CACHELINE_OUT" : !pto.ptr<i8, gm>
+pto.dsb "ALL"
 ```
 
 Without proper barriers, loads may see stale data or stores may be reordered incorrectly.
@@ -273,8 +384,8 @@ pto.vecscope {
 pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
 pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
 pto.mte_ub_gm %8, %14, %c128_i64
-  nburst(%c32_i64, %c128_i64, %c128_i64)
-  : !pto.ptr<f32, ub>, !pto.ptr<f32, gm>, i64, i64, i64, i64
+  nburst(%c32_i64, %c128_i64, %c128_i64) l2_cache_ctl(%c0_i64)
+  : !pto.ptr<f32, ub>, !pto.ptr<f32, gm>, i64, i64, i64, i64, i64
 ```
 
 ### Example: Strict VecScope
@@ -371,6 +482,11 @@ Cube block and a Vector block within the same cluster. The sender specifies whic
 pipeline** commits the signal, ensuring the preceding operation on that pipeline has completed
 before the signal is issued. The receiver specifies which **local pipeline** should stall until
 the signal arrives. This is the fundamental IPC primitive for Cube–Vector cooperation on A5.
+
+For the public `pto.sync.set` / `pto.sync.wait` surface on A5, event IDs are physical semaphore
+IDs in the `0-31` range. AIV subblock 0 uses event IDs `0-15`, and AIV subblock 1 uses event
+IDs `16-31`. Code that signals or waits for both AIV subblocks should explicitly emit both
+the base ID and `base_id + 16`.
 
 > **Note:** `pto.set_cross_core` / `pto.wait_cross_core` operate at **multi-cluster** scope and
 > are not used for intra-cluster communication.
@@ -618,44 +734,106 @@ At the PTO micro Instruction level, these runtime-query ops are pure scalar prod
 
 In this pattern, all blocks execute the same kernel body, but each block sees a different `%block` value and therefore computes a different GM window.
 
-#### `pto.get_block_idx`
+The complete syntax, result types, constraints, semantics, pseudocode, and
+partitioning example for `pto.get_block_idx`, `pto.get_subblock_idx`,
+`pto.get_block_num`, and `pto.get_subblock_num` are documented in
+[Special Scalar Operations](#kernel-execution-query-operations).
 
-- **syntax:** `%block = pto.get_block_idx`
-- **result:** `i64`
-- **semantics:** Return the current block ID in the range `[0, pto.get_block_num())`.
+#### `pto.store_vfsimt_info`
+
+- **syntax:** `pto.store_vfsimt_info %dim_z, %dim_y, %dim_x : i32, i32, i32`
+- **operands:** `i32, i32, i32`
+- **semantics:** Configure the SIMT VF launch descriptor consumed by a subsequent SIMT entry invocation. The three operands are the launch dimensions in `z, y, x` order.
+- **placement:** This op must appear in the outer non-SIMT caller. It must not appear inside a function marked with `pto.simt_entry`.
 
 ```c
-block = block_idx();
+store_vfsimt_info(dim_z, dim_y, dim_x);
 ```
 
-#### `pto.get_subblock_idx`
+#### `pto.simt_launch`
 
-- **syntax:** `%subblock = pto.get_subblock_idx`
-- **result:** `i64`
-- **semantics:** Return the current subblock ID in the range `[0, pto.get_subblock_num())`.
+- **syntax:** `pto.simt_launch @body<<<%dim_x, %dim_y, %dim_z>>>(%arg0, ...) : (arg_types...) -> ()`
+- **operands:** `%dim_x`, `%dim_y`, and `%dim_z` are `i32` workitem counts in `x, y, z` launch order. The remaining operands are passed to `@body`.
+- **semantics:** Invoke the SIMT entry `@body` for the workitem space described by `%dim_x * %dim_y * %dim_z`. Workitems in `@body` observe thread coordinates through the SIMT query ops.
+- **placement:** This op must appear in the outer non-SIMT caller. The callee must be marked with `pto.simt_entry` and must return no values.
 
-```c
-subblock = subblock_idx();
+```mlir
+pto.simt_launch @simt_write<<<%dim_x, %dim_y, %dim_z>>>(%ub_out)
+  : (!pto.ptr<i32, ub>) -> ()
 ```
 
-#### `pto.get_block_num`
+#### `pto.get_tid_x`
 
-- **syntax:** `%block_num = pto.get_block_num`
-- **result:** `i64`
-- **semantics:** Return the total number of launched blocks visible to the current kernel instance.
+- **syntax:** `%tx = pto.get_tid_x : i32`
+- **result:** `i32`
+- **semantics:** Return the current SIMT lane X coordinate inside the active VF launch.
 
 ```c
-block_num = block_num();
+tx = get_tid_x();
 ```
 
-#### `pto.get_subblock_num`
+#### `pto.get_tid_y`
 
-- **syntax:** `%subblock_num = pto.get_subblock_num`
-- **result:** `i64`
-- **semantics:** Return the total number of visible subblocks for the current execution instance.
+- **syntax:** `%ty = pto.get_tid_y : i32`
+- **result:** `i32`
+- **semantics:** Return the current SIMT lane Y coordinate inside the active VF launch.
 
 ```c
-subblock_num = subblock_num();
+ty = get_tid_y();
+```
+
+#### `pto.get_tid_z`
+
+- **syntax:** `%tz = pto.get_tid_z : i32`
+- **result:** `i32`
+- **semantics:** Return the current SIMT lane Z coordinate inside the active VF launch.
+
+```c
+tz = get_tid_z();
+```
+
+Example:
+
+```mlir
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
+  func.func @simt_store_tid_kernel(%out: !pto.ptr<i32, gm>) attributes {pto.kernel} {
+    %c0_i64 = arith.constant 0 : i64
+    %c32_i64 = arith.constant 32 : i64
+    %c128_i64 = arith.constant 128 : i64
+    %dim_z = arith.constant 1 : i32
+    %dim_y = arith.constant 32 : i32
+    %dim_x = arith.constant 32 : i32
+
+    %ub_out = pto.castptr %c0_i64 : i64 -> !pto.ptr<i32, ub>
+    pto.store_vfsimt_info %dim_z, %dim_y, %dim_x : i32, i32, i32
+    func.call @simt_write(%ub_out) : (!pto.ptr<i32, ub>) -> ()
+
+    pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+    pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+    pto.dma_store %ub_out, %out, %c128_i64
+      nburst(%c32_i64, %c128_i64, %c128_i64)
+      : !pto.ptr<i32, ub>, !pto.ptr<i32, gm>, i64, i64, i64, i64
+    return
+  }
+
+  func.func @simt_write(%dst: !pto.ptr<i32, ub>) attributes {pto.simt_entry} {
+    %tx = pto.get_tid_x : i32
+    %ty = pto.get_tid_y : i32
+    %tz = pto.get_tid_z : i32
+    %c8_i32 = arith.constant 8 : i32
+    %c16_i32 = arith.constant 16 : i32
+    %c32_i32 = arith.constant 32 : i32
+    %ty_shift = arith.shli %ty, %c8_i32 : i32
+    %tz_shift = arith.shli %tz, %c16_i32 : i32
+    %xy = arith.ori %tx, %ty_shift : i32
+    %xyz = arith.ori %xy, %tz_shift : i32
+    %lane_base = arith.muli %ty, %c32_i32 : i32
+    %tid = arith.addi %lane_base, %tx : i32
+    %tid_idx = arith.index_castui %tid : i32 to index
+    pto.store %xyz, %dst[%tid_idx] : !pto.ptr<i32, ub>, i32
+    return
+  }
+}
 ```
 
 Typical usage:
@@ -757,51 +935,33 @@ Typical examples:
 
 ### Pointer Operations
 
-#### `pto.castptr`
+The complete contracts for `pto.castptr`, `pto.addptr`, `pto.load_scalar`, and
+`pto.store_scalar` are documented in
+[Special Scalar Operations](#typed-pointer-and-address-operations).
 
-- **syntax:** `%result = pto.castptr %addr : i64 -> !pto.ptr<T, space>`
-- **semantics:** Reinterpret a scalar address value as a typed PTO pointer in the target memory space.
+#### `pto.load`
 
-```c
-result = (ptr<T, space>)addr;
-```
-
-`pto.castptr` is a pointer-construction operation. It does not perform data movement and does not by itself imply any load/store side effect.
-
-#### `pto.addptr`
-
-- **syntax:** `%result = pto.addptr %ptr, %offset : !pto.ptr<T, space> -> !pto.ptr<T, space>`
-- **semantics:** Compute a new pointer by advancing the base pointer by an element offset.
-
-```c
-result = ptr + offset;  // offset counted in elements, not bytes
-```
-
-`pto.addptr` preserves both the element type `T` and the memory-space tag `space`.
-
-#### `pto.load_scalar`
-
-- **syntax:** `%value = pto.load_scalar %ptr[%offset] : !pto.ptr<T, space> -> T`
-- **semantics:** Load one scalar element from a pointer-like operand.
+- **syntax:** `%value = pto.load %ptr[%offset] : !pto.ptr<T, space> -> T`
+- **semantics:** Load one scalar element from a VPTO pointer-like operand.
 
 ```c
 value = ptr[offset];
 ```
 
 - **inputs:**
-  `%ptr` is a typed PTO pointer `!pto.ptr<T, space>`, and `%offset` is an
+  `%ptr` is a typed PTO pointer `!pto.ptr<T, space>` or a memref operand that
+  will be normalized to a PTO pointer before LLVM emission. `%offset` is an
   `index` displacement counted in elements.
 - **outputs:**
   `%value` is the loaded scalar element.
 - **constraints and limitations:**
-  The result type MUST match the element type of `%ptr`. This op is a scalar
-  memory helper; unlike `pto.vlds`, it does not produce a `vreg` result and
-  does not participate in vector load `dist` families.
+  The result type MUST match the element type of `%ptr`. This is the preferred
+  scalar memory op for VPTO/SIMT authoring.
 
-#### `pto.store_scalar`
+#### `pto.store`
 
-- **syntax:** `pto.store_scalar %value, %ptr[%offset] : !pto.ptr<T, space>, T`
-- **semantics:** Store one scalar element to a pointer-like operand.
+- **syntax:** `pto.store %value, %ptr[%offset] : !pto.ptr<T, space>, T`
+- **semantics:** Store one scalar element to a VPTO pointer-like operand.
 
 ```c
 ptr[offset] = value;
@@ -809,12 +969,17 @@ ptr[offset] = value;
 
 - **inputs:**
   `%value` is the scalar value to store. `%ptr` is a typed PTO pointer
-  `!pto.ptr<T, space>`, and `%offset` is an `index` displacement counted in
+  `!pto.ptr<T, space>` or a memref operand that will be normalized to a PTO
+  pointer before LLVM emission. `%offset` is an `index` displacement counted in
   elements.
 - **constraints and limitations:**
-  The stored value type MUST match the element type of `%ptr`. This op is a
-  scalar memory helper; unlike `pto.vsts`, it does not consume a mask and does
-  not target vector-store `dist` families.
+  The stored value type MUST match the element type of `%ptr`. This is the
+  preferred scalar memory op for VPTO/SIMT authoring.
+
+The complete syntax, type restrictions, execution-scope rules, cache behavior,
+target availability, and examples for `pto.ld_dev` and `pto.st_dev` are
+documented in
+[Special Scalar Operations](#aicore-scalar-gm-l1-bypass-operations).
 
 #### Pointer-Based Vector Access Example
 
@@ -830,8 +995,8 @@ UB vector loads/stores:
 pto.vecscope {
   %16 = scf.for %arg3 = %c0 to %11 step %c64 iter_args(%arg4 = %12) -> (i32) {
     %mask, %scalar_out = pto.plt_b32 %arg4 : i32 -> !pto.mask<b32>, i32
-    %s = pto.load_scalar %1[%c4] : !pto.ptr<f32, ub> -> f32
-    pto.store_scalar %s, %1[%c8] : !pto.ptr<f32, ub>, f32
+    %s = pto.load %1[%c4] : !pto.ptr<f32, ub> -> f32
+    pto.store %s, %1[%c8] : !pto.ptr<f32, ub>, f32
     %17 = pto.vlds %1[%arg3] : !pto.ptr<f32, ub> -> !pto.vreg<64xf32>
     %18 = pto.vabs %17, %mask : !pto.vreg<64xf32>, !pto.mask<b32> -> !pto.vreg<64xf32>
     pto.vsts %18, %10[%arg3], %mask : !pto.vreg<64xf32>, !pto.ptr<f32, ub>, !pto.mask<b32>
@@ -944,12 +1109,14 @@ All PTO micro Instruction operations follow standard MLIR syntax. The common pat
 
 ```mlir
 %result = pto.vlds %source[%offset] {dist = "DIST"} : !pto.ptr<T, ub> -> !pto.vreg<NxT>
+%result, %updated_base = pto.vlds %source[%offset] {dist = "DIST"} : !pto.ptr<T, ub> -> !pto.vreg<NxT>, !pto.ptr<T, ub>
 ```
 
 **Store (register to memory):**
 
 ```mlir
 pto.vsts %value, %destination[%offset] {dist = "DIST"} : !pto.vreg<NxT>, !pto.ptr<T, ub>
+%updated_base = pto.vsts %value, %destination[%offset] {dist = "DIST"} : !pto.vreg<NxT>, !pto.ptr<T, ub> -> !pto.ptr<T, ub>
 ```
 
 **Dual Load (one load, two results — deinterleave):**
@@ -1086,15 +1253,17 @@ for (int i = 0; i < N; i++)
 **Example — pto.vcgadd (group reduction per VLane) semantics:**
 
 ```c
-int K = N / 8;  // elements per VLane
-for (int i = 0; i < N; i++)
-    dst[i] = 0;
+int groups = 8;
+int K = 32 / sizeof(T);  // elements per 32-byte VLane
 for (int g = 0; g < 8; g++) {
     T sum = 0;
     for (int i = 0; i < K; i++)
-        sum += src[g*K + i];
+        if (mask[g*K + i])
+            sum += src[g*K + i];
     dst[g] = sum;
 }
+for (int i = groups; i < N; i++)
+    dst[i] = 0;
 ```
 
 For A5 reduction result types:
@@ -1128,24 +1297,26 @@ This section provides a categorized overview of all PTO micro Instruction operat
 |---|-------|-------------|-------|---------|
 | 1 | [Pipeline Sync](#micro-01-pipeline-sync) | Intra-core pipeline synchronization | 5 | `pto.set_flag`, `pto.wait_flag`, `pto.pipe_barrier`, `pto.get_buf`, `pto.rls_buf` |
 | 2 | [DMA Copy Programming](#micro-02-dma-copy) | Public DMA transfer interface between GM↔UB, UB→UB, and UB→L1 | 4 | `pto.mte_gm_ub`, `pto.mte_ub_gm`, `pto.mte_ub_ub`, `pto.mte_ub_l1` |
-| 3 | [Vector Load/Store](#micro-03-vector-load-store) | UB↔vreg data movement with various access patterns | ~20 | `pto.vlds`, `pto.vldsx2`, `pto.vgather2`, `pto.vsts`, `pto.vstsx2`, `pto.vscatter`, etc. |
+| 3 | [Vector Load/Store](#micro-03-vector-load-store) | UB↔vreg data movement with various access patterns | ~23 | `pto.vlds`, `pto.vldsx2`, `pto.vgather2`, `pto.vsts`, `pto.vstsx2`, `pto.vscatter`, `pto.sprclr`, `pto.sprsti`, `pto.sprsts`, etc. |
 | 4 | [Predicate Load/Store](#micro-04-predicate-load-store) | UB↔mask register movement | 5 | `pto.plds`, `pto.pldi`, `pto.psts`, `pto.psti`, `pto.pstu` |
-| 5 | [Materialization & Predicate Ops](#micro-05-materialization-predicate) | Scalar broadcast, predicate generation and manipulation | ~17 | `pto.vbr`, `pto.vdup`, `pto.pset_b*`, `pto.pge_b*`, `pto.plt_b*`, `pto.ppack`, `pto.punpack`, `pto.pnot`, `pto.psel`, etc. |
-| 6 | [Unary Vector Ops](#micro-06-unary-vector-ops) | Single-input element-wise operations | 6 | `pto.vabs`, `pto.vexp`, `pto.vln`, `pto.vsqrt`, `pto.vrelu`, `pto.vnot` |
-| 7 | [Binary Vector Ops](#micro-07-binary-vector-ops) | Two-input element-wise operations | 13 | `pto.vadd`, `pto.vsub`, `pto.vmul`, `pto.vdiv`, `pto.vmax`, `pto.vmin`, `pto.vand`, `pto.vor`, `pto.vxor`, `pto.vshl`, `pto.vshr`, `pto.vaddc`, `pto.vsubc` |
+| 5 | [Materialization & Predicate Ops](#micro-05-materialization-predicate) | Scalar broadcast, predicate generation and manipulation | ~20 | `pto.vbr`, `pto.vdup`, `pto.pset_b*`, `pto.pge_b*`, `pto.plt_b*`, `pto.pltm_b*`, `pto.ppack`, `pto.punpack`, `pto.pnot`, `pto.psel`, etc. |
+| 6 | [Unary Vector Ops](#micro-06-unary-vector-ops) | Single-input element-wise operations | 7 | `pto.vabs`, `pto.vneg`, `pto.vexp`, `pto.vln`, `pto.vsqrt`, `pto.vrelu`, `pto.vnot` |
+| 7 | [Binary Vector Ops](#micro-07-binary-vector-ops) | Two-input element-wise operations | 14 | `pto.vadd`, `pto.vsub`, `pto.vmul`, `pto.vdiv`, `pto.vmax`, `pto.vmin`, `pto.vmadd`, `pto.vand`, `pto.vor`, `pto.vxor`, `pto.vshl`, `pto.vshr`, `pto.vaddc`, `pto.vsubc` |
 | 8 | [Vec-Scalar Ops](#micro-08-vec-scalar-ops) | Vector-scalar operations | 9 | `pto.vadds`, `pto.vmuls`, `pto.vmaxs`, `pto.vmins`, `pto.vlrelu`, `pto.vshls`, `pto.vshrs`, `pto.vaddcs`, `pto.vsubcs` |
 | 9 | [Conversion Ops](#micro-09-conversion-ops) | Type conversion with rounding/saturation control | 4 | `pto.vcvt`, `pto.vtrc`, `pto.vbitcast`, `pto.pbitcast` |
-| 10 | [Reduction Ops](#micro-10-reduction-ops) | Vector reductions | 7 | `pto.vcadd`, `pto.vcmax`, `pto.vcmin`, `pto.vcgadd`, `pto.vcgmax`, `pto.vcgmin`, `pto.vcpadd` |
+| 10 | [Reduction Ops](#micro-10-reduction-ops) | Vector reductions | 11 | `pto.vcadd`, `pto.vcmax`, `pto.vcmin`, `pto.vcbmax`, `pto.vcbmin`, `pto.vcgadd`, `pto.vcgmax`, `pto.vcgmin`, `pto.vcpadd`, `pto.chistv2`, `pto.dhistv2` |
 | 11 | [Compare & Select](#micro-11-compare-select) | Comparison and conditional selection | 4 (+1 not A5) | `pto.vcmp`, `pto.vcmps`, `pto.vsel`, `pto.vselr` (`pto.vselrv2` removed: not A5) |
 | 12 | [Data Rearrangement](#micro-12-data-rearrangement) | In-register data movement and permutation | 2 (+2 not A5) | `pto.vintlv`, `pto.vdintlv` (`pto.vintlvv2`, `pto.vdintlvv2` removed: not A5) |
-| 13 | [DSA/SFU Ops](#micro-13-dsa-sfu-ops) | Specialized ops, index generation, and sorting helpers | 10 | `pto.vlrelu`, `pto.vprelu`, `pto.vexpdif`, `pto.vaxpy`, `pto.vmull`, `pto.vmula`, `pto.vci`, `pto.vbitsort`, `pto.vmrgsort4`, `pto.get_vms4_sr` |
+| 13 | [DSA/SFU Ops](#micro-13-dsa-sfu-ops) | Specialized ops, index generation, and sorting helpers | 11 | `pto.vlrelu`, `pto.vprelu`, `pto.vexpdif`, `pto.vaxpy`, `pto.vmulscvt`, `pto.vmull`, `pto.vmula`, `pto.vci`, `pto.vbitsort`, `pto.vmrgsort4`, `pto.get_vms4_sr` |
 | 14 | [Arith (Shared MLIR Dialect)](#micro-14-shared-arith) | Full scalar `arith` surface used around PTO ops; the companion page lists categories and representative examples | all scalar ops | `arith.constant`, `arith.addi`, `arith.addf`, `arith.cmpi`, `arith.cmpf`, `arith.select`, `arith.index_cast`, `arith.extsi`, `arith.trunci`, `arith.andi`, `arith.shli`, etc. |
 | 15 | [SCF (Shared MLIR Dialect)](#micro-15-shared-scf) | Structured loops, branches, and loop-carried state around PTO regions | 5 | `scf.for`, `scf.if`, `scf.while`, `scf.condition`, `scf.yield` |
 | 16 | [Cube Matrix Multiply](#micro-16-cube-matmul) | GM↔L1 (`l1`/cbuf) staging, L1 (`l1`)↔UB/BT/FB side moves, L1→L0A/L0B loads, L0C (`l0c`) matmul, and FIXPIPE MTE writeback | 19 | `pto.mte_gm_l1`, `pto.mte_l1_ub`, `pto.mte_gm_l1_frac`, `pto.mte_l1_bt`, `pto.mte_l1_fb`, `pto.mte_l1_l0a`, `pto.mte_l1_l0b`, `pto.mte_l1_l0a_mx`, `pto.mte_l1_l0b_mx`, `pto.mad`, `pto.mad_acc`, `pto.mad_bias`, `pto.mad_mx`, `pto.mad_mx_acc`, `pto.mad_mx_bias`, `pto.mte_l0c_l1`, `pto.mte_l0c_gm`, `pto.mte_l0c_ub` |
+| 17 | [SIMT Ops](#micro-17-simt) | SIMT launch, thread/lane queries, vote/shuffle/redux, scalar memory, atomics, scalar math, conversion, entry synchronization, and state preservation | ~65 | `pto.store_vfsimt_info`, `pto.simt_launch`, `pto.get_tid_x`, `pto.get_laneid`, `pto.vote_*`, `pto.shuffle_*`, `pto.redux_*`, `pto.load`, `pto.store`, `pto.atomic_*`, `pto.convert`, `pto.syncthreads`, `pto.keep`, `pto.resume`, etc. |
+| 18 | [Special Scalar Operations](#micro-18-special-scalar) | PTO scalar kernel queries, typed pointer/address calculation, scalar-pipeline memory, and ordinary AICore GM L1-bypass access | 10 | `pto.get_block_idx`, `pto.get_subblock_idx`, `pto.get_block_num`, `pto.get_subblock_num`, `pto.castptr`, `pto.addptr`, `pto.load_scalar`, `pto.store_scalar`, `pto.ld_dev`, `pto.st_dev` |
 
 ## Detailed ISA Group Reference
 
-This section inlines the 16 ISA group documents so the architectural overview, notation, summary table, and per-group semantics can be read in a single file.
+This section inlines the 18 ISA group documents so the architectural overview, notation, summary table, and per-group semantics can be read in a single file.
 
 <a id="micro-01-pipeline-sync"></a>
 
@@ -1209,12 +1380,12 @@ pipe_barrier(pipe);
 
 ```mlir
 // Both stores target the same GM address — order matters!
-pto.mte_ub_gm %ub_partial_0, %gm_result, ...
+pto.mte_ub_gm %ub_partial_0, %gm_result, %len_burst ...
 // Without pipe_barrier, MTE3 could execute the second copy before the first
 // completes, producing a non-deterministic result at %gm_result.
 pto.pipe_barrier "PIPE_MTE3"
 // After barrier: first copy is guaranteed complete. Second copy overwrites deterministically.
-pto.mte_ub_gm %ub_partial_1, %gm_result, ...
+pto.mte_ub_gm %ub_partial_1, %gm_result, %len_burst ...
 ```
 
 ---
@@ -1264,6 +1435,32 @@ The `mode` parameter controls how `get_buf` and `rls_buf` interact with pipeline
 
 ---
 
+##### `pto.get_buf_dyn` / `pto.rls_buf_dyn`
+
+Dynamic variants of `get_buf`/`rls_buf` where `buf_id` is provided as an SSA value instead of a static integer attribute. This enables runtime-computed buf_id patterns such as SIMT ping-pong buffering.
+
+- **syntax:**
+  - String shorthand: `pto.get_buf_dyn "PIPE_MTE2", %buf_id, 0`
+  - Bracket form: `pto.get_buf_dyn [TLOAD, %buf_id, 0]`
+- **semantics:** Same as `get_buf`/`rls_buf`, but the buffer-id is an `index`-typed SSA value resolved at runtime.
+- **inputs:**
+  - `op_type`: same pipe-like attribute as the static form
+  - `buf_id`: an SSA value of `index` type (e.g. `iter & 1` for ping-pong)
+  - `mode`: same mode parameter (default `0`)
+- **constraints and limitations:** The BufidSync auto-insertion pass only uses the static form (`get_buf`/`rls_buf`). Use the dynamic form (`get_buf_dyn`/`rls_buf_dyn`) when buf_id must be computed at runtime.
+
+Example (SIMT double-buffering with `iter & 1`):
+
+```mlir
+  %c1 = arith.constant 1 : index
+  %buf_id = arith.andi %iter, %c1 : index
+  pto.get_buf_dyn [TLOAD, %buf_id, 0]
+  // ... tload to ubuf slot %buf_id ...
+  pto.rls_buf_dyn [TLOAD, %buf_id, 0]
+```
+
+---
+
 ##### `pto.mem_bar`
 
 - **syntax:** `pto.mem_bar "BARRIER_TYPE"`
@@ -1295,6 +1492,63 @@ mem_bar(barrier_type);
 pto.vsts %v0, %ub[%c0] : !pto.vreg<64xf32>, !pto.ptr<f32, ub>
 pto.mem_bar "VST_VLD"
 %v1 = pto.vlds %ub[%c0] : !pto.ptr<f32, ub> -> !pto.vreg<64xf32>
+```
+
+---
+
+##### `pto.dsb`
+
+- **syntax:** `pto.dsb "MEM_DOMAIN"`
+- **semantics:** Issues a data synchronization barrier for the selected memory domain. All prior memory effects covered by the domain must become complete before subsequent memory effects proceed.
+
+**Memory domains:**
+
+| Domain | Meaning |
+|--------|---------|
+| `ALL` | Wait for all memory-access classes covered by the target |
+| `DDR` | Wait for DDR/GM memory-access effects |
+| `UB` | Wait for UB memory-access effects |
+| `SEQ` | Wait for sequencer-visible memory-access effects |
+
+**Example:** Ensure prior GM stores are complete before publishing a scalar signal:
+
+```mlir
+pto.dsb "DDR"
+```
+
+---
+
+##### `pto.dcci`
+
+- **syntax:** `pto.dcci %ptr "CACHE_SCOPE" : !pto.ptr<T, gm|ub>`
+- **syntax:** `pto.dcci %ptr "CACHE_SCOPE", "CACHE_DST" : !pto.ptr<T, gm|ub>`
+- **semantics:** Performs data-cache clean/invalidate maintenance for the selected cache scope. The pointer address space selects whether the operation applies to GM or UB-backed cache state. The optional destination domain further restricts which cache-line class is affected.
+
+**Cache scopes:**
+
+| Scope | Meaning |
+|-------|---------|
+| `SINGLE_CACHE_LINE` | Apply maintenance to the cache line containing `%ptr` |
+| `ENTIRE_DATA_CACHE` | Apply maintenance to the entire data cache; `%ptr` is still required by the IR form |
+
+**Destination domains:**
+
+| Destination | Meaning |
+|-------------|---------|
+| `CACHELINE_ALL` | All supported cache-line domains |
+| `CACHELINE_UB` | UB cache-line domain |
+| `CACHELINE_OUT` | Output/GM-visible cache-line domain |
+| `CACHELINE_ATOMIC` | Atomic cache-line domain |
+
+**Constraints:**
+- `%ptr` must be a PTO pointer or buffer-like value in GM or UB address space.
+- Omitting `CACHE_DST` uses the target's default destination-domain form.
+
+**Example:** Flush GM-visible cache state after scalar GM stores:
+
+```mlir
+pto.dcci %gm "ENTIRE_DATA_CACHE", "CACHELINE_OUT" : !pto.ptr<i8, gm>
+pto.dsb "ALL"
 ```
 
 ---
@@ -1435,7 +1689,7 @@ pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
 // MTE3 waits until Vector's signal arrives
 pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
 
-pto.mte_ub_gm %ub_out, %gm_out, ...
+pto.mte_ub_gm %ub_out, %gm_out, %len_burst ...
 ```
 
 **Key property:** Every cross-pipeline edge is an explicit `(set_flag, wait_flag)` pair. Simple for straight-line code, but gets verbose in loops (see Example 3).
@@ -1475,7 +1729,7 @@ pto.rls_buf "PIPE_V", %bufid_ub_out, %c0 : i64, i64
 // ─── Stage 3: MTE3 stores result to GM ───
 // MTE3 acquires ub_out — blocks until Vector releases it (RAW: V write → MTE3 read)
 pto.get_buf "PIPE_MTE3", %bufid_ub_out, %c0 : i64, i64
-pto.mte_ub_gm %ub_out, %gm_out, ...
+pto.mte_ub_gm %ub_out, %gm_out, %len_burst ...
 // MTE3 done reading ub_out — release so Vector can reuse it in next iteration
 pto.rls_buf "PIPE_MTE3", %bufid_ub_out, %c0 : i64, i64
 ```
@@ -1551,7 +1805,7 @@ scf.for %i = %c0 to %N step %c1 {
   // ── MTE3: store result from buf_out[i%2] to GM ──
   // RAW: wait for Vector to finish writing buf_out[i%2]
   pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVT_OUT_FWD_{pp}"]
-  pto.mte_ub_gm %ub_out[%pp], %gm_out[%i], ...
+  pto.mte_ub_gm %ub_out[%pp], %gm_out[%i], %len_burst ...
   // WAR: tell Vector "done reading buf_out[i%2]"
   pto.set_flag["PIPE_MTE3", "PIPE_V", "EVT_OUT_REV_{pp}"]
 }
@@ -1602,7 +1856,7 @@ scf.for %i = %c0 to %N step %c1 {
   // ── MTE3: store result ──
   // Acquires out[i%2] — blocks until Vector releases it (RAW: automatic)
   pto.get_buf "PIPE_MTE3", %bufid_out[%pp], %c0 : i64, i64
-  pto.mte_ub_gm %ub_out[%pp], %gm_out[%i], ...
+  pto.mte_ub_gm %ub_out[%pp], %gm_out[%i], %len_burst ...
   pto.rls_buf "PIPE_MTE3", %bufid_out[%pp], %c0 : i64, i64
 }
 // No post-loop drain needed — last rls_buf completes the pipeline.
@@ -1827,12 +2081,13 @@ pto.mte_gm_ub %gm_in, %ub_out, %cache, %len_burst
 - **syntax:**
 ```mlir
 pto.mte_ub_gm %ub_src, %gm_dst, %len_burst
-  nburst(%n_burst, %src_stride, %dst_stride)
+  nburst(%n_burst, %src_stride, %dst_stride) l2_cache_ctl(%l2_cache_ctl)
   [loop(%loop_count, %loop_src_stride, %loop_dst_stride)]*
-  : !pto.ptr<T, ub>, !pto.ptr<T, gm>, i64, i64, i64, i64,
+  : !pto.ptr<T, ub>, !pto.ptr<T, gm>, i64, i64, i64, i64, i64,
     [loop i64, i64, i64,]*
 ```
 - **semantics:** Grouped UB→GM DMA transfer. `nburst(...)` defines the innermost repeated burst transfer, and optional `loop(...)` groups add outer repetition levels.
+  The `l2_cache_ctl(...)` group is optional in textual VPTO IR; when omitted, lowering uses `0`.
 
 **Parameter Table:**
 
@@ -1842,6 +2097,7 @@ pto.mte_ub_gm %ub_src, %gm_dst, %len_burst
 | `%gm_dst` | ptr | GM destination pointer (`!pto.ptr<T, gm>`) |
 | `%len_burst` | 16 bits | Contiguous bytes transferred per burst row |
 | `nburst(%n_burst, %src_stride, %dst_stride)` | 16 bits / 21 bits / 40 bits | Required innermost burst group: count, UB source stride, GM destination stride |
+| `l2_cache_ctl(%l2_cache_ctl)` | 4 bits | Optional GM store-side L2 cache control; omitted means `0` |
 | `loop(%loop_count, %loop_src_stride, %loop_dst_stride)` | 21 bits / 21 bits / 40 bits | Optional outer repetition group: count, UB source stride, GM destination stride |
 
 **Constraints:**
@@ -1857,10 +2113,10 @@ pto.mte_ub_gm %ub_src, %gm_dst, %len_burst
 
 ```mlir
 pto.mte_ub_gm %ub_in, %gm_out, %len_burst
-  nburst(%rows, %ub_row_stride, %gm_row_stride)
+  nburst(%rows, %ub_row_stride, %gm_row_stride) l2_cache_ctl(%l2_cache_ctl)
   loop(%tiles, %ub_tile_stride, %gm_tile_stride)
   loop(%batches, %ub_batch_stride, %gm_batch_stride)
-  : !pto.ptr<f16, ub>, !pto.ptr<f16, gm>, i64, i64, i64, i64,
+  : !pto.ptr<f16, ub>, !pto.ptr<f16, gm>, i64, i64, i64, i64, i64,
     loop i64, i64, i64, loop i64, i64, i64
 ```
 
@@ -2090,6 +2346,7 @@ For a form
 ```mlir
 pto.mte_ub_gm %ub_src, %dst, %len_burst
   nburst(%n_burst, %src_stride, %dst_stride)
+  l2_cache_ctl(%l2_cache_ctl)
   loop(%c0, %s0, %d0)
   loop(%c1, %s1, %d1)
   ...
@@ -2261,8 +2518,8 @@ GM (dest, 32 × 32 f32):
 
 ```mlir
 pto.mte_ub_gm %ub_out, %arg1, %c128_i64
-  nburst(%c32_i64, %c128_i64, %c128_i64)
-  : !pto.ptr<f32, ub>, !pto.ptr<f32, gm>, i64, i64, i64, i64
+  nburst(%c32_i64, %c128_i64, %c128_i64) l2_cache_ctl(%c0_i64)
+  : !pto.ptr<f32, ub>, !pto.ptr<f32, gm>, i64, i64, i64, i64, i64
 ```
 
 ---
@@ -2299,8 +2556,8 @@ GM (dest, into 1024 × 512 matrix):
 
 ```mlir
 pto.mte_ub_gm %ub_ptr, %gm_ptr, %c256_i64
-  nburst(%c64_i64, %c256_i64, %c1024_i64)
-  : !pto.ptr<f16, ub>, !pto.ptr<f16, gm>, i64, i64, i64, i64
+  nburst(%c64_i64, %c256_i64, %c1024_i64) l2_cache_ctl(%c0_i64)
+  : !pto.ptr<f16, ub>, !pto.ptr<f16, gm>, i64, i64, i64, i64, i64
 ```
 
 ---
@@ -2454,12 +2711,17 @@ DMA **`TLOAD` / `TSTORE`** (global memory ↔ UB) use **MTE** pipes, not `RV_VLD
 ##### `pto.vlds`
 
 - **syntax:** `%result = pto.vlds %source[%offset] {dist = "DIST"} : !pto.ptr<T, ub> -> !pto.vreg<NxT>`
+
+  Post-update form:
+
+  `%result, %updated_base = pto.vlds %source[%offset] {dist = "DIST"} : !pto.ptr<T, ub> -> !pto.vreg<NxT>, !pto.ptr<T, ub>`
 - **semantics:** Vector load with distribution mode.
 - **inputs:**
   `%source` is the UB base address, `%offset` is the load displacement, and
   `DIST` selects the distribution mode.
 - **outputs:**
-  `%result` is the loaded vector register value.
+  `%result` is the loaded vector register value. In the post-update form,
+  `%updated_base` is the base pointer advanced according to `%offset`.
 - **constraints and limitations:**
   The effective address MUST satisfy the alignment rule of the selected
   distribution mode. `NORM` reads one full vector footprint. Broadcast,
@@ -2467,6 +2729,8 @@ DMA **`TLOAD` / `TSTORE`** (global memory ↔ UB) use **MTE** pipes, not `RV_VLD
   how memory bytes are mapped into destination lanes, but they do not change the
   fact that the source is UB memory. PTO surface exposes load `dist` as family
   tokens, and each family only supports the element widths listed below.
+  The optional `%updated_base` result must have the same pointer type as the
+  base address operand.
 
 **Distribution families:**
 
@@ -2637,14 +2901,46 @@ for (int blk = 0; blk < 8; ++blk) {
 - **syntax:** `%result = pto.vgather2 %source, %offsets, %mask : !pto.ptr<T, ub>, !pto.vreg<NxI>, !pto.mask<G> -> !pto.vreg<NxT>`
 - **semantics:** Indexed gather from UB.
 - **inputs:**
-  `%source` is the UB base pointer, `%offsets` provides per-lane element
-  offsets, and `%mask` selects the active requests.
+  `%source` is the UB base pointer, `%offsets` provides one unsigned element
+  index for each logical gather lane, and `%mask` selects those logical
+  index/result lanes.
 - **outputs:**
   `%result` is the gathered vector.
+- **addressing:**
+  Each active lane computes its UB byte address from the source element width:
+
+  ```text
+  addr[i] = byte_address(%source) + unsigned(%offsets[i]) * sizeof(source element)
+  ```
+
+  For `i8/ui8` sources, `sizeof(source element) == 1`; for 16-bit sources it is
+  `2`; for 32-bit sources it is `4`. The computed address must be aligned for
+  the source element type. For `i8/ui8` sources, each loaded 8-bit payload is
+  zero-extended into a 16-bit result lane.
+- **semantic pseudocode:**
+
+  ```text
+  for i in lanes:
+    if mask[i]:
+      value = UB_load(source_element_type, addr[i])
+      if source_element_type is i8 or ui8:
+        result[i] = zero_extend_to_16_bits(value)
+      else:
+        result[i] = value
+    else:
+      result[i] = 0
+  ```
 - **constraints and limitations:**
   Only masked-on indices participate. The index element width
   and interpretation MUST match the selected gather form, and each effective
   address must satisfy that form's alignment rules.
+  Supported forms are:
+  `i8/ui8 -> i16/ui16` with `!pto.vreg<128xui16>` offsets and
+  `!pto.mask<b16>`; `i16/ui16/f16/bf16 -> same type` with
+  `!pto.vreg<128xui16>` offsets and `!pto.mask<b16>`; and
+  `i32/ui32/f32 -> same type` with `!pto.vreg<64xui32>` offsets and
+  `!pto.mask<b32>`. Signless integer offsets are accepted as storage-compatible
+  aliases for the unsigned offset register payload.
 - **Latency:** **27–28** cycles per `RV_VGATHER2`; throughput much lower than contiguous `RV_VLD` (see **Latency and throughput (A5)** at the start of this chapter).
 
 ```c
@@ -2709,13 +3005,16 @@ for (int blk = 0; blk < VL / 32; ++blk) {
 ##### `pto.vsts`
 
 - **syntax:** `pto.vsts %value, %dest[%offset], %mask {dist = "DIST"} : !pto.vreg<NxT>, !pto.ptr<T, ub>, !pto.mask<G>`
+- **post-update syntax:** `%updated_dest = pto.vsts %value, %dest[%offset], %mask {dist = "DIST"} : !pto.vreg<NxT>, !pto.ptr<T, ub>, !pto.mask<G> -> !pto.ptr<T, ub>`
 - **semantics:** Vector store with distribution mode.
 - **inputs:**
   `%value` is the source vector, `%dest` is the UB base pointer, `%offset` is
   the displacement, `%mask` is the predicate operand, and
   `DIST` selects the store distribution.
 - **outputs:**
-  This op has no SSA result; it writes to UB memory.
+  The normal form has no SSA result and writes to UB memory. In the post-update
+  form, `%updated_dest` is the destination pointer advanced according to
+  `%offset`.
 - **constraints and limitations:**
   The effective destination address MUST satisfy the alignment rule of the
   selected store mode. The single-input `pto.vsts` family covers contiguous
@@ -2781,13 +3080,16 @@ for (int i = 0; i < 64; i++) {
 ##### `pto.vsstb`
 
 - **syntax:** `pto.vsstb %value, %dest, %block_stride, %repeat_stride, %mask : !pto.vreg<NxT>, !pto.ptr<T, ub>, i16, i16, !pto.mask<G>`
+- **post-update syntax:** `%updated_dest = pto.vsstb %value, %dest, %block_stride, %repeat_stride, %mask : !pto.vreg<NxT>, !pto.ptr<T, ub>, i16, i16, !pto.mask<G> -> !pto.ptr<T, ub>`
 - **semantics:** Block-strided store for 2D tile access.
 - **inputs:**
   `%value` is the source vector, `%dest` is the UB base pointer,
   `%block_stride` and `%repeat_stride` are the two 16-bit fields of the
   hardware control word, and `%mask` controls block participation.
 - **outputs:**
-  This op writes UB memory and returns no SSA value.
+  The normal form writes UB memory and returns no SSA value. In the post-update
+  form, `%updated_dest` is the destination pointer advanced according to the
+  packed stride control word.
 - **constraints and limitations:**
   PTO surface does not expose the packed control word directly. Masked-off
   blocks MUST NOT issue memory writes.
@@ -2811,22 +3113,75 @@ for (int blk = 0; blk < 8; ++blk) {
 - **semantics:** Indexed scatter to UB.
 - **inputs:**
   `%value` is the source vector, `%dest` is the UB base pointer, `%offsets`
-  provides per-lane or per-block indices, and `%mask` selects the active
-  requests.
+  provides unsigned element indices relative to `%dest`, and `%mask` selects
+  the active requests. The legal type combinations are:
+
+  | Value and destination type | Offset type | Mask type | Requests |
+  | --- | --- | --- | --- |
+  | `b8` (`!pto.vreg<256xT>`) | `!pto.vreg<128xui16>` or `!pto.vreg<128xi16>` | `!pto.mask<b16>` | 128 |
+  | `b16` (`!pto.vreg<128xT>`) | `!pto.vreg<128xui16>` or `!pto.vreg<128xi16>` | `!pto.mask<b16>` | 128 |
+  | `b32` (`!pto.vreg<64xT>`) | `!pto.vreg<64xui32>` or `!pto.vreg<64xi32>` | `!pto.mask<b32>` | 64 |
+
+  Signless offset element types have the same unsigned interpretation as the
+  corresponding `ui16` or `ui32` type.
 - **outputs:**
   This op writes UB memory and returns no SSA value.
 - **constraints and limitations:**
-  Only `b8`, `b16`, and `b32` element sizes are supported. The index vector
-  must use a supported integer element type and layout for this family.
-  Each computed address MUST be element-aligned. If two or more indices alias,
-  only one write is guaranteed and the winning lane is implementation-defined.
+  Only `b8`, `b16`, and `b32` element sizes are supported, and `%dest` must have
+  the same element type as `%value`. Each destination address is
+  `%dest + %offsets[i]` in elements, equivalently
+  `byte_address(%dest) + unsigned(%offsets[i]) * sizeof(T)`, and MUST be
+  element-aligned. For `b8`, request `i` stores `%value[2*i]`; odd-numbered
+  source bytes are ignored. If two or more active indices are equal, only one
+  write is guaranteed and the winning request is implementation-defined.
 - **Latency:** **~17** cycles for **`Dtype: B16`**.
 
 ```c
-for (int i = 0; i < N; i++)
+for (int i = 0; i < num_requests; i++)
     if (mask[i])
-        UB[base + offsets[i] * sizeof(T)] = src[i];
+        dest[unsigned(offsets[i])] =
+            sizeof(T) == 1 ? value[2 * i] : value[i];
 ```
+
+---
+
+#### SPR State Ops
+
+##### `pto.sprclr`
+
+- **syntax:** `pto.sprclr "AR"`
+- **semantics:** Clear the hardware SPR AR state used by AR-driven unaligned
+  store forms.
+- **constraints and limitations:**
+  Only `"AR"` is supported.
+
+---
+
+##### `pto.sprsti`
+
+- **syntax:** `pto.sprsti "AR", %dest[%offset] : !pto.ptr<ui32, ub>, i32`
+- **semantics:** Store SPR AR to UB using a signed 8-bit immediate offset.
+- **inputs:**
+  `%dest` is the UB base pointer and `%offset` is the immediate offset in units
+  of the SPR data width.
+- **constraints and limitations:**
+  Only `"AR"` is supported. `%dest` must be a `ui32` or signless `i32` UB
+  pointer. `%offset` must be a constant signed 8-bit `i32`. The current VPTO
+  surface models only the no-post-update form, so no updated base pointer is
+  returned.
+
+---
+
+##### `pto.sprsts`
+
+- **syntax:** `pto.sprsts "AR", %dest[%offset] : !pto.ptr<ui32, ub>, i32`
+- **semantics:** Store SPR AR to UB using a scalar-register offset.
+- **inputs:**
+  `%dest` is the UB base pointer and `%offset` is the scalar offset in bytes.
+- **constraints and limitations:**
+  Only `"AR"` is supported. `%dest` must be a `ui32` or signless `i32` UB
+  pointer. The current VPTO surface models only the no-post-update form, so no
+  updated base pointer is returned.
 
 ---
 
@@ -3234,6 +3589,35 @@ Where `VL_t` is the logical lane count of the concrete op variant:
 
 ---
 
+##### `pto.pltm_b8` / `pto.pltm_b16` / `pto.pltm_b32`
+
+- **syntax:** `%mask = pto.pltm_b8 %loop, %bound : i16, i32 -> !pto.mask<b8>`
+- **syntax:** `%mask = pto.pltm_b16 %loop, %bound : i16, i32 -> !pto.mask<b16>`
+- **syntax:** `%mask = pto.pltm_b32 %loop, %bound : i16, i32 -> !pto.mask<b32>`
+- **semantics:** Generate a loop-indexed tail predicate without updating the
+  bound scalar.
+- **inputs:**
+  `%loop` is the current logical loop index multiplier and `%bound` is the
+  total element bound.
+- **outputs:**
+  `%mask` is true for lanes whose logical index is still below `%bound`.
+
+```c
+for (int i = 0; i < VL_t; ++i)
+    mask[i] = (i + loop * VL_t) < bound;
+```
+
+Where `VL_t` is the logical lane count of the concrete op variant:
+
+- `pto.pltm_b8`: `VL_t = 256`
+- `pto.pltm_b16`: `VL_t = 128`
+- `pto.pltm_b32`: `VL_t = 64`
+
+Unlike `pto.plt_b*`, `pto.pltm_b*` does not return a post-update scalar. It is
+used when the loop index is already tracked separately in scalar SSA.
+
+---
+
 #### Predicate Pack/Unpack
 
 ##### `pto.ppack`
@@ -3608,6 +3992,7 @@ Cycle-accurate simulator **popped→retire** latency (cycles). **fp16** uses **a
 | `pto.vsub` | `RV_VSUB` | **7** | **7** | — |
 | `pto.vmul` | `RV_VMUL` | **8** | **8** | — |
 | `pto.vdiv` | `RV_VDIV` | **17** | **22** | — |
+| `pto.vmadd` | `RV_VMADD` | — | — | — |
 
 ---
 
@@ -3713,6 +4098,26 @@ for (int i = 0; i < N; i++)
 - **inputs:** `%lhs`, `%rhs`, and `%mask` as above.
 - **outputs:** `%result` holds the lane-wise minimum.
 - **constraints and limitations:** Input and result types MUST match.
+
+---
+
+##### `pto.vmadd`
+
+- **syntax:** `%result = pto.vmadd %acc, %lhs, %rhs, %mask : !pto.vreg<NxT>, !pto.vreg<NxT>, !pto.vreg<NxT>, !pto.mask<G> -> !pto.vreg<NxT>`
+- **A5 types:** f16, bf16, f32
+
+```c
+for (int i = 0; i < N; i++)
+    dst[i] = src0[i] * acc[i] + src1[i];
+```
+
+- **inputs:** `%acc` is the destination-as-source multiplicand, `%lhs` is the
+  other multiplicand, `%rhs` is the addend, and `%mask` selects active lanes.
+- **outputs:** `%result` holds the multiply-add result.
+- **constraints and limitations:** `%acc`, `%lhs`, `%rhs`, and `%result` MUST
+  have matching vector shapes and element types. This is a direct fused
+  multiply-add semantic and should not be assumed equivalent to separate
+  multiply and add operations for floating-point results.
 
 ---
 
@@ -4517,7 +4922,7 @@ for (int i = 1; i < N; i++)
 ##### `pto.vcmax`
 
 - **syntax:** `%result = pto.vcmax %input, %mask : !pto.vreg<NxT>, !pto.mask<G> -> !pto.vreg<NxT>`
-- **A5 types:** i16-i32, f16, f32
+- **A5 types:** i8-i32, f16, f32
 - **semantics:** Find max element with argmax. The lowest destination element
   stores the maximum value, the second-lowest destination element stores the
   index of the first maximum, and all remaining elements are zero-filled.
@@ -4549,7 +4954,7 @@ for (int i = 2; i < N; i++)
 ##### `pto.vcmin`
 
 - **syntax:** `%result = pto.vcmin %input, %mask : !pto.vreg<NxT>, !pto.mask<G> -> !pto.vreg<NxT>`
-- **A5 types:** i16-i32, f16, f32
+- **A5 types:** i8-i32, f16, f32
 - **semantics:** Find min element with argmin. The lowest destination element
   stores the minimum value, the second-lowest destination element stores the
   index of the first minimum, and all remaining elements are zero-filled.
@@ -4578,9 +4983,97 @@ for (int i = 2; i < N; i++)
 
 ---
 
+##### `pto.vcbmax`
+
+- **syntax:** `%value, %predicate = pto.vcbmax %input, %mask : !pto.vreg<NxT>, !pto.mask<G> -> !pto.vreg<NxT>, !pto.mask<G>`
+- **A5 types:** i8-i32, f16, f32
+- **semantics:** Find the maximum value and produce a predicate marking every
+  participating lane whose value matches that maximum.
+
+```c
+T mx = max_active(src, mask);
+for (int i = 0; i < N; i++) {
+    value[i] = (i == 0) ? mx : 0;
+    predicate[i] = mask[i] && matches_max(src[i], mx);
+}
+```
+
+- **inputs:** `%input` is the source vector and `%mask` selects participating
+  lanes.
+- **outputs:** `%value[0]` holds the maximum and remaining value elements are
+  zero-filled. `%predicate` marks all active lanes matching the maximum.
+- **constraints and limitations:** If all lanes are inactive, `%predicate` is
+  all zero. Floating-point inactive lanes are treated as `-INF`; integer
+  inactive lanes are treated as the literal minimum value. For floating-point
+  `+0/-0`, the value result follows the target maximum rule while predicate
+  matching marks both zero signs as matching locations.
+
+---
+
+##### `pto.vcbmin`
+
+- **syntax:** `%value, %predicate = pto.vcbmin %input, %mask : !pto.vreg<NxT>, !pto.mask<G> -> !pto.vreg<NxT>, !pto.mask<G>`
+- **A5 types:** i8-i32, f16, f32
+- **semantics:** Find the minimum value and produce a predicate marking every
+  participating lane whose value matches that minimum.
+
+```c
+T mn = min_active(src, mask);
+for (int i = 0; i < N; i++) {
+    value[i] = (i == 0) ? mn : 0;
+    predicate[i] = mask[i] && matches_min(src[i], mn);
+}
+```
+
+- **inputs:** `%input` is the source vector and `%mask` selects participating
+  lanes.
+- **outputs:** `%value[0]` holds the minimum and remaining value elements are
+  zero-filled. `%predicate` marks all active lanes matching the minimum.
+- **constraints and limitations:** If all lanes are inactive, `%predicate` is
+  all zero. Floating-point inactive lanes are treated as `+INF`; integer
+  inactive lanes are treated as the literal maximum value. Floating-point NaN
+  handling follows the target instruction semantics.
+
+---
+
+#### Histogram Reductions
+
+##### `pto.chistv2`
+
+- **syntax:** `%result = pto.chistv2 %acc, %source, %mask, %bin : !pto.vreg<128xui16>, !pto.vreg<256xui8>, !pto.mask<b8>, i32 -> !pto.vreg<128xui16>`
+- **semantics:** Cumulative histogram update over unsigned 8-bit source lanes.
+  `%acc` provides the incoming 16-bit bin accumulators and `%result` contains
+  the updated accumulators.
+- **inputs:** `%source` provides 256 unsigned 8-bit samples, `%mask` selects
+  active source lanes, and `%bin` is the target bin/control operand passed to
+  the A5 histogram instruction.
+- **constraints and limitations:** `%acc` and `%result` are fixed to
+  `!pto.vreg<128xui16>`, `%source` is fixed to `!pto.vreg<256xui8>`, and the
+  mask granularity is fixed to `b8`.
+
+---
+
+##### `pto.dhistv2`
+
+- **syntax:** `%result = pto.dhistv2 %acc, %source, %mask, %bin : !pto.vreg<128xui16>, !pto.vreg<256xui8>, !pto.mask<b8>, i32 -> !pto.vreg<128xui16>`
+- **semantics:** Distribution histogram update over unsigned 8-bit source
+  lanes. `%acc` provides the incoming 16-bit bin accumulators and `%result`
+  contains the updated accumulators.
+- **inputs:** `%source` provides 256 unsigned 8-bit samples, `%mask` selects
+  active source lanes, and `%bin` is the target bin/control operand passed to
+  the A5 histogram instruction.
+- **constraints and limitations:** `%acc` and `%result` are fixed to
+  `!pto.vreg<128xui16>`, `%source` is fixed to `!pto.vreg<256xui8>`, and the
+  mask granularity is fixed to `b8`.
+
+---
+
 #### Per-VLane (Group) Reductions
 
-The vector register is organized as **8 VLanes** of 32 bytes each. Group reductions operate within each VLane independently.
+The vector register is organized as **8 VLanes** of 32 bytes each. Group
+reductions operate within each VLane independently and produce one result per
+VLane. The 8 VLane results are written contiguously to the low elements of the
+destination vector; all remaining destination elements are zero.
 
 ```
 vreg layout (f32 example, 64 elements total):
@@ -4591,82 +5084,102 @@ VLane 4: [32..39] VLane 5: [40..47] VLane 6: [48..55] VLane 7: [56..63]
 ##### `pto.vcgadd`
 
 - **syntax:** `%result = pto.vcgadd %input, %mask : !pto.vreg<NxT>, !pto.mask<G> -> !pto.vreg<NxT>`
-- **A5 types:** i16-i32, f16, f32
-- **semantics:** Sum within each VLane. 8 results are written to indices 0..7.
+- **A5 types:** i8-i32, f16, f32
+- **semantics:** Sum active elements within each 32-byte VLane. The 8 VLane
+  sums are written to result elements `0..7`; all other result elements are
+  zero.
 
 ```c
-int K = N / 8;  // elements per VLane
-for (int i = 0; i < N; i++)
-    dst[i] = 0;
+int groups = 8;
+int K = 32 / sizeof(T);  // elements per 32-byte VLane
 for (int g = 0; g < 8; g++) {
     T sum = 0;
     for (int i = 0; i < K; i++)
-        sum += src[g*K + i];
+        if (mask[g*K + i])
+            sum += src[g*K + i];
     dst[g] = sum;
 }
-// Results at dst[0]..dst[7]
+for (int i = groups; i < N; i++)
+    dst[i] = 0;
 ```
 
 - **inputs:** `%input` is the source vector and `%mask` selects participating
   lanes.
 - **outputs:** `%result` contains one sum per 32-byte VLane group, written
-  contiguously into `%result[0]..%result[7]`. Remaining elements are zero-filled.
+  contiguously to the low elements of the result vector.
 - **constraints and limitations:** This is a per-32-byte VLane-group reduction.
-  Inactive lanes are treated as zero.
+  Inactive lanes are treated as zero. If all lanes in a VLane are inactive, the
+  corresponding result element is `0` (`+0` for floating-point types).
 
 ---
 
 ##### `pto.vcgmax`
 
 - **syntax:** `%result = pto.vcgmax %input, %mask : !pto.vreg<NxT>, !pto.mask<G> -> !pto.vreg<NxT>`
-- **A5 types:** i16-i32, f16, f32
-- **semantics:** Max within each VLane.
+- **A5 types:** i8-i32, f16, f32
+- **semantics:** Find the maximum active element within each 32-byte VLane. The
+  8 VLane maxima are written to result elements `0..7`; all other result
+  elements are zero.
 
 ```c
-int K = N / 8;
-for (int i = 0; i < N; i++)
-    dst[i] = 0;
+int groups = 8;
+int K = 32 / sizeof(T);
 for (int g = 0; g < 8; g++) {
-    T mx = -INF;
+    T mx = max_identity_for_T;  // -INF for float, minimum value for integer
     for (int i = 0; i < K; i++)
-        if (src[g*K + i] > mx) mx = src[g*K + i];
+        if (mask[g*K + i])
+            mx = max(mx, src[g*K + i]);
     dst[g] = mx;
 }
+for (int i = groups; i < N; i++)
+    dst[i] = 0;
 ```
 
 - **inputs:** `%input` is the source vector and `%mask` selects participating
   lanes.
 - **outputs:** `%result` contains one maximum per 32-byte VLane group, written
-  contiguously into `%result[0]..%result[7]`. Remaining elements are zero-filled.
+  contiguously to the low elements of the result vector.
 - **constraints and limitations:** Grouping is by hardware 32-byte VLane, not by
-  arbitrary software subvector.
+  arbitrary software subvector. Inactive floating-point lanes are treated as
+  `-INF`; inactive integer lanes are treated as the element type's minimum
+  value. If all lanes in a VLane are inactive, that neutral value is written for
+  the corresponding VLane result. For floating-point values, `max(+0, -0)`
+  returns `+0`.
 
 ---
 
 ##### `pto.vcgmin`
 
 - **syntax:** `%result = pto.vcgmin %input, %mask : !pto.vreg<NxT>, !pto.mask<G> -> !pto.vreg<NxT>`
-- **A5 types:** i16-i32, f16, f32
-- **semantics:** Min within each VLane.
+- **A5 types:** i8-i32, f16, f32
+- **semantics:** Find the minimum active element within each 32-byte VLane. The
+  8 VLane minima are written to result elements `0..7`; all other result
+  elements are zero.
 
 ```c
-int K = N / 8;
-for (int i = 0; i < N; i++)
-    dst[i] = 0;
+int groups = 8;
+int K = 32 / sizeof(T);
 for (int g = 0; g < 8; g++) {
-    T mn = INF;
+    T mn = min_identity_for_T;  // +INF for float, maximum value for integer
     for (int i = 0; i < K; i++)
-        if (src[g*K + i] < mn) mn = src[g*K + i];
+        if (mask[g*K + i])
+            mn = min(mn, src[g*K + i]);
     dst[g] = mn;
 }
+for (int i = groups; i < N; i++)
+    dst[i] = 0;
 ```
 
 - **inputs:** `%input` is the source vector and `%mask` selects participating
   lanes.
 - **outputs:** `%result` contains one minimum per 32-byte VLane group, written
-  contiguously into `%result[0]..%result[7]`. Remaining elements are zero-filled.
+  contiguously to the low elements of the result vector.
 - **constraints and limitations:** Grouping is by hardware 32-byte VLane, not by
-  arbitrary software subvector.
+  arbitrary software subvector. Inactive floating-point lanes are treated as
+  `+INF`; inactive integer lanes are treated as the element type's maximum
+  value. If all lanes in a VLane are inactive, that neutral value is written for
+  the corresponding VLane result. For floating-point values, `min(-0, +0)`
+  returns `-0`.
 
 ---
 
@@ -4706,9 +5219,9 @@ for (int i = 1; i < N; i++)
 // max is in lane 0, broadcast it
 %max_broadcast = pto.vlds %ub_tmp[%c0] {dist = "BRC_B32"} : !pto.ptr<f32, ub> -> !pto.vreg<64xf32>
 
-// Row-wise sum using vcgadd (for 8-row tile)
+// Per-VLane sums using vcgadd
 %row_sums = pto.vcgadd %tile, %mask : !pto.vreg<64xf32>, !pto.mask<G> -> !pto.vreg<64xf32>
-// Results at indices 0..7
+// Results at indices 0..7; remaining elements are zero
 
 // Full vector sum for normalization
 %total = pto.vcadd %values, %mask : !pto.vreg<64xf32>, !pto.mask<G> -> !pto.vreg<64xf32>
@@ -5242,6 +5755,47 @@ for (int i = 0; i < N; i++)
 
 ---
 
+##### `pto.vmulscvt`
+
+- **syntax:** `%result = pto.vmulscvt %input, %scalar, %mask, %rnd, %part : !pto.vreg<NxT0>, T0, !pto.mask<G> -> !pto.vreg<MxT1>`
+- **A5 types:** input `f32`, output `f16` (primary documented pair)
+- **semantics:** Fused multiply-by-scalar and type conversion. Each active lane
+  is multiplied by `%scalar` and then converted from the source element type to
+  the destination element type in a single hardware step using the authored
+  round mode.
+
+```c
+for (int i = 0; i < N; i++)
+    if (mask[i])
+        dst[i] = convert_type<T1>(src[i] * scalar, rnd);
+```
+
+**Use case:** Softmax scale-and-downcast: apply the reciprocal scale factor and
+narrow from `f32` (accumulator precision) to `f16` (storage precision) before a
+block-strided store.
+
+- **inputs:** `%input` is the source vector (wider type), `%scalar` is the
+  uniform scale factor, `%mask` selects active lanes, `%rnd` selects the cast
+  round mode, and `%part` selects `EVEN` or `ODD` for half-width output
+  placement.
+- **outputs:** `%result` is the scaled and converted vector with the narrower
+  destination element type.
+- **constraints and limitations:** The source/destination type pair must be a
+  legal hardware narrowing conversion (e.g., `f32 -> f16`). Illegal pairs are
+  rejected. `%scalar` must match the source element type. The mask granularity
+  must match the source vector element width.
+
+**Example** — softmax scale and downcast:
+```mlir
+// Apply scale=1.0 and narrow f32 -> f16, writing into even half of the
+// destination packing layout
+%f16_even = pto.vmulscvt %f32_exp, %one, %mask, "A", "EVEN"
+    : !pto.vreg<64xf32>, f32, !pto.mask<b32> -> !pto.vreg<128xf16>
+%f16_odd  = pto.vmulscvt %f32_exp2, %one, %mask, "A", "ODD"
+    : !pto.vreg<64xf32>, f32, !pto.mask<b32> -> !pto.vreg<128xf16>
+```
+
+---
 
 #### Extended Arithmetic
 
@@ -5363,6 +5917,7 @@ for (int i = 0; i < N; i++)
 
 - `pto.vmull %lhs, %rhs, %mask : !pto.vreg<NxT>, !pto.vreg<NxT>, !pto.mask<G> -> !pto.vreg<NxT>, !pto.vreg<NxT>`
 - `pto.vmula %acc, %lhs, %rhs, %mask : !pto.vreg<NxT>, !pto.vreg<NxT>, !pto.vreg<NxT>, !pto.mask<G> -> !pto.vreg<NxT>`
+- `pto.vmulscvt %input, %scalar, %mask, %rnd, %part : !pto.vreg<NxT0>, T0, !pto.mask<G> -> !pto.vreg<MxT1>`
 - `pto.vci %index {order = "ASC|DESC"} : T -> !pto.vreg<NxT>`
 - `pto.vbitsort %dest, %src, %indices, %repeat_times : !pto.ptr<...>, !pto.ptr<...>, !pto.ptr<...>, index`
 - `pto.vmrgsort4 %dest, %src0, %src1, %src2, %src3, %count, %config : !pto.ptr<...>, !pto.ptr<...>, !pto.ptr<...>, !pto.ptr<...>, !pto.ptr<...>, i64, i64`
@@ -6183,12 +6738,16 @@ If `transpose = true`, the selected logical source tile is transposed before it
 is placed in the destination operand domain. Omitting the attribute means
 `transpose = false`.
 
+The `%start_row` and `%start_col` operands select the row and column offset of
+the source tile extraction start position. Frontends that expose these as
+optional user arguments must materialize `0` for both operands when omitted.
+
 ##### `pto.mte_l1_l0a`
 
 - **syntax:**
 ```mlir
-pto.mte_l1_l0a %src, %dst, %m, %k
-  : !pto.ptr<T, l1>, !pto.ptr<T, l0a>, i64, i64
+pto.mte_l1_l0a %src, %dst, %m, %k, %start_row, %start_col
+  : !pto.ptr<T, l1>, !pto.ptr<T, l0a>, i64, i64, i64, i64
 ```
 - **semantics:** Load a logical `%m x %k` left tile from L1 `l1` into `l0a`.
 
@@ -6200,6 +6759,8 @@ pto.mte_l1_l0a %src, %dst, %m, %k
 | `%dst` | ptr | Left operand destination in `l0a` |
 | `%m` | i64 | Logical M extent |
 | `%k` | i64 | Logical K extent |
+| `%start_row` | i64 | Source row offset |
+| `%start_col` | i64 | Source column offset |
 | `transpose` | attr | Optional boolean source-tile transpose before destination placement |
 
 **Constraints:**
@@ -6212,8 +6773,8 @@ pto.mte_l1_l0a %src, %dst, %m, %k
 **Example:**
 
 ```mlir
-pto.mte_l1_l0a %l1_a, %l0a, %c16_i64, %c32_i64
-  : !pto.ptr<f16, l1>, !pto.ptr<f16, l0a>, i64, i64
+pto.mte_l1_l0a %l1_a, %l0a, %c16_i64, %c32_i64, %c0_i64, %c0_i64
+  : !pto.ptr<f16, l1>, !pto.ptr<f16, l0a>, i64, i64, i64, i64
 ```
 
 ---
@@ -6222,8 +6783,8 @@ pto.mte_l1_l0a %l1_a, %l0a, %c16_i64, %c32_i64
 
 - **syntax:**
 ```mlir
-pto.mte_l1_l0b %src, %dst, %k, %n
-  : !pto.ptr<T, l1>, !pto.ptr<T, l0b>, i64, i64
+pto.mte_l1_l0b %src, %dst, %k, %n, %start_row, %start_col
+  : !pto.ptr<T, l1>, !pto.ptr<T, l0b>, i64, i64, i64, i64
 ```
 - **semantics:** Load a logical `%k x %n` right tile from L1 `l1` into
   `l0b`.
@@ -6236,6 +6797,8 @@ pto.mte_l1_l0b %src, %dst, %k, %n
 | `%dst` | ptr | Right operand destination in `l0b` |
 | `%k` | i64 | Logical K extent |
 | `%n` | i64 | Logical N extent |
+| `%start_row` | i64 | Source row offset |
+| `%start_col` | i64 | Source column offset |
 | `transpose` | attr | Optional boolean source-tile transpose before destination placement |
 
 **Constraints:**
@@ -6248,8 +6811,8 @@ pto.mte_l1_l0b %src, %dst, %k, %n
 **Example:**
 
 ```mlir
-pto.mte_l1_l0b %l1_b, %l0b, %c32_i64, %c16_i64
-  : !pto.ptr<f16, l1>, !pto.ptr<f16, l0b>, i64, i64
+pto.mte_l1_l0b %l1_b, %l0b, %c32_i64, %c16_i64, %c0_i64, %c0_i64
+  : !pto.ptr<f16, l1>, !pto.ptr<f16, l0b>, i64, i64, i64, i64
 ```
 
 ---
@@ -6268,8 +6831,8 @@ entry applies to one 32-element K group.
 
 - **syntax:**
 ```mlir
-pto.mte_l1_l0a_mx %src, %dst, %m, %k
-  : !pto.ptr<T, l1>, !pto.ptr<T, l0a>, i64, i64
+pto.mte_l1_l0a_mx %src, %dst, %m, %k, %start_row, %start_col
+  : !pto.ptr<T, l1>, !pto.ptr<T, l0a>, i64, i64, i64, i64
 ```
 - **semantics:** Load left-side MX scale fragments for a logical `%m x %k`
   left data tile.
@@ -6282,6 +6845,8 @@ pto.mte_l1_l0a_mx %src, %dst, %m, %k
 | `%dst` | ptr | Left-side MX payload destination associated with `l0a` |
 | `%m` | i64 | M extent of the associated left data tile |
 | `%k` | i64 | K extent; scale grouping is by 32 K elements |
+| `%start_row` | i64 | Source MX-fractal row offset in the packed L1 big matrix |
+| `%start_col` | i64 | Source MX-fractal column offset in the packed L1 big matrix |
 
 **Constraints:**
 
@@ -6291,8 +6856,8 @@ pto.mte_l1_l0a_mx %src, %dst, %m, %k
 **Example:**
 
 ```mlir
-pto.mte_l1_l0a_mx %l1_a_scale, %l0a_scale, %c16_i64, %c64_i64
-  : !pto.ptr<f8E4M3FN, l1>, !pto.ptr<f8E4M3FN, l0a>, i64, i64
+pto.mte_l1_l0a_mx %l1_a_scale, %l0a_scale, %c16_i64, %c64_i64, %c0_i64, %c0_i64
+  : !pto.ptr<f8E4M3FN, l1>, !pto.ptr<f8E4M3FN, l0a>, i64, i64, i64, i64
 ```
 
 ---
@@ -6301,8 +6866,8 @@ pto.mte_l1_l0a_mx %l1_a_scale, %l0a_scale, %c16_i64, %c64_i64
 
 - **syntax:**
 ```mlir
-pto.mte_l1_l0b_mx %src, %dst, %k, %n
-  : !pto.ptr<T, l1>, !pto.ptr<T, l0b>, i64, i64
+pto.mte_l1_l0b_mx %src, %dst, %k, %n, %start_row, %start_col
+  : !pto.ptr<T, l1>, !pto.ptr<T, l0b>, i64, i64, i64, i64
 ```
 - **semantics:** Load right-side MX scale fragments for a logical `%k x %n`
   right data tile.
@@ -6315,6 +6880,8 @@ pto.mte_l1_l0b_mx %src, %dst, %k, %n
 | `%dst` | ptr | Right-side MX payload destination associated with `l0b` |
 | `%k` | i64 | K extent; scale grouping is by 32 K elements |
 | `%n` | i64 | N extent of the associated right data tile |
+| `%start_row` | i64 | Source MX-fractal row offset in the packed L1 big matrix |
+| `%start_col` | i64 | Source MX-fractal column offset in the packed L1 big matrix |
 
 **Constraints:**
 
@@ -6324,8 +6891,8 @@ pto.mte_l1_l0b_mx %src, %dst, %k, %n
 **Example:**
 
 ```mlir
-pto.mte_l1_l0b_mx %l1_b_scale, %l0b_scale, %c64_i64, %c16_i64
-  : !pto.ptr<f8E4M3FN, l1>, !pto.ptr<f8E4M3FN, l0b>, i64, i64
+pto.mte_l1_l0b_mx %l1_b_scale, %l0b_scale, %c64_i64, %c16_i64, %c0_i64, %c0_i64
+  : !pto.ptr<f8E4M3FN, l1>, !pto.ptr<f8E4M3FN, l0b>, i64, i64, i64, i64
 ```
 
 ---
@@ -6757,6 +7324,1545 @@ right data tile + right scale payload
 For bias matmul, prepare the bias vector in `bt` with `pto.mte_l1_bt` before the
 `pto.mad_bias` / `pto.mad_mx_bias` consumer.
 
+<a id="micro-17-simt"></a>
+
+### 17. SIMT Ops
+
+> **Category:** SIMT scalar execution, lane collectives, scalar memory, and
+> memory-reduction operations
+> **Pipeline:** Vector-side SIMT execution
+
+SIMT ops are scalar operations executed by a group of workitems. A VPTO SIMT
+program has an outer `pto.aicore` kernel that configures a VF subtask launch and
+calls a SIMT body function marked with `pto.simt_entry`. The body is executed by
+the logical workitems in the configured `dim_x * dim_y * dim_z` launch space.
+
+---
+
+#### Common SIMT Execution Model
+
+- The outer non-SIMT kernel configures launch dimensions with
+  `pto.store_vfsimt_info`.
+- The SIMT body is a normal `func.func` with the `pto.simt_entry` attribute.
+- Each active workitem executes the same SIMT body with its own scalar SSA
+  values, thread coordinates, lane id, and lane-mask state.
+- SIMT scalar memory offsets are element offsets, not byte offsets.
+- Vector-register ops such as `pto.vlds`, `pto.vadd`, and `pto.vsts` belong to
+  normal vector code, not to the SIMT body.
+
+Example SIMT body:
+
+```mlir
+func.func @body(%dst: !pto.ptr<i32, ub>) attributes {pto.simt_entry} {
+  %tx = pto.get_tid_x : i32
+  %idx = arith.index_castui %tx : i32 to index
+  pto.store %tx, %dst[%idx] : !pto.ptr<i32, ub>, i32
+  return
+}
+```
+
+##### Supported PTO SIMT Operation Surface
+
+The current PTO SIMT surface supports these operation families:
+
+| Family | Ops |
+|--------|-----|
+| Launch configuration | `pto.store_vfsimt_info`, `pto.simt_launch` |
+| Thread and lane queries | `pto.get_tid_x`, `pto.get_tid_y`, `pto.get_tid_z`, `pto.get_block_dim_x`, `pto.get_block_dim_y`, `pto.get_block_dim_z`, `pto.get_grid_dim_x`, `pto.get_grid_dim_y`, `pto.get_grid_dim_z`, `pto.get_block_idx_x`, `pto.get_block_idx_y`, `pto.get_block_idx_z`, `pto.get_veccoreid`, `pto.get_clock32`, `pto.get_clock64`, `pto.get_laneid`, `pto.get_lanemask_eq`, `pto.get_lanemask_le`, `pto.get_lanemask_lt`, `pto.get_lanemask_ge`, `pto.get_lanemask_gt` |
+| Lane collectives | `pto.vote_all`, `pto.vote_any`, `pto.vote_uni`, `pto.vote_ballot`, `pto.shuffle_idx`, `pto.shuffle_up`, `pto.shuffle_down`, `pto.shuffle_bfly`, `pto.redux_add`, `pto.redux_max`, `pto.redux_min` |
+| Scalar memory | `pto.load`, `pto.store`, `pto.ldg`, `pto.stg` |
+| Atomic memory | `pto.atomic_exch`, `pto.atomic_add`, `pto.atomic_sub`, `pto.atomic_min`, `pto.atomic_max`, `pto.atomic_and`, `pto.atomic_or`, `pto.atomic_xor`, `pto.atomic_cas` |
+| Scalar math | `pto.prmt`, `pto.mulhi`, `pto.mul_i32toi64`, `pto.absf`, `pto.sqrt`, `pto.exp`, `pto.log`, `pto.pow`, `pto.ceil`, `pto.floor`, `pto.rint`, `pto.round`, `pto.fmin`, `pto.fmax`, `pto.fma` |
+| Conversion | `pto.convert` |
+| Entry synchronization and state | `pto.syncthreads`, `pto.threadfence`, `pto.threadfence_block`, `pto.keep`, `pto.resume` |
+
+One optional function attribute may be attached to a `pto.simt_entry`
+function:
+
+| Function attribute | Type | Default | Meaning |
+|--------------------|------|---------|---------|
+| `pto.simt_max_threads` | signless `i32` integer attribute | `1024` | Compile-time launch envelope. It should cover the largest `dim_x * dim_y * dim_z` launch count used for this entry. |
+
+`pto.simt_max_threads` may only appear on functions that also carry
+`pto.simt_entry`. It must be a positive `i32` value no greater than 2048. The
+thread envelope determines the emitted scalar register budget:
+
+| `pto.simt_max_threads` | Emitted `simt-max-registers` |
+|------------------------|------------------------------|
+| `1` to `256` | `128` |
+| `257` to `512` | `64` |
+| `513` to `1024` | `32` |
+| `1025` to `2048` | `16` |
+
+The register budget is derived automatically and is not independently
+configurable. `pto.simt_max_threads` does not launch work by itself; the actual
+workitem count comes from `pto.store_vfsimt_info` or `pto.simt_launch`.
+
+```mlir
+func.func @body(%dst: !pto.ptr<i32, ub>)
+    attributes {pto.simt_entry,
+                pto.simt_max_threads = 256 : i32} {
+  return
+}
+```
+
+---
+
+#### Launch Configuration
+
+##### `pto.store_vfsimt_info`
+
+- **syntax:** `pto.store_vfsimt_info %dim_z, %dim_y, %dim_x : i32, i32, i32`
+- **semantics:** Configure the launch descriptor consumed by a subsequent SIMT
+  entry call sequence in the current outer vector-side kernel.
+
+```text
+configured_dim_z = dim_z
+configured_dim_y = dim_y
+configured_dim_x = dim_x
+logical_workitems = dim_x * dim_y * dim_z
+call one or more simt_entry_body(...) functions
+```
+
+- **inputs:** `%dim_z`, `%dim_y`, and `%dim_x` are `i32` workitem counts in
+  `z, y, x` order.
+- **outputs:** None.
+- **constraints and limitations:** This op belongs in the outer non-SIMT
+  caller and must not appear inside a function marked with `pto.simt_entry`.
+  SIMT entry calls that use the descriptor must be dominated by the matching
+  launch configuration. On the current SIMT VF model, the launch count is
+  bounded by 2048.
+  If `pto.simt_max_threads` is present on the callee, it should be at least the
+  largest launch count used for that callee.
+
+Typical outer-kernel pattern:
+
+```mlir
+%dim_z = arith.constant 1 : i32
+%dim_y = arith.constant 1 : i32
+%dim_x = arith.constant 32 : i32
+pto.store_vfsimt_info %dim_z, %dim_y, %dim_x : i32, i32, i32
+func.call @body(%ub_out) : (!pto.ptr<i32, ub>) -> ()
+```
+
+##### `pto.simt_launch`
+
+- **syntax:** `pto.simt_launch @body<<<%dim_x, %dim_y, %dim_z>>>(%arg0, ...) : (arg_types...) -> ()`
+- **semantics:** Launch the SIMT body `@body` using the workitem dimensions
+  `%dim_x`, `%dim_y`, and `%dim_z`. The dimension order follows the launch-site
+  order `x, y, z`; each active workitem in the body observes coordinates in the
+  ranges `tid_x in [0, dim_x)`, `tid_y in [0, dim_y)`, and
+  `tid_z in [0, dim_z)`.
+- **inputs:** `%dim_x`, `%dim_y`, and `%dim_z` are `i32` workitem counts. The
+  remaining operands are passed to the SIMT body and must match the callee
+  function signature.
+- **outputs:** None. The SIMT body must return no values.
+- **constraints and limitations:** The callee must be a `func.func` marked with
+  `pto.simt_entry`. The launch op belongs in the outer non-SIMT caller and must
+  not appear inside a function marked with `pto.simt_entry`. The launch count is
+  `dim_x * dim_y * dim_z` and is bounded by the same limits as
+  `pto.store_vfsimt_info`.
+
+Example launch-site pattern:
+
+```mlir
+%dim_x = arith.constant 32 : i32
+%dim_y = arith.constant 1 : i32
+%dim_z = arith.constant 1 : i32
+pto.simt_launch @body<<<%dim_x, %dim_y, %dim_z>>>(%ub_out)
+  : (!pto.ptr<i32, ub>) -> ()
+```
+
+---
+
+#### Thread and Lane Query Ops
+
+Thread and lane query ops are nullary pure scalar ops. They return the value
+visible to the current workitem.
+
+##### `pto.get_tid_x` / `pto.get_tid_y` / `pto.get_tid_z`
+
+- **syntax:** `%tx = pto.get_tid_x : i32`
+- **semantics:** Return the current workitem coordinate in the selected launch
+  dimension.
+
+```text
+0 <= tid_x < dim_x
+0 <= tid_y < dim_y
+0 <= tid_z < dim_z
+linear_tid = tid_x + dim_x * (tid_y + dim_y * tid_z)
+```
+
+- **inputs:** None.
+- **outputs:** One `i32` coordinate.
+- **constraints and limitations:** Use these coordinates for logical indexing.
+  They are launch coordinates, not necessarily the same value as the physical
+  lane id.
+
+##### `pto.get_block_dim_x` / `pto.get_block_dim_y` / `pto.get_block_dim_z`
+
+- **syntax:** `%v = pto.get_block_dim_x : i32`
+- **semantics:** Return the block dimension visible to the current workitem in
+  the selected dimension.
+- **inputs:** None.
+- **outputs:** One `i32` block dimension.
+- **constraints and limitations:** For single-block VF launches, block
+  dimensions match the configured launch dimensions.
+
+##### `pto.get_grid_dim_x` / `pto.get_grid_dim_y` / `pto.get_grid_dim_z`
+
+- **syntax:** `%v = pto.get_grid_dim_x : i32`
+- **semantics:** Return the grid dimension visible to the current workitem in
+  the selected dimension.
+- **inputs:** None.
+- **outputs:** One `i32` grid dimension.
+- **constraints and limitations:** Use grid dimensions with block dimensions and
+  block indices when deriving global workitem coordinates.
+
+##### `pto.get_block_idx_x` / `pto.get_block_idx_y` / `pto.get_block_idx_z`
+
+- **syntax:** `%v = pto.get_block_idx_x : i32`
+- **semantics:** Return the current block index in the selected dimension.
+- **inputs:** None.
+- **outputs:** One `i32` block index.
+- **constraints and limitations:** For single-block VF launches, block indices
+  are normally zero.
+
+##### `pto.get_veccoreid`
+
+- **syntax:** `%core = pto.get_veccoreid : i32`
+- **semantics:** Return the vector-core id visible to the current workitem.
+- **inputs:** None.
+- **outputs:** One `i32` vector-core id.
+- **constraints and limitations:** The value is target scoped; use it only when
+  the algorithm intentionally depends on the executing vector core.
+
+##### `pto.get_clock32` / `pto.get_clock64`
+
+- **syntax:** `%c32 = pto.get_clock32 : i32`, `%c64 = pto.get_clock64 : i64`
+- **semantics:** Sample the target clock counter visible to the current
+  workitem.
+- **inputs:** None.
+- **outputs:** `pto.get_clock32` returns `i32`; `pto.get_clock64` returns `i64`.
+- **constraints and limitations:** Use `get_clock64` when 32-bit wraparound
+  could make elapsed-time comparisons ambiguous.
+
+##### `pto.get_laneid`
+
+- **syntax:** `%lane = pto.get_laneid : i32`
+- **semantics:** Return the physical SIMT lane id for the current workitem.
+- **inputs:** None.
+- **outputs:** One `i32` lane id.
+- **constraints and limitations:** Use lane id for lane-mask, vote, shuffle,
+  and reduction logic. Use `get_tid_x/y/z` for logical tensor indexing.
+
+##### `pto.get_lanemask_eq` / `pto.get_lanemask_le` / `pto.get_lanemask_lt` / `pto.get_lanemask_ge` / `pto.get_lanemask_gt`
+
+- **syntax:** `%mask = pto.get_lanemask_lt : i32`
+- **semantics:** Return a 32-bit mask derived from the current lane id.
+
+```text
+get_lanemask_eq = 1 << laneid
+get_lanemask_lt = bits for lanes 0 .. laneid-1
+get_lanemask_le = bits for lanes 0 .. laneid
+get_lanemask_gt = bits for lanes laneid+1 .. subgroup_width-1
+get_lanemask_ge = bits for lanes laneid .. subgroup_width-1
+```
+
+- **inputs:** None.
+- **outputs:** One `i32` mask value.
+- **constraints and limitations:** The mask is indexed by physical lane id.
+
+---
+
+#### Vote Ops
+
+Vote ops consume one `i1` predicate from each participating active lane and
+return a collective result to each participating active lane.
+
+##### `pto.vote_all` / `pto.vote_any` / `pto.vote_uni` / `pto.vote_ballot`
+
+- **syntax:**
+```mlir
+%all = pto.vote_all %pred : i1 -> i1
+%any = pto.vote_any %pred : i1 -> i1
+%uni = pto.vote_uni %pred : i1 -> i1
+%bits = pto.vote_ballot %pred : i1 -> i32
+```
+- **semantics:**
+```text
+active = participating active lanes
+vote_all    = forall lane in active: pred[lane]
+vote_any    = exists lane in active: pred[lane]
+vote_uni    = all pred[lane] values in active are equal
+vote_ballot = bitset of lanes in active where pred[lane] is true
+```
+- **inputs:** `%pred` is the current lane's `i1` predicate.
+- **outputs:** `vote_all`, `vote_any`, and `vote_uni` return `i1`.
+  `vote_ballot` returns an `i32` lane bit mask.
+- **constraints and limitations:** Inactive lanes do not contribute predicate
+  values to the vote.
+
+Example:
+
+```mlir
+%lane = pto.get_laneid : i32
+%one = arith.constant 1 : i32
+%low = arith.andi %lane, %one : i32
+%is_odd = arith.cmpi eq, %low, %one : i32
+%odd_mask = pto.vote_ballot %is_odd : i1 -> i32
+```
+
+---
+
+#### Shuffle Ops
+
+Shuffle ops exchange values between participating lanes. The source value and
+result have the same type.
+
+##### `pto.shuffle_idx`
+
+- **syntax:** `%r = pto.shuffle_idx %value, %index {width = 16 : i32} : T, i32 -> T`
+- **semantics:** Read `%value` from absolute `%index` inside the current
+  subgroup.
+- **inputs:** `%value` is the current lane's payload. `%index` is the
+  source lane index inside the subgroup.
+- **outputs:** `%r` is the selected source lane's value.
+- **constraints and limitations:** `T` is `i32`, `i64`, `f16`, `f32`, or
+  `vector<2xf16>`. `%index` is `i32`. `width` is `16` or `32` and defaults to
+  `32`.
+
+##### `pto.shuffle_up` / `pto.shuffle_down` / `pto.shuffle_bfly`
+
+- **syntax:**
+```mlir
+%u = pto.shuffle_up %value, %offset : T, i32 -> T
+%d = pto.shuffle_down %value, %offset : T, i32 -> T
+%b = pto.shuffle_bfly %value, %mask : T, i32 -> T
+```
+- **semantics:**
+```text
+group_base = floor(lane / width) * width
+local_lane = lane - group_base
+shuffle_up:   source = group_base + local_lane - offset
+shuffle_down: source = group_base + local_lane + offset
+shuffle_bfly: source = group_base + (local_lane xor mask)
+result        = value[source] when source is a valid participating lane
+```
+- **inputs:** `%value` is the current lane's payload. `%offset` is the
+  relative lane distance. `%mask` is the XOR mask for butterfly selection.
+- **outputs:** The selected source lane's value.
+- **constraints and limitations:** `T` is `i32`, `i64`, `f16`, `f32`, or
+  `vector<2xf16>`. Control operands are `i32`. The optional `width` attribute is
+  `16` or `32` and defaults to `32`. Out-of-range source-lane behavior is
+  target-scoped and should not be used for portable algorithms.
+
+---
+
+#### Lane Redux Ops
+
+Redux ops reduce one scalar value from each participating active lane and
+return the reduction result to each participating active lane.
+
+##### `pto.redux_add` / `pto.redux_max` / `pto.redux_min`
+
+- **syntax:**
+```mlir
+%sum_i = pto.redux_add %v signed : i32 -> i32
+%max_u = pto.redux_max %v unsigned : i32 -> i32
+%sum_f = pto.redux_add %f : f32 -> f32
+```
+- **semantics:**
+```text
+redux_add = sum(value[lane] for lane in active)
+redux_max = max(value[lane] for lane in active)
+redux_min = min(value[lane] for lane in active)
+result    = the selected reduction value in every participating active lane
+```
+- **inputs:** `%value` is `i32`, `f16`, or `f32`.
+- **outputs:** The result type matches `%value`.
+- **constraints and limitations:** Floating-point forms do not accept
+  signedness. For `i32`, `pto.redux_max` and `pto.redux_min` require explicit
+  `signed` or `unsigned`. `pto.redux_add` accepts signedness for consistency
+  with integer authoring, but addition has the same two's-complement bit result
+  for signed and unsigned inputs.
+
+---
+
+#### Common SIMT Memory Attributes
+
+**L1 cache.**
+
+`l1cache(cache)` and `l1cache(uncache)` are accepted on GM scalar `pto.ldg` /
+`pto.stg` forms.
+
+| Attribute | Meaning |
+|-----------|---------|
+| `l1cache(cache)` | Request cacheable GM scalar access |
+| `l1cache(uncache)` | Request uncacheable GM scalar access |
+
+The L1 cache clause selects the GM access path. It does not change the scalar value
+being loaded or stored.
+
+**L2 cache.**
+
+L2 cache clauses select the memory hierarchy behavior attached to GM `pto.ldg`,
+GM `pto.stg`, and atomic ops. They do not select the
+mathematical operation; the op mnemonic still determines the load, store,
+or atomic update.
+
+Load `l2cache(...)` uses these tokens:
+
+| Token | Meaning |
+|-------|---------|
+| `nmfv` | Normal allocation, first-victim replacement priority |
+| `nmlv` | Normal allocation, last-victim replacement priority |
+| `nmprs` | Normal allocation, persistent cache residency hint |
+| `nmpref` | Normal allocation, prefetch-oriented hint |
+| `nakeep` | Not-allocate, keep existing cache line state |
+| `naclean` | Not-allocate, clean cache line state |
+| `nadrop` | Not-allocate, drop cache line state |
+| `idsfv` | Inter-domain-share, first-victim replacement priority |
+| `idslv` | Inter-domain-share, last-victim replacement priority |
+| `idsprs` | Inter-domain-share, persistent cache residency hint |
+| `idspref` | Inter-domain-share, prefetch-oriented hint |
+| `exfv` | Exclusive, first-victim replacement priority |
+| `exlv` | Exclusive, last-victim replacement priority |
+| `exprs` | Exclusive, persistent cache residency hint |
+| `expref` | Exclusive, prefetch-oriented hint |
+
+Store and atomic `l2cache(...)` uses these tokens:
+
+| Token | Meaning |
+|-------|---------|
+| `nmfv` | Normal allocation, first-victim replacement priority |
+| `nmlv` | Normal allocation, last-victim replacement priority |
+| `nmprs` | Normal allocation, persistent cache residency hint |
+| `nmred` | Normal allocation, reduce-oriented update hint |
+| `naci` | Not-allocate, clean-invalid cache line state |
+| `napw` | Not-allocate, clean pre-writeback cache line state |
+| `napi` | Not-allocate, pre-invalid cache line state |
+| `nared` | Not-allocate, reduce-oriented update hint |
+| `wbhfv` | Write-back-home, first-victim replacement priority |
+| `wbhlv` | Write-back-home, last-victim replacement priority |
+| `wbhprs` | Write-back-home, persistent cache residency hint |
+| `wbhred` | Write-back-home, reduce-oriented update hint |
+| `wtsfv` | Write-through-share, first-victim replacement priority |
+| `wtslv` | Write-through-share, last-victim replacement priority |
+| `wtsprs` | Write-through-share, persistent cache residency hint |
+| `wtsred` | Write-through-share, reduce-oriented update hint |
+
+For scalar GM `pto.ldg` / `pto.stg` and atomic syntax, write
+`l2cache(...)`. Omitted `l2cache(...)` means `l2cache(nmfv)`. On `pto.ldg` /
+`pto.stg`, omitted `l1cache(...)` means `l1cache(cache)`.
+
+In syntax summaries, `<ld-l2cache>` means one token from the load L2 cache
+table, `<st-l2cache>` means one token from the store/atomic L2 cache table,
+`?` marks an optional clause, and `signedness?` means either
+`signed`, `unsigned`, or no signedness clause.
+
+---
+
+#### SIMT Scalar Memory Ops
+
+##### `pto.load`
+
+- **syntax:** `%value = pto.load %ptr[%offset] : !pto.ptr<T, space> -> T`
+- **accepted forms:**
+
+```mlir
+// Plain scalar load. Uses the ordinary scalar memory path.
+%value = pto.load %ptr[%offset] : !pto.ptr<T, space> -> T
+```
+
+- **semantics:** Load one scalar element from `%ptr + %offset`.
+
+```text
+effective_element = ptr + offset
+result = memory[effective_element]
+```
+
+- **inputs:** `%ptr` is a `!pto.ptr<T, space>` or memref. `%offset` is an
+  `index` element offset, not a byte offset.
+- **outputs:** One scalar value of type `T`.
+- **constraints and limitations:** The result type must match the pointer
+  element type. This op does not accept cache-control clauses; use `pto.ldg`
+  for GM scalar loads that need `l1cache(...)` or `l2cache(...)`.
+
+##### `pto.store`
+
+- **syntax:** `pto.store %value, %ptr[%offset] : !pto.ptr<T, space>, T`
+- **accepted forms:**
+
+```mlir
+// Plain scalar store. Uses the ordinary scalar memory path.
+pto.store %value, %ptr[%offset] : !pto.ptr<T, space>, T
+```
+
+- **semantics:** Store one scalar element to `%ptr + %offset`.
+
+```text
+effective_element = ptr + offset
+memory[effective_element] = value
+```
+
+- **inputs:** `%value` is the scalar element to write. `%ptr` is a
+  `!pto.ptr<T, space>` or memref. `%offset` is an `index` element offset.
+- **outputs:** None.
+- **constraints and limitations:** `%value` type must match the pointer element
+  type. This op does not accept cache-control clauses; use `pto.stg` for GM
+  scalar stores that need `l1cache(...)` or `l2cache(...)`.
+
+##### `pto.ldg`
+
+- **syntax:** `%value = pto.ldg %ptr[%offset] l1cache(...)? l2cache(...)? attr-dict : !pto.ptr<T, gm> -> T`
+- **accepted forms:**
+
+```mlir
+// GM load with default cache controls: l1cache(cache) and l2cache(nmfv).
+%value = pto.ldg %gm[%offset] : !pto.ptr<T, gm> -> T
+
+// GM load with an explicit L1 cache control.
+%value = pto.ldg %gm[%offset] l1cache(cache) : !pto.ptr<T, gm> -> T
+
+// GM load with explicit L1 and L2 cache controls.
+%value = pto.ldg %gm[%offset] l1cache(uncache) l2cache(nmpref) : !pto.ptr<T, gm> -> T
+```
+
+- **semantics:** Load one element from GM at `%ptr + %offset` using the
+  selected cache controls.
+- **inputs:** `%ptr` is a `!pto.ptr<T, gm>`. `%offset` is an `index` element
+  offset, not a byte offset.  For ``!pto.ptr<vector<2xf32>, gm>``, offset 1
+  advances by 8 bytes (2 × sizeof(f32)).
+- **attributes:** `l1cache` may be `l1cache(cache)` or `l1cache(uncache)` and
+  defaults to `cache`. `l2cache(...)` uses the load L2 cache table and defaults
+  to `nmfv`.
+- **outputs:** One value of type `T`.
+- **constraints and limitations:** `pto.ldg` supports 8/16/32/64-bit integer
+  values, `f16`, `bf16`, `f32`, `f64`, `fp8`, `hif8`, and packed vectors
+  `vector<2xf16>`, `vector<2xbf16>`, `vector<2xf32>`,
+  `vector<2/4/8xf8E4M3FN>`, `vector<2/4/8xf8E5M2>`,
+  `vector<2xi8>`, `vector<2xi16>`, `vector<2xi32>`,
+  and `!pto.hif8x2`.  Vector loads from GM
+  use the same-width load path as scalars (e.g. ``vector<2xf32>`` uses a 64-bit
+  GM load) and reinterpret the loaded bits as the requested vector type.  The
+  effective address for ``vector<2xf32>`` must satisfy 8-byte alignment
+  (enforced by the call-site contract; the op does not carry an alignment
+  operand).
+
+##### `pto.stg`
+
+- **syntax:** `pto.stg %value, %ptr[%offset] l1cache(...)? l2cache(...)? attr-dict : !pto.ptr<T, gm>, T`
+- **accepted forms:**
+
+```mlir
+// GM store with default cache controls: l1cache(cache) and l2cache(nmfv).
+pto.stg %value, %gm[%offset] : !pto.ptr<T, gm>, T
+
+// GM store with an explicit L1 cache control.
+pto.stg %value, %gm[%offset] l1cache(cache) : !pto.ptr<T, gm>, T
+
+// GM store with explicit L1 and L2 cache controls.
+pto.stg %value, %gm[%offset] l1cache(uncache) l2cache(wtsred) : !pto.ptr<T, gm>, T
+```
+
+- **semantics:** Store one element to GM at `%ptr + %offset` using the
+  selected cache controls.
+- **inputs:** `%value` is the element to write. `%ptr` is a
+  `!pto.ptr<T, gm>`. `%offset` is an `index` element offset
+  (same element-level semantics as `pto.ldg`).
+- **attributes:** `l1cache` may be `l1cache(cache)` or `l1cache(uncache)` and
+  defaults to `cache`. `l2cache(...)` uses the store/atomic L2 cache table and
+  defaults to `nmfv`.
+- **outputs:** None.
+- **constraints and limitations:** `%value` type must match the pointer element
+  type.  Supported types and alignment requirements are the same as `pto.ldg`
+  (see above).
+
+Example:
+
+```mlir
+%tx = pto.get_tid_x : i32
+%idx = arith.index_castui %tx : i32 to index
+%loaded = pto.load %gm[%idx] : !pto.ptr<i32, gm> -> i32
+%sum = arith.addi %loaded, %tx : i32
+pto.store %sum, %gm[%idx] : !pto.ptr<i32, gm>, i32
+```
+
+---
+
+#### Atomic Memory Ops
+
+Atomic ops update one scalar or supported packed memory location and return the
+old value observed by the current workitem. The read, update, and returned old
+value form one atomic read-modify-write at `%ptr`.
+
+##### `pto.atomic_exch` / `pto.atomic_add` / `pto.atomic_sub`
+
+- **syntax:**
+```mlir
+%old = pto.atomic_exch %ptr, %value l2cache(<st-l2cache>)? signedness? : !pto.ptr<T, space>, T -> T
+%old = pto.atomic_add  %ptr, %value l2cache(<st-l2cache>)? signedness? : !pto.ptr<T, space>, T -> T
+%old = pto.atomic_sub  %ptr, %value l2cache(<st-l2cache>)? signedness? : !pto.ptr<T, space>, T -> T
+```
+- **accepted forms:**
+
+```mlir
+// Signed integer atomic with default nmfv L2 cache.
+%old = pto.atomic_add %ptr, %value signed : !pto.ptr<i32, space>, i32 -> i32
+
+// Signed integer atomic with an explicit store/atomic L2 cache.
+%old = pto.atomic_add %ptr, %value l2cache(wtsred) signed : !pto.ptr<i32, space>, i32 -> i32
+
+// Floating-point atomic. Floating-point atomics do not take signedness.
+%old = pto.atomic_add %ptr, %value l2cache(nmfv) : !pto.ptr<f32, space>, f32 -> f32
+
+// Packed two-lane atomic. Packed atomics do not take signedness.
+%old = pto.atomic_add %ptr, %value : !pto.ptr<vector<2xf16>, space>, vector<2xf16> -> vector<2xf16>
+```
+- **semantics:**
+```text
+old = *ptr
+atomic_exch: *ptr = value
+atomic_add:  *ptr = old + value
+atomic_sub:  *ptr = old - value
+return old
+```
+- **inputs:** `%ptr` is `!pto.ptr<T, gm>` or `!pto.ptr<T, ub>`. `%value` is
+  `i32`, `i64`, `f16`, `bf16`, `f32`, `vector<2xf16>`, or
+  `vector<2xbf16>`.
+  `l2cache(...)` selects the store/atomic L2 cache control and defaults to
+  `nmfv`.
+- **outputs:** `%old` has the same type as `%value`. For packed
+  `vector<2xf16>` and `vector<2xbf16>` atomics on beta.1, `%old` must be left
+  unused; beta.1 can compile the packed atomic update but cannot compile a
+  consumed packed old-value result.
+- **constraints and limitations:** UB-space atomics do not support `i64`.
+  Floating-point and packed atomics do not accept `signed` or `unsigned`.
+  Packed atomics must be placed inside a `pto.simt_entry` function on beta.1.
+
+##### `pto.atomic_min` / `pto.atomic_max`
+
+- **syntax:**
+```mlir
+%old = pto.atomic_min %ptr, %value l2cache(<st-l2cache>)? signedness? : !pto.ptr<T, space>, T -> T
+%old = pto.atomic_max %ptr, %value l2cache(<st-l2cache>)? signedness? : !pto.ptr<T, space>, T -> T
+```
+- **accepted forms:**
+
+```mlir
+// Signed integer comparison.
+%old = pto.atomic_min %ptr, %value signed : !pto.ptr<i32, space>, i32 -> i32
+
+// Unsigned integer comparison.
+%old = pto.atomic_min %ptr, %value unsigned : !pto.ptr<i32, space>, i32 -> i32
+
+// Floating-point comparison. Floating-point atomics do not take signedness.
+%old = pto.atomic_min %ptr, %value l2cache(nmlv) : !pto.ptr<f32, space>, f32 -> f32
+
+// Packed two-lane comparison.
+%old = pto.atomic_min %ptr, %value : !pto.ptr<vector<2xbf16>, space>, vector<2xbf16> -> vector<2xbf16>
+```
+- **semantics:**
+```text
+old = *ptr
+atomic_min: *ptr = min(old, value)
+atomic_max: *ptr = max(old, value)
+return old
+```
+- **inputs:** Same as `pto.atomic_add`. For integer values, `signed` or
+  `unsigned` selects the comparison interpretation.
+- **outputs:** `%old` has the same type as `%value`. For packed
+  `vector<2xf16>` and `vector<2xbf16>` atomics on beta.1, `%old` must be left
+  unused; beta.1 can compile the packed atomic update but cannot compile a
+  consumed packed old-value result.
+- **constraints and limitations:** Floating-point and packed atomics do not
+  accept signedness. UB-space atomics do not support `i64`. Packed atomics
+  must be placed inside a `pto.simt_entry` function on beta.1.
+
+##### `pto.atomic_and` / `pto.atomic_or` / `pto.atomic_xor`
+
+- **syntax:**
+```mlir
+%old = pto.atomic_and %ptr, %value l2cache(<st-l2cache>)? signedness? : !pto.ptr<T, space>, T -> T
+%old = pto.atomic_or  %ptr, %value l2cache(<st-l2cache>)? signedness? : !pto.ptr<T, space>, T -> T
+%old = pto.atomic_xor %ptr, %value l2cache(<st-l2cache>)? signedness? : !pto.ptr<T, space>, T -> T
+```
+- **accepted forms:**
+
+```mlir
+// Unsigned bitwise atomic with default nmfv L2 cache.
+%old = pto.atomic_and %ptr, %value unsigned : !pto.ptr<i32, space>, i32 -> i32
+
+// Signedness is accepted for integer authoring consistency; the bit operation
+// itself is bitwise and does not reinterpret arithmetic magnitude.
+%old = pto.atomic_and %ptr, %value l2cache(napw) signed : !pto.ptr<i32, space>, i32 -> i32
+```
+- **semantics:**
+```text
+old = *ptr
+atomic_and: *ptr = old & value
+atomic_or:  *ptr = old | value
+atomic_xor: *ptr = old ^ value
+return old
+```
+- **inputs:** `%ptr` points to an integer scalar element. `%value` is `i32` or
+  `i64`.
+- **outputs:** `%old` has the same type as `%value`.
+- **constraints and limitations:** Bitwise atomics require integer types.
+  UB-space bitwise atomics do not support `i64`.
+
+##### `pto.atomic_cas`
+
+- **syntax:** `%old = pto.atomic_cas %ptr, %compare, %value l2cache(<st-l2cache>)? signedness? : !pto.ptr<T, space>, T -> T`
+- **accepted forms:**
+
+```mlir
+// Integer CAS with default nmfv L2 cache.
+%old = pto.atomic_cas %ptr, %compare, %value signed : !pto.ptr<i32, space>, i32 -> i32
+
+// Integer CAS with an explicit store/atomic L2 cache.
+%old = pto.atomic_cas %ptr, %compare, %value l2cache(wbhred) signed : !pto.ptr<i32, space>, i32 -> i32
+
+// Floating-point CAS. Floating-point atomics do not take signedness.
+%old = pto.atomic_cas %ptr, %compare, %value : !pto.ptr<f32, space>, f32 -> f32
+
+// Packed two-lane CAS. Packed atomics do not take signedness.
+%old = pto.atomic_cas %ptr, %compare, %value : !pto.ptr<vector<2xbf16>, space>, vector<2xbf16> -> vector<2xbf16>
+```
+
+- **semantics:**
+```text
+old = *ptr
+if old == compare:
+  *ptr = value
+return old
+```
+- **inputs:** `%ptr` is the atomic address. `%compare` is the expected old
+  value. `%value` is the replacement value.
+- **outputs:** `%old` is the value observed before the conditional update. For
+  packed `vector<2xf16>` and `vector<2xbf16>` CAS on beta.1, `%old` must be
+  left unused; beta.1 can compile the packed CAS update but cannot compile a
+  consumed packed old-value result.
+- **constraints and limitations:** `%compare`, `%value`, pointer element type,
+  and result type must match. `T` is `i32`, `i64`, `f32`,
+  `vector<2xf16>`, or `vector<2xbf16>`; UB-space `i64` is not supported.
+  Packed CAS must be placed inside a `pto.simt_entry` function on beta.1.
+
+When multiple workitems target the same address, each workitem observes one
+serialized old value from the total order chosen by the target. Algorithms must
+not rely on any particular tie order beyond atomicity.
+
+---
+
+#### SIMT Scalar Math Ops
+
+##### `pto.prmt`
+
+- **syntax:** `%r = pto.prmt %lhs, %rhs, %selector : i32, i32, i32 -> i32`
+- **semantics:** Build the `i32` result byte-by-byte from the eight source bytes
+  in `%lhs:%rhs` according to `%selector`.
+- **inputs:** `%lhs` and `%rhs` provide the source bytes. `%selector` selects
+  which source byte is copied into each destination byte.
+- **outputs:** One `i32` result.
+- **constraints and limitations:** All operands and the result are `i32`.
+
+##### `pto.mulhi`
+
+- **syntax:**
+```mlir
+%s32 = pto.mulhi %lhs, %rhs signed : i32, i32 -> i32
+%u32 = pto.mulhi %lhs, %rhs unsigned : i32, i32 -> i32
+%s64 = pto.mulhi %lhs64, %rhs64 signed : i64, i64 -> i64
+%u64 = pto.mulhi %lhs64, %rhs64 unsigned : i64, i64 -> i64
+```
+- **semantics:**
+```text
+N = bitwidth(lhs)
+if signed:
+  product = signed_N(lhs) * signed_N(rhs)
+else:
+  product = unsigned_N(lhs) * unsigned_N(rhs)
+result = high_N_bits(product)
+```
+- **inputs:** `%lhs` and `%rhs` are scalar integer operands with the same type.
+- **outputs:** One scalar integer result with the same type as the inputs.
+- **attributes:** The required `signed` or `unsigned` clause selects whether
+  the operands are interpreted as signed two's-complement values or unsigned
+  values before forming the double-width product.
+- **constraints and limitations:** The operands and result must all be `i32` or
+  all be `i64`.
+
+##### `pto.mul_i32toi64`
+
+- **syntax:**
+```mlir
+%s = pto.mul_i32toi64 %lhs, %rhs signed : i32, i32 -> i64
+%u = pto.mul_i32toi64 %lhs, %rhs unsigned : i32, i32 -> i64
+```
+- **semantics:**
+```text
+if signed:
+  result = sign_extend_i64(lhs) * sign_extend_i64(rhs)
+else:
+  result = zero_extend_i64(lhs) * zero_extend_i64(rhs)
+```
+- **inputs:** `%lhs` and `%rhs` are `i32` scalar operands.
+- **outputs:** One `i64` widened-product result.
+- **attributes:** The required `signed` or `unsigned` clause selects the
+  extension rule before multiplication.
+- **constraints and limitations:** The operand types are fixed to `i32`, and
+  the result type is fixed to `i64`.
+
+##### `pto.absf`
+
+- **syntax:** `%r = pto.absf %x : T -> T`
+- **semantics:** Return `abs(x)`. For `vector<2xT>`, absolute value is applied
+  independently to each element.
+- **inputs:** `%x` is an `f32` scalar, `vector<2xf16>`, or `vector<2xbf16>`.
+- **outputs:** One value with the same type as `%x`.
+- **constraints and limitations:** Scalar `f16` and scalar `bf16` are not
+  accepted by this op; use the packed form only for `vector<2xT>`.
+
+##### `pto.sqrt`
+
+- **syntax:** `%r = pto.sqrt %x : T -> T`
+- **semantics:** Return `sqrt(x)`. For `vector<2xT>`, square root is applied
+  independently to each element.
+- **inputs:** `%x` is `f16`, `f32`, or `vector<2xf16>`.
+- **outputs:** One value with the same type as `%x`.
+- **constraints and limitations:** `T` is `f16`, `f32`, or `vector<2xf16>`.
+
+##### `pto.exp`
+
+- **syntax:** `%r = pto.exp %x : T -> T`
+- **semantics:** Return the natural exponential `e ** x`. For `vector<2xT>`,
+  exponentiation is applied independently to each element.
+- **inputs:** `%x` is an `f16` scalar, `f32` scalar, or `vector<2xf16>`.
+- **outputs:** One value with the same type as `%x`.
+- **constraints and limitations:** `T` is `f16`, `f32`, or `vector<2xf16>`.
+  Overflow, underflow, infinities, and NaNs follow the target floating-point
+  rules.
+
+##### `pto.log`
+
+- **syntax:** `%r = pto.log %x : T -> T`
+- **semantics:** Return the natural logarithm `ln(x)`. For `vector<2xT>`,
+  logarithm is applied independently to each element.
+- **inputs:** `%x` is an `f16` scalar, `f32` scalar, or `vector<2xf16>`.
+- **outputs:** One value with the same type as `%x`.
+- **constraints and limitations:** `T` is `f16`, `f32`, or `vector<2xf16>`.
+  For real-number semantics, each element should be positive; non-positive
+  inputs follow the target floating-point rules.
+
+##### `pto.pow`
+
+- **syntax:** `%r = pto.pow %a, %b : T, T -> T`
+- **semantics:** Return `%a ** %b`. For `vector<2xT>`, power is applied
+  independently to each element pair.
+- **inputs:** `%a` is the base and `%b` is the exponent. Both operands have the
+  same type.
+- **outputs:** One value with the same type as the inputs.
+- **constraints and limitations:** `T` is `f16`, `f32`, or `vector<2xf16>`.
+  Exceptional inputs follow the target floating-point rules.
+
+##### `pto.ceil`
+
+- **syntax:** `%r = pto.ceil %x : T -> T`
+- **semantics:** Return the smallest integral floating value not less than
+  `%x`.
+- **inputs:** `%x` is an `f16`, `bf16`, or `f32` scalar.
+- **outputs:** One scalar with the same type as `%x`.
+- **constraints and limitations:** `T` is `f16`, `bf16`, or `f32`.
+
+##### `pto.floor`
+
+- **syntax:** `%r = pto.floor %x : T -> T`
+- **semantics:** Return the largest integral floating value not greater than
+  `%x`.
+- **inputs:** `%x` is an `f16`, `bf16`, or `f32` scalar.
+- **outputs:** One scalar with the same type as `%x`.
+- **constraints and limitations:** `T` is `f16`, `bf16`, or `f32`.
+
+##### `pto.rint`
+
+- **syntax:** `%r = pto.rint %x : T -> T`
+- **semantics:** Return the integral floating value selected by the target's
+  current floating rounding rule.
+- **inputs:** `%x` is an `f16`, `bf16`, or `f32` scalar.
+- **outputs:** One scalar with the same type as `%x`.
+- **constraints and limitations:** `T` is `f16`, `bf16`, or `f32`.
+
+##### `pto.round`
+
+- **syntax:** `%r = pto.round %x : T -> T`
+- **semantics:** Return the nearest integral floating value using the target
+  round operation's tie rule.
+- **inputs:** `%x` is an `f16`, `bf16`, or `f32` scalar.
+- **outputs:** One scalar with the same type as `%x`.
+- **constraints and limitations:** `T` is `f16`, `bf16`, or `f32`.
+
+##### `pto.fmin`
+
+- **syntax:** `%r = pto.fmin %a, %b : T, T -> T`
+- **semantics:** Return the floating minimum of `%a` and `%b`.
+- **inputs:** `%a` and `%b` have the same type.
+- **outputs:** One value with the same type as the inputs.
+- **constraints and limitations:** `T` is `f32`, `bf16`, `vector<2xf16>`, or
+  `vector<2xbf16>`. For vector types, the minimum is computed element-wise. NaN
+  handling follows the target floating-point minimum rule.
+
+##### `pto.fmax`
+
+- **syntax:** `%r = pto.fmax %a, %b : T, T -> T`
+- **semantics:** Return the floating maximum of `%a` and `%b`.
+- **inputs:** `%a` and `%b` have the same type.
+- **outputs:** One value with the same type as the inputs.
+- **constraints and limitations:** `T` is `f32`, `bf16`, `vector<2xf16>`, or
+  `vector<2xbf16>`. For vector types, the maximum is computed element-wise. NaN
+  handling follows the target floating-point maximum rule.
+
+##### `pto.fma`
+
+- **syntax:** `%r = pto.fma %a, %b, %acc : T, T, T -> T`
+- **semantics:** Return fused `a * b + acc` with one final rounding.
+- **inputs:** `%a`, `%b`, and `%acc` have the same type.
+- **outputs:** One value with the same type as the inputs.
+- **constraints and limitations:** `T` is `f16`, `bf16`, `f32`,
+  `vector<2xf16>`, or `vector<2xbf16>`. For vector types, fused multiply-add is
+  computed element-wise.
+
+---
+
+#### SIMT Conversion Op
+
+##### `pto.convert`
+
+- **syntax:** `%dst = pto.convert %src round(R) sat|nosat [signed|unsigned] : SrcType -> DstType`
+- **semantics:** Convert one scalar or packed two-element value from `SrcType` to
+  `DstType` using the specified rounding, saturation, and signedness controls.
+
+```mlir
+%as_f32 = pto.convert %i round(r) nosat signed : i32 -> f32
+%as_i32 = pto.convert %f round(z) sat signed : f32 -> i32
+%as_h2 = pto.convert %f2 round(r) nosat : vector<2xf32> -> vector<2xf16>
+```
+
+- **inputs:** `%src` is `i32`, `i64`, `f16`, `bf16`, `f32`,
+  `vector<2xf16>`, `vector<2xbf16>`, or `vector<2xf32>`.
+  `round(R)` selects the rounding rule. `sat` or `nosat` selects whether
+  finite overflow is clamped to the destination range. `signed` or `unsigned`
+  is required when converting to or from an integer type and is omitted for
+  floating-to-floating and packed vector conversion.
+- **outputs:** `%dst` is `i32`, `i64`, `f16`, `bf16`, `f32`,
+  `vector<2xf16>`, `vector<2xbf16>`, or `vector<2xf32>`.
+- **constraints and limitations:** Integer-to-integer conversion is not
+  supported by `pto.convert`. Scalar floating-to-floating conversion supports
+  `f32`, `f16`, and `bf16` source/destination pairs. `i64` source conversion is
+  supported only to `f32`; conversion to `i64` is supported only from `f32`.
+  `i32` can convert to `f32`, `f16`, or `bf16`, with `signed` or `unsigned`
+  selecting the source interpretation. Floating-to-integer conversion supports
+  `i32` destinations, plus `f32 -> i64`, and requires `sat`. Packed conversion
+  supports only
+  `vector<2xf32> -> vector<2xf16>`, `vector<2xf16> -> vector<2xf32>`,
+  `vector<2xf32> -> vector<2xbf16>`, and
+  `vector<2xbf16> -> vector<2xf32>`.
+
+Rounding selectors:
+
+| Selector | Meaning |
+|----------|---------|
+| `round(r)` | Round to nearest, ties to even |
+| `round(a)` | Round away from zero |
+| `round(f)` | Round toward minus infinity |
+| `round(c)` | Round toward plus infinity |
+| `round(z)` | Round toward zero |
+| `round(o)` | Round to odd |
+| `round(h)` | Cast-ceil mode for the target conversion slice that supports it |
+
+Saturation selectors:
+
+| Selector | Meaning |
+|----------|---------|
+| `nosat` | Do not clamp finite overflow to the destination range |
+| `sat` | Clamp finite overflow to the destination range |
+
+---
+
+#### SIMT Entry Synchronization and State Ops
+
+##### `pto.syncthreads`
+
+- **syntax:** `pto.syncthreads attr-dict`
+- **semantics:** Synchronize all active workitems in the current SIMT entry.
+  Memory effects issued before the barrier by participating workitems are
+  ordered before memory effects issued after the barrier by those workitems.
+- **inputs:** None.
+- **outputs:** None.
+- **constraints and limitations:** `pto.syncthreads` must appear inside a
+  function marked with `pto.simt_entry`. It synchronizes workitems in the
+  active SIMT entry; it is not a substitute for outer pipeline synchronization
+  between vector, MTE, cube, and scalar host-visible effects.
+
+Example:
+
+```mlir
+func.func @body(%ub: !pto.ptr<i32, ub>) attributes {pto.simt_entry} {
+  %tx = pto.get_tid_x : i32
+  %idx = arith.index_castui %tx : i32 to index
+  pto.store %tx, %ub[%idx] : !pto.ptr<i32, ub>, i32
+  pto.syncthreads
+  %v = pto.load %ub[%idx] : !pto.ptr<i32, ub> -> i32
+  pto.store %v, %ub[%idx] : !pto.ptr<i32, ub>, i32
+  return
+}
+```
+
+##### `pto.threadfence` / `pto.threadfence_block`
+
+- **syntax:** `pto.threadfence attr-dict` or `pto.threadfence_block attr-dict`
+- **semantics:** Issue a memory fence for memory effects from the current SIMT
+  workitem. `pto.threadfence` uses the target workitem fence operation;
+  `pto.threadfence_block` uses the target block-scoped workitem fence
+  operation.
+- **inputs:** None.
+- **outputs:** None.
+- **constraints and limitations:** These ops must appear inside a function
+  marked with `pto.simt_entry`. They order memory effects but do not by
+  themselves make other workitems wait; use `pto.syncthreads` when a workitem
+  barrier is required.
+
+##### `pto.keep` / `pto.resume`
+
+- **syntax:**
+
+```mlir
+pto.keep %value {slot = N : i64} : T
+%value = pto.resume {slot = N : i64} : T
+```
+
+- **semantics:** Preserve and restore one per-workitem scalar payload across
+  adjacent SIMT entry calls in the same outer launch sequence. `pto.keep`
+  records the current workitem's `%value` in logical slot `N`; `pto.resume`
+  restores the value for the same logical workitem from logical slot `N`.
+
+```text
+for each active workitem:
+  keep(slot, value) stores value in that workitem's slot
+  resume(slot) returns the value stored in the same workitem's slot
+```
+
+- **inputs:** `pto.keep` takes one scalar `%value` of type `T`.
+- **outputs:** `pto.resume` returns one scalar value of type `T`.
+- **attributes:** `slot` is a non-negative `i64` logical slot identifier in
+  the range `[0, 122]`.
+- **supported types:** `T` may be any signless integer scalar with bit width up
+  to 64 bits, `f16`, `bf16`, or `f32`.
+- **constraints and limitations:** Both ops must appear inside functions marked
+  with `pto.simt_entry`. A `pto.resume` group must be the first non-constant
+  operation group in its SIMT entry. A `pto.keep` group must be the final
+  operation group before optional `pto.syncthreads` and `func.return`. Slot
+  storage words must not overlap within one `pto.resume` group or one
+  `pto.keep` group. A value resumed from a slot should use the same type as the
+  value kept into that slot.
+- **slot allocation rule:** Users allocate slots explicitly. Values up to 32
+  bits and supported floating-point values consume only `slot`. A 64-bit
+  integer value consumes `slot` and `slot + 1`; therefore its slot must be even
+  and must leave room for the second word. Because slot mapping is explicit, a
+  later SIMT entry may resume only the subset of preserved slots that it needs
+  without changing the location of those slots.
+
+Example:
+
+```mlir
+func.func @stage0(%dst: !pto.ptr<i32, ub>) attributes {pto.simt_entry} {
+  %tx = pto.get_tid_x : i32
+  %idx = arith.index_castui %tx : i32 to index
+  pto.store %tx, %dst[%idx] : !pto.ptr<i32, ub>, i32
+  pto.keep %tx {slot = 0 : i64} : i32
+  pto.syncthreads
+  return
+}
+
+func.func @stage1(%dst: !pto.ptr<i32, ub>) attributes {pto.simt_entry} {
+  %tx0 = pto.resume {slot = 0 : i64} : i32
+  %tx = pto.get_tid_x : i32
+  %idx = arith.index_castui %tx : i32 to index
+  %sum = arith.addi %tx0, %tx : i32
+  pto.store %sum, %dst[%idx] : !pto.ptr<i32, ub>, i32
+  return
+}
+```
+
+---
+
+#### Outer Pipeline Synchronization and Ordering
+
+SIMT body execution is sequenced as a function call from the outer kernel. Use
+the existing PTO pipeline synchronization ops around the SIMT call when data is
+produced or consumed by other pipelines.
+
+```mlir
+pto.store_vfsimt_info %dim_z, %dim_y, %dim_x : i32, i32, i32
+func.call @body(%ub_out) : (!pto.ptr<i32, ub>) -> ()
+pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+pto.mte_ub_gm %ub_out, %gm_out, %len
+  nburst(%n, %src_stride, %dst_stride) l2_cache_ctl(%l2_cache_ctl)
+  : !pto.ptr<i32, ub>, !pto.ptr<i32, gm>, i64, i64, i64, i64, i64
+```
+
+For pipeline synchronization semantics, see
+[`01-pipeline-sync.md`](#micro-01-pipeline-sync). Do not use pipeline barriers as a
+substitute for lane collectives: vote, shuffle, redux, and atomic ops are the
+SIMT-specific mechanisms documented in this chapter.
+
+---
+
+#### Complete Minimal Example
+
+```mlir
+module attributes {pto.target_arch = "a5",
+                   pto.kernel_kind = #pto.kernel_kind<vector>} {
+  func.func @simt_store_tid_kernel(%out: !pto.ptr<i32, gm>)
+      attributes {pto.aicore} {
+    %c0_i64 = arith.constant 0 : i64
+    %c32_i64 = arith.constant 32 : i64
+    %c128_i64 = arith.constant 128 : i64
+    %dim_z = arith.constant 1 : i32
+    %dim_y = arith.constant 1 : i32
+    %dim_x = arith.constant 32 : i32
+
+    %ub_out = pto.castptr %c0_i64 : i64 -> !pto.ptr<i32, ub>
+    pto.store_vfsimt_info %dim_z, %dim_y, %dim_x : i32, i32, i32
+    func.call @simt_write(%ub_out) : (!pto.ptr<i32, ub>) -> ()
+
+    pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+    pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+    pto.mte_ub_gm %ub_out, %out, %c128_i64
+      nburst(%c32_i64, %c128_i64, %c128_i64) l2_cache_ctl(%c0_i64)
+      : !pto.ptr<i32, ub>, !pto.ptr<i32, gm>, i64, i64, i64, i64, i64
+    pto.barrier #pto.pipe<PIPE_ALL>
+    return
+  }
+
+  func.func @simt_write(%dst: !pto.ptr<i32, ub>)
+      attributes {pto.simt_entry} {
+    %tx = pto.get_tid_x : i32
+    %ty = pto.get_tid_y : i32
+    %tz = pto.get_tid_z : i32
+    %c8_i32 = arith.constant 8 : i32
+    %c16_i32 = arith.constant 16 : i32
+    %c32_i32 = arith.constant 32 : i32
+    %ty_shift = arith.shli %ty, %c8_i32 : i32
+    %tz_shift = arith.shli %tz, %c16_i32 : i32
+    %xy = arith.ori %tx, %ty_shift : i32
+    %xyz = arith.ori %xy, %tz_shift : i32
+    %lane_base = arith.muli %ty, %c32_i32 : i32
+    %idx_i32 = arith.addi %lane_base, %tx : i32
+    %idx = arith.index_castui %idx_i32 : i32 to index
+    pto.store %xyz, %dst[%idx] : !pto.ptr<i32, ub>, i32
+    return
+  }
+}
+```
+
+<a id="micro-18-special-scalar"></a>
+
+### 18. Special Scalar Operations
+
+> **Category:** PTO scalar query, pointer/address, and scalar-memory operations
+> **Dialect:** `pto`
+
+Special Scalar operations provide the PTO-specific scalar facilities used
+around vector and tile code. They query the current kernel execution instance,
+construct and adjust typed pointers, access one scalar element through the
+scalar pipeline, and perform ordinary AICore GM accesses that bypass the local
+L1 data cache.
+
+This group does not include shared scalar arithmetic, which remains in
+[Arith](#micro-14-shared-arith), or SIMT workitem operations, which remain in
+[SIMT Ops](#micro-17-simt). An operation with a scalar operand but a vector result,
+such as `pto.vadds`, belongs to [Vec-Scalar Ops](#micro-08-vec-scalar-ops).
+
+---
+
+#### Operation Summary
+
+| Family | Operations | Purpose |
+|--------|------------|---------|
+| Kernel execution queries | `pto.get_block_idx`, `pto.get_subblock_idx`, `pto.get_block_num`, `pto.get_subblock_num` | Query the block or subblock identity and launch extent visible to the current kernel instance |
+| Typed pointer/address operations | `pto.castptr`, `pto.addptr` | Construct, reinterpret, and offset `!pto.ptr` values |
+| Scalar-pipeline memory | `pto.load_scalar`, `pto.store_scalar` | Read or write one element through the general scalar-memory interface |
+| AICore scalar GM L1-bypass | `pto.ld_dev`, `pto.st_dev` | Read or write one integer GM element while bypassing the local L1 data cache |
+
+---
+
+#### Common Pointer and Offset Rules
+
+Memory operations in this chapter use the typed pointer form
+`!pto.ptr<T, space>`:
+
+- `T` is the element type stored at the pointed-to location;
+- `space` identifies the memory space, such as `gm` or `ub`;
+- a pointer carries an address, element type, and memory-space interpretation,
+  but no tensor shape or stride metadata;
+- every `%offset` operand in this chapter has type `index` and is measured in
+  elements of `T`, not bytes.
+
+For a base address `base`, element type `T`, and element offset `offset`, the
+effective byte address is:
+
+```text
+effective_address = base + offset * sizeof(T)
+```
+
+For example, offset `3` on `!pto.ptr<i32, gm>` selects the element beginning
+12 bytes after the base address.
+
+---
+
+#### Kernel Execution Query Operations
+
+These nullary, side-effect-free operations expose the block-level execution
+state visible to the current PTO kernel instance. They return `i64` values and
+do not perform memory access, synchronization, tiling, or work partitioning by
+themselves.
+
+They are distinct from the `pto.get_tid_*`, `pto.get_block_idx_*`, and related
+SIMT workitem queries documented in [SIMT Ops](#micro-17-simt).
+
+##### `pto.get_block_idx`
+
+- **Purpose:** Return the linear block index of the current kernel instance.
+- **Syntax:**
+
+  ```mlir
+  %block = pto.get_block_idx
+  ```
+
+- **Operands and attributes:** None.
+- **Result:** One `i64` block index.
+- **Semantics:** The result identifies the current block in the range
+  `[0, block_num)`, where `block_num` is the value returned by
+  `pto.get_block_num` for the same launch.
+
+```text
+block = current_block_index
+0 <= block < block_num
+```
+
+##### `pto.get_subblock_idx`
+
+- **Purpose:** Return the subblock index visible to the current kernel
+  instance.
+- **Syntax:**
+
+  ```mlir
+  %subblock = pto.get_subblock_idx
+  ```
+
+- **Operands and attributes:** None.
+- **Result:** One `i64` subblock index.
+- **Semantics:** The result identifies the current subblock in the range
+  `[0, subblock_num)`, where `subblock_num` is returned by
+  `pto.get_subblock_num` for the same execution instance.
+
+```text
+subblock = current_subblock_index
+0 <= subblock < subblock_num
+```
+
+##### `pto.get_block_num`
+
+- **Purpose:** Return the total number of blocks in the current kernel launch.
+- **Syntax:**
+
+  ```mlir
+  %block_num = pto.get_block_num
+  ```
+
+- **Operands and attributes:** None.
+- **Result:** One `i64` block count.
+- **Semantics:** The result is the launch-wide block count used to interpret
+  `pto.get_block_idx`.
+
+##### `pto.get_subblock_num`
+
+- **Purpose:** Return the number of subblocks visible to the current execution
+  instance.
+- **Syntax:**
+
+  ```mlir
+  %subblock_num = pto.get_subblock_num
+  ```
+
+- **Operands and attributes:** None.
+- **Result:** One `i64` subblock count.
+- **Semantics:** The result is the subblock count used to interpret
+  `pto.get_subblock_idx`.
+
+##### Block Partitioning Example
+
+The following example assigns a disjoint 2048-element GM window to each
+block:
+
+```mlir
+%block = pto.get_block_idx
+%block_num = pto.get_block_num
+%block_len = arith.constant 2048 : index
+%block_as_index = arith.index_cast %block : i64 to index
+%block_offset = arith.muli %block_as_index, %block_len : index
+%block_in = pto.addptr %gm_in, %block_offset
+  : !pto.ptr<f32, gm> -> !pto.ptr<f32, gm>
+%block_out = pto.addptr %gm_out, %block_offset
+  : !pto.ptr<f32, gm> -> !pto.ptr<f32, gm>
+```
+
+The query operations report the launch state; the surrounding arithmetic and
+pointer operations define the actual partitioning policy.
+
+---
+
+#### Typed Pointer and Address Operations
+
+##### `pto.castptr`
+
+- **Purpose:** Explicitly convert between an integer address, a typed PTO
+  pointer, or a memref base address without moving data.
+- **Syntax:**
+
+  ```mlir
+  %result = pto.castptr %input : input-type -> result-type
+  ```
+
+- **Operands:** `%input` is an integer, a memref, or `!pto.ptr<T, space>`.
+- **Result:** An integer or `!pto.ptr<T, space>` according to the selected form.
+- **Attributes:** None.
+- **Legal forms:**
+
+  | Input | Result | Meaning |
+  |-------|--------|---------|
+  | integer | `!pto.ptr<T, space>` | Interpret the integer as an address in `space` |
+  | `!pto.ptr<T, space>` | integer | Expose the pointer address as an integer |
+  | `!pto.ptr<S, space>` | `!pto.ptr<T, space>` | Reinterpret the element type while preserving the address and memory space |
+  | `memref<..., space>` | `!pto.ptr<T, space>` | Extract the aligned base address and represent it as a PTO pointer |
+
+- **Constraints:** Integer-to-integer and memref-to-integer forms are invalid.
+  Pointer-to-pointer casts must preserve the PTO memory space. A memref with an
+  explicit PTO memory space must be cast to the same space. The operation does
+  not dereference the address and does not change the referenced bytes.
+
+```text
+result.address = input.address
+result.space = requested_space
+result.element_type = requested_element_type
+```
+
+Examples:
+
+```mlir
+%gm_i32 = pto.castptr %addr : i64 -> !pto.ptr<i32, gm>
+%gm_i8 = pto.castptr %gm_i32
+  : !pto.ptr<i32, gm> -> !pto.ptr<i8, gm>
+%addr_again = pto.castptr %gm_i8 : !pto.ptr<i8, gm> -> i64
+```
+
+##### `pto.addptr`
+
+- **Purpose:** Produce a pointer displaced from a typed base pointer.
+- **Syntax:**
+
+  ```mlir
+  %result = pto.addptr %ptr, %offset
+    : !pto.ptr<T, space> -> !pto.ptr<T, space>
+  ```
+
+- **Operands:** `%ptr` is `!pto.ptr<T, space>` and `%offset` is `index`.
+- **Result:** A pointer with exactly the same element type and memory space as
+  `%ptr`.
+- **Attributes:** None.
+- **Semantics:** `%offset` is a signed element displacement. Positive values
+  advance the pointer and negative values move it toward lower addresses.
+
+```text
+result.address = ptr.address + offset * sizeof(T)
+result.element_type = T
+result.space = space
+```
+
+- **Constraints:** The result type must exactly match the input pointer type.
+  `pto.addptr` does not access memory and does not perform bounds checking.
+
+Example:
+
+```mlir
+%c16 = arith.constant 16 : index
+%tail = pto.addptr %base, %c16
+  : !pto.ptr<f32, gm> -> !pto.ptr<f32, gm>
+```
+
+`%tail` points 16 `f32` elements, or 64 bytes, after `%base`.
+
+---
+
+#### Scalar-Pipeline Memory Operations
+
+`pto.load_scalar` and `pto.store_scalar` access one element through the general
+scalar-memory interface. The pointer element type and memory space determine
+the accessed value type and storage domain.
+
+##### `pto.load_scalar`
+
+- **Purpose:** Read one scalar element from a typed PTO pointer.
+- **Syntax:**
+
+  ```mlir
+  %value = pto.load_scalar %ptr[%offset]
+    : !pto.ptr<T, space> -> T
+  ```
+
+- **Operands:** `%ptr` is `!pto.ptr<T, space>` and `%offset` is an element
+  offset of type `index`.
+- **Result:** One scalar value of type `T`.
+- **Attributes:** None.
+- **Semantics:** Read the element at `ptr + offset` through the scalar pipeline.
+
+```text
+value = memory[ptr.address + offset * sizeof(T)] as T
+```
+
+- **Constraints:** The result type must exactly match the pointer element type.
+  This op returns a scalar, not a `!pto.vreg` value, and has no vector load
+  distribution or mask clauses.
+
+##### `pto.store_scalar`
+
+- **Purpose:** Write one scalar element through a typed PTO pointer.
+- **Syntax:**
+
+  ```mlir
+  pto.store_scalar %value, %ptr[%offset]
+    : !pto.ptr<T, space>, T
+  ```
+
+- **Operands:** `%value` has type `T`, `%ptr` is `!pto.ptr<T, space>`, and
+  `%offset` is an element offset of type `index`.
+- **Results:** None.
+- **Attributes:** None.
+- **Semantics:** Write `%value` to the element at `ptr + offset` through the
+  scalar pipeline.
+
+```text
+memory[ptr.address + offset * sizeof(T)] = value
+```
+
+- **Constraints:** `%value` must exactly match the pointer element type. This
+  op writes one scalar element and has no vector store distribution or mask
+  clauses.
+
+Example round trip in UB:
+
+```mlir
+%c7 = arith.constant 7 : index
+%value = pto.load_scalar %ub[%c7] : !pto.ptr<i32, ub> -> i32
+pto.store_scalar %value, %ub_out[%c7] : !pto.ptr<i32, ub>, i32
+```
+
+---
+
+#### AICore Scalar GM L1-Bypass Operations
+
+`pto.ld_dev` and `pto.st_dev` are the ordinary AICore scalar GM access pair
+for accesses that must bypass the local L1 data cache. They are not SIMT
+operations and must not be substituted with `pto.ldg` or `pto.stg`, whose
+execution scope and cache-control contract are different.
+
+##### Common Contract
+
+- the pointer must be `!pto.ptr<T, gm>`;
+- `T` must be one of `i8`, `i16`, `i32`, or `i64`;
+- `%offset` has type `index` and is measured in elements of `T`;
+- load result and store value types must exactly match `T`;
+- no `l1cache` or `l2cache` policy attribute is accepted;
+- the op must appear in an ordinary AICore entry function, outside both a
+  `pto.simt_entry` function and `pto.section.simt`;
+- the supported target profile is A5 with CANN output version 9.0.0 official
+  or newer.
+
+Both operations are non-atomic. They do not imply synchronization, memory
+ordering, cache invalidation, cache writeback, or an L2 cache policy. Programs
+that combine these accesses with another cached path must provide any required
+synchronization and cache maintenance separately. Cache behavior beyond the
+local L1 data cache is target-defined.
+
+##### `pto.ld_dev`
+
+- **Purpose:** Read one integer scalar from GM while bypassing the local L1
+  data cache.
+- **Syntax:**
+
+  ```mlir
+  %value = pto.ld_dev %ptr[%offset] : !pto.ptr<T, gm> -> T
+  ```
+
+- **Operands:** `%ptr` is `!pto.ptr<T, gm>` and `%offset` is an element offset
+  of type `index`.
+- **Result:** One value of type `T` containing exactly the bytes read from GM.
+- **Attributes:** None.
+- **Semantics:** Read `sizeof(T)` bytes from the selected GM element. No sign
+  extension, zero extension, truncation, or numeric conversion is part of the
+  observable operation semantics.
+
+```text
+address = ptr.address + offset * sizeof(T)
+value = GM[address : address + sizeof(T)] as T
+```
+
+##### `pto.st_dev`
+
+- **Purpose:** Write one integer scalar to GM while bypassing the local L1 data
+  cache.
+- **Syntax:**
+
+  ```mlir
+  pto.st_dev %value, %ptr[%offset] : !pto.ptr<T, gm>, T
+  ```
+
+- **Operands:** `%value` has type `T`, `%ptr` is `!pto.ptr<T, gm>`, and
+  `%offset` is an element offset of type `index`.
+- **Results:** None.
+- **Attributes:** None.
+- **Semantics:** Write exactly `sizeof(T)` bytes from `%value` to the selected
+  GM element.
+
+```text
+address = ptr.address + offset * sizeof(T)
+GM[address : address + sizeof(T)] = value as bytes
+```
+
+##### Nonzero-Offset Example
+
+```mlir
+%c3 = arith.constant 3 : index
+%value = pto.ld_dev %src[%c3] : !pto.ptr<i32, gm> -> i32
+pto.st_dev %value, %dst[%c3] : !pto.ptr<i32, gm>, i32
+```
+
+Both operations access element 3, which begins 12 bytes after the corresponding
+`i32` base address. The load and store bypass the local L1 data cache; they do
+not establish ordering with other memory operations.
+
+---
+
+#### Choosing a Scalar Memory Operation
+
+| Requirement | Operation family |
+|-------------|------------------|
+| General typed scalar access through the scalar-memory interface | `pto.load_scalar`, `pto.store_scalar` |
+| Ordinary AICore integer GM access that bypasses local L1 | `pto.ld_dev`, `pto.st_dev` |
+| SIMT workitem scalar memory access | See [SIMT Ops](#micro-17-simt) |
+
 ## Supported Data Types
 
 | Type | Bits | vreg Lanes | Description |
@@ -6837,6 +8943,7 @@ pto.vstsx2 %x, %y, %ub_xy[%offset], "INTLV_B32", %all_mask : !pto.vreg<64xf32>, 
 | Gather | 3 | `pto.vgather2`, `pto.vgatherb` |
 | Contiguous Store | 3 | `pto.vsts` with `NORM_B8` / `NORM_B16` / `NORM_B32` dist |
 | Scatter | 3 | `pto.vscatter` |
+| Scalar GM access bypassing local L1 data cache | 18 | `pto.ld_dev`, `pto.st_dev` |
 
 ### Compute Operations
 
@@ -6864,10 +8971,14 @@ pto.vstsx2 %x, %y, %ub_xy[%offset], "INTLV_B32", %all_mask : !pto.vreg<64xf32>, 
 |-----------|-------|-------------|
 | Intra-core Sync | 1 | `pto.set_flag`, `pto.wait_flag` |
 | Pipeline Buffer Sync | 1 | `pto.get_buf`, `pto.rls_buf` |
+| Memory Barrier / Cache Maintenance | 1 | `pto.mem_bar`, `pto.dsb`, `pto.dcci` |
 
 ### Scalar & Control Operations
 
-Group 14 covers the full scalar `arith` surface. The rows below list common PTO micro Instruction patterns rather than an exhaustive partition of `arith` ops.
+Group 14 covers shared MLIR scalar arithmetic. Group 18 catalogs PTO scalar
+queries, pointer/address operations, and scalar-memory operations. SIMT scalar
+operations remain in Group 17, while
+shared structured-control semantics remain in Group 15.
 
 | Operation | Group | Description |
 |-----------|-------|-------------|
@@ -6877,6 +8988,12 @@ Group 14 covers the full scalar `arith` surface. The rows below list common PTO 
 | Scalar Compare & Select | 14 | `arith.cmpi`, `arith.cmpf`, `arith.select` |
 | Scalar Casts / Width Changes | 14 | `arith.index_cast`, `arith.index_castui`, `arith.extsi`, `arith.extui`, `arith.trunci`, `arith.sitofp`, etc. |
 | Scalar Bitwise / Shift Ops | 14 | `arith.andi`, `arith.ori`, `arith.xori`, `arith.shli`, `arith.shrsi`, `arith.shrui`, etc. |
+| Kernel Execution Queries | 18 | `pto.get_block_idx`, `pto.get_subblock_idx`, `pto.get_block_num`, `pto.get_subblock_num` |
+| Typed Pointer / Address Operations | 18 | `pto.castptr`, `pto.addptr` |
+| Scalar-Pipeline Memory | 18 | `pto.load_scalar`, `pto.store_scalar` |
+| AICore Scalar GM L1-Bypass | 18 | `pto.ld_dev`, `pto.st_dev` |
+| SIMT Scalar Memory / Atomics | 17 | `pto.load`, `pto.store`, `pto.ldg`, `pto.stg`, `pto.atomic_*` |
+| SIMT Scalar Math / Conversion | 17 | `pto.prmt`, `pto.mulhi`, `pto.sqrt`, `pto.exp`, `pto.fma`, `pto.convert`, etc. |
 | Counted Loops | 15 | `scf.for` |
 | Conditional Regions | 15 | `scf.if`, `scf.yield` |
 | Break-like Structured Loops | 15 | `scf.while`, `scf.condition`, `scf.yield` |

@@ -5,77 +5,77 @@
 // scenarios: signed-i16, signless-i16, same-module, issue-173-regression
 // -----------------------------------------------------------------------------
 module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
-  func.func @copy_signed_i16_kernel(%arg0: !pto.ptr<si16, gm>,
-                                    %arg1: !pto.ptr<si16, gm>) attributes {pto.aicore} {
-    %c0 = arith.constant 0 : index
-    %c128 = arith.constant 128 : index
-    %c1024 = arith.constant 1024 : index
-    %c0_i64 = arith.constant 0 : i64
-    %c1_i64 = arith.constant 1 : i64
-    %c32_i64 = arith.constant 32 : i64
-    %c64_i64 = arith.constant 64 : i64
-    %c2048_i64 = arith.constant 2048 : i64
+    func.func @issue_173_vsts_signed_signless_deep_merged_kernel(%arg0: !pto.ptr<si16, gm>, %arg1: !pto.ptr<si16, gm>, %arg2: !pto.ptr<i16, gm>, %arg3: !pto.ptr<i16, gm>) attributes {pto.kernel} {
+    // active merged from copy_signed_i16_kernel
 
-    %ub_in = pto.castptr %c0_i64 : i64 -> !pto.ptr<si16, ub>
-    %ub_out = pto.castptr %c2048_i64 : i64 -> !pto.ptr<si16, ub>
+    %c0_m0 = arith.constant 0 : index
+    %c128_m0 = arith.constant 128 : index
+    %c1024_m0 = arith.constant 1024 : index
+    %c0_i64_m0 = arith.constant 0 : i64
+    %c1_i64_m0 = arith.constant 1 : i64
+    %c32_i64_m0 = arith.constant 32 : i64
+    %c64_i64_m0 = arith.constant 64 : i64
+    %c2048_i64_m0 = arith.constant 2048 : i64
 
-    %false = arith.constant false
-    pto.set_loop_size_outtoub %c1_i64, %c1_i64 : i64, i64
-    pto.copy_gm_to_ubuf %arg0, %ub_in, %c0_i64, %c32_i64, %c64_i64, %c0_i64, %c0_i64, %false, %c0_i64, %c64_i64, %c64_i64 : !pto.ptr<si16, gm>, !pto.ptr<si16, ub>, i64, i64, i64, i64, i64, i1, i64, i64, i64
+    %ub_in_m0 = pto.castptr %c0_i64_m0 : i64 -> !pto.ptr<si16, ub>
+    %ub_out_m0 = pto.castptr %c2048_i64_m0 : i64 -> !pto.ptr<si16, ub>
 
-    pto.set_flag["PIPE_MTE2", "PIPE_V", "EVENT_ID0"]
-    pto.wait_flag["PIPE_MTE2", "PIPE_V", "EVENT_ID0"]
-
-    pto.vecscope {
-      %mask = pto.pset_b16 "PAT_ALL" : !pto.mask<b16>
-      scf.for %offset = %c0 to %c1024 step %c128 {
-        %vec = pto.vlds %ub_in[%offset] : !pto.ptr<si16, ub> -> !pto.vreg<128xsi16>
-        pto.vsts %vec, %ub_out[%offset], %mask : !pto.vreg<128xsi16>, !pto.ptr<si16, ub>, !pto.mask<b16>
-      }
-    }
-
-    pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
-    pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
-    pto.set_loop_size_ubtoout %c1_i64, %c1_i64 : i64, i64
-    pto.copy_ubuf_to_gm %ub_out, %arg1, %c0_i64, %c32_i64, %c64_i64, %c0_i64, %c64_i64, %c64_i64 : !pto.ptr<si16, ub>, !pto.ptr<si16, gm>, i64, i64, i64, i64, i64, i64
-    pto.barrier #pto.pipe<PIPE_ALL>
-    return
-  }
-
-  func.func @copy_signless_i16_kernel(%arg0: !pto.ptr<i16, gm>,
-                                      %arg1: !pto.ptr<i16, gm>) attributes {pto.aicore} {
-    %c0 = arith.constant 0 : index
-    %c128 = arith.constant 128 : index
-    %c1024 = arith.constant 1024 : index
-    %c0_i64 = arith.constant 0 : i64
-    %c1_i64 = arith.constant 1 : i64
-    %c32_i64 = arith.constant 32 : i64
-    %c64_i64 = arith.constant 64 : i64
-    %c2048_i64 = arith.constant 2048 : i64
-
-    %ub_in = pto.castptr %c0_i64 : i64 -> !pto.ptr<i16, ub>
-    %ub_out = pto.castptr %c2048_i64 : i64 -> !pto.ptr<i16, ub>
-
-    %false = arith.constant false
-    pto.set_loop_size_outtoub %c1_i64, %c1_i64 : i64, i64
-    pto.copy_gm_to_ubuf %arg0, %ub_in, %c0_i64, %c32_i64, %c64_i64, %c0_i64, %c0_i64, %false, %c0_i64, %c64_i64, %c64_i64 : !pto.ptr<i16, gm>, !pto.ptr<i16, ub>, i64, i64, i64, i64, i64, i1, i64, i64, i64
+    %false_m0 = arith.constant false
+    pto.set_loop_size_outtoub %c1_i64_m0, %c1_i64_m0 : i64, i64
+    pto.copy_gm_to_ubuf %arg0, %ub_in_m0, %c0_i64_m0, %c32_i64_m0, %c64_i64_m0, %c0_i64_m0, %c0_i64_m0, %false_m0, %c0_i64_m0, %c64_i64_m0, %c64_i64_m0 : !pto.ptr<si16, gm>, !pto.ptr<si16, ub>, i64, i64, i64, i64, i64, i1, i64, i64, i64
 
     pto.set_flag["PIPE_MTE2", "PIPE_V", "EVENT_ID0"]
     pto.wait_flag["PIPE_MTE2", "PIPE_V", "EVENT_ID0"]
 
     pto.vecscope {
-      %mask = pto.pset_b16 "PAT_ALL" : !pto.mask<b16>
-      scf.for %offset = %c0 to %c1024 step %c128 {
-        %vec = pto.vlds %ub_in[%offset] : !pto.ptr<i16, ub> -> !pto.vreg<128xi16>
-        pto.vsts %vec, %ub_out[%offset], %mask : !pto.vreg<128xi16>, !pto.ptr<i16, ub>, !pto.mask<b16>
+      %mask_m0 = pto.pset_b16 "PAT_ALL" : !pto.mask<b16>
+      scf.for %offset_m0 = %c0_m0 to %c1024_m0 step %c128_m0 {
+        %vec_m0 = pto.vlds %ub_in_m0[%offset_m0] : !pto.ptr<si16, ub> -> !pto.vreg<128xsi16>
+        pto.vsts %vec_m0, %ub_out_m0[%offset_m0], %mask_m0 : !pto.vreg<128xsi16>, !pto.ptr<si16, ub>, !pto.mask<b16>
       }
     }
 
     pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
     pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
-    pto.set_loop_size_ubtoout %c1_i64, %c1_i64 : i64, i64
-    pto.copy_ubuf_to_gm %ub_out, %arg1, %c0_i64, %c32_i64, %c64_i64, %c0_i64, %c64_i64, %c64_i64 : !pto.ptr<i16, ub>, !pto.ptr<i16, gm>, i64, i64, i64, i64, i64, i64
+    pto.set_loop_size_ubtoout %c1_i64_m0, %c1_i64_m0 : i64, i64
+    pto.copy_ubuf_to_gm %ub_out_m0, %arg1, %c0_i64_m0, %c32_i64_m0, %c64_i64_m0, %c0_i64_m0, %c64_i64_m0, %c64_i64_m0 : !pto.ptr<si16, ub>, !pto.ptr<si16, gm>, i64, i64, i64, i64, i64, i64
     pto.barrier #pto.pipe<PIPE_ALL>
+
+    // active merged from copy_signless_i16_kernel
+
+    %c0_m1 = arith.constant 0 : index
+    %c128_m1 = arith.constant 128 : index
+    %c1024_m1 = arith.constant 1024 : index
+    %c0_i64_m1 = arith.constant 0 : i64
+    %c1_i64_m1 = arith.constant 1 : i64
+    %c32_i64_m1 = arith.constant 32 : i64
+    %c64_i64_m1 = arith.constant 64 : i64
+    %c2048_i64_m1 = arith.constant 2048 : i64
+
+    %ub_in_m1 = pto.castptr %c0_i64_m1 : i64 -> !pto.ptr<i16, ub>
+    %ub_out_m1 = pto.castptr %c2048_i64_m1 : i64 -> !pto.ptr<i16, ub>
+
+    %false_m1 = arith.constant false
+    pto.set_loop_size_outtoub %c1_i64_m1, %c1_i64_m1 : i64, i64
+    pto.copy_gm_to_ubuf %arg2, %ub_in_m1, %c0_i64_m1, %c32_i64_m1, %c64_i64_m1, %c0_i64_m1, %c0_i64_m1, %false_m1, %c0_i64_m1, %c64_i64_m1, %c64_i64_m1 : !pto.ptr<i16, gm>, !pto.ptr<i16, ub>, i64, i64, i64, i64, i64, i1, i64, i64, i64
+
+    pto.set_flag["PIPE_MTE2", "PIPE_V", "EVENT_ID0"]
+    pto.wait_flag["PIPE_MTE2", "PIPE_V", "EVENT_ID0"]
+
+    pto.vecscope {
+      %mask_m1 = pto.pset_b16 "PAT_ALL" : !pto.mask<b16>
+      scf.for %offset_m1 = %c0_m1 to %c1024_m1 step %c128_m1 {
+        %vec_m1 = pto.vlds %ub_in_m1[%offset_m1] : !pto.ptr<i16, ub> -> !pto.vreg<128xi16>
+        pto.vsts %vec_m1, %ub_out_m1[%offset_m1], %mask_m1 : !pto.vreg<128xi16>, !pto.ptr<i16, ub>, !pto.mask<b16>
+      }
+    }
+
+    pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+    pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+    pto.set_loop_size_ubtoout %c1_i64_m1, %c1_i64_m1 : i64, i64
+    pto.copy_ubuf_to_gm %ub_out_m1, %arg3, %c0_i64_m1, %c32_i64_m1, %c64_i64_m1, %c0_i64_m1, %c64_i64_m1, %c64_i64_m1 : !pto.ptr<i16, ub>, !pto.ptr<i16, gm>, i64, i64, i64, i64, i64, i64
+    pto.barrier #pto.pipe<PIPE_ALL>
+
     return
   }
 }

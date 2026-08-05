@@ -1,0 +1,113 @@
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
+  func.func @simt_float_convert_core_kernel(%arg0: !pto.ptr<i32, gm>) attributes {pto.aicore} {
+    %c0_i64 = arith.constant 0 : i64
+    %c128_i64 = arith.constant 128 : i64
+    %c32_i64 = arith.constant 32 : i64
+    %dim_z = arith.constant 1 : i32
+    %dim_y = arith.constant 1 : i32
+    %dim_x = arith.constant 32 : i32
+
+    %ub_out = pto.castptr %c0_i64 : i64 -> !pto.ptr<i32, ub>
+    pto.simt_launch @simt_float_convert_core_body<<<%dim_x, %dim_y, %dim_z>>>(%ub_out) : (!pto.ptr<i32, ub>) -> ()
+
+    pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+    pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+    pto.mte_ub_gm %ub_out, %arg0, %c128_i64
+      nburst(%c32_i64, %c128_i64, %c128_i64)
+      : !pto.ptr<i32, ub>, !pto.ptr<i32, gm>, i64, i64, i64, i64
+    pto.barrier #pto.pipe<PIPE_ALL>
+    return
+  }
+
+  func.func @simt_float_convert_core_body(%dst: !pto.ptr<i32, ub>) attributes {pto.simt_entry} {
+    %c0 = arith.constant 0 : index
+    %c1 = arith.constant 1 : index
+    %c2 = arith.constant 2 : index
+    %c3 = arith.constant 3 : index
+    %c4 = arith.constant 4 : index
+    %c5 = arith.constant 5 : index
+    %c6 = arith.constant 6 : index
+    %c7 = arith.constant 7 : index
+    %c8 = arith.constant 8 : index
+    %c9 = arith.constant 9 : index
+    %c10 = arith.constant 10 : index
+    %c11 = arith.constant 11 : index
+    %c12 = arith.constant 12 : index
+    %c13 = arith.constant 13 : index
+    %c14 = arith.constant 14 : index
+    %c15 = arith.constant 15 : index
+
+    %f32_neg = arith.constant -3.000000e+00 : f32
+    %f32_one = arith.constant 1.000000e+00 : f32
+    %f32_two = arith.constant 2.000000e+00 : f32
+    %f32_four = arith.constant 4.000000e+00 : f32
+    %f16_one = arith.constant 1.000000e+00 : f16
+    %f16_two = arith.constant 2.000000e+00 : f16
+    %f16_four = arith.constant 4.000000e+00 : f16
+    %bf16_one = arith.constant 1.000000e+00 : bf16
+    %bf16_two = arith.constant 2.000000e+00 : bf16
+    %bf16_four = arith.constant 4.000000e+00 : bf16
+    %i32_neg = arith.constant -4 : i32
+    %u32_four = arith.constant 4 : i32
+
+    %abs = pto.absf %f32_neg : f32 -> f32
+    %sqrt_f32 = pto.sqrt %f32_four : f32 -> f32
+    %sqrt_f16 = pto.sqrt %f16_four : f16 -> f16
+    %fmin = pto.fmin %f32_one, %f32_two : f32, f32 -> f32
+    %fmax = pto.fmax %bf16_one, %bf16_two : bf16, bf16 -> bf16
+    %exp = pto.exp %f32_one : f32 -> f32
+    %log = pto.log %f32_one : f32 -> f32
+    %pow = pto.pow %f32_two, %f32_four : f32, f32 -> f32
+    %pow16 = pto.pow %f16_two, %f16_four : f16, f16 -> f16
+    %ceil = pto.ceil %bf16_one : bf16 -> bf16
+    %floor = pto.floor %f32_two : f32 -> f32
+    %rint = pto.rint %f16_two : f16 -> f16
+    %round = pto.round %bf16_two : bf16 -> bf16
+    %fma = pto.fma %f32_one, %f32_two, %f32_four : f32, f32, f32 -> f32
+    %fma16 = pto.fma %f16_one, %f16_two, %f16_four : f16, f16, f16 -> f16
+    %fmabf16 = pto.fma %bf16_one, %bf16_two, %bf16_four : bf16, bf16, bf16 -> bf16
+    %s32_f32 = pto.convert %i32_neg round(r) nosat signed : i32 -> f32
+    %u32_f16 = pto.convert %u32_four round(r) nosat unsigned : i32 -> f16
+
+    %abs_i = pto.convert %abs round(z) sat signed : f32 -> i32
+    %sqrt_f32_i = pto.convert %sqrt_f32 round(z) sat signed : f32 -> i32
+    %sqrt_f16_i = pto.convert %sqrt_f16 round(z) sat signed : f16 -> i32
+    %fmin_i = pto.convert %fmin round(z) sat signed : f32 -> i32
+    %fmax_i = pto.convert %fmax round(z) sat signed : bf16 -> i32
+    %exp_i = pto.convert %exp round(z) sat signed : f32 -> i32
+    %log_i = pto.convert %log round(z) sat signed : f32 -> i32
+    %pow_i = pto.convert %pow round(z) sat signed : f32 -> i32
+    %pow16_i = pto.convert %pow16 round(z) sat signed : f16 -> i32
+    %ceil_i = pto.convert %ceil round(z) sat signed : bf16 -> i32
+    %floor_i = pto.convert %floor round(z) sat signed : f32 -> i32
+    %rint_i = pto.convert %rint round(z) sat signed : f16 -> i32
+    %round_i = pto.convert %round round(z) sat signed : bf16 -> i32
+    %fma_i = pto.convert %fma round(z) sat signed : f32 -> i32
+    %fma16_i = pto.convert %fma16 round(z) sat signed : f16 -> i32
+    %fmabf16_i = pto.convert %fmabf16 round(z) sat signed : bf16 -> i32
+    %s32_f32_i = pto.convert %s32_f32 round(z) sat signed : f32 -> i32
+    %u32_f16_i = pto.convert %u32_f16 round(z) sat unsigned : f16 -> i32
+
+    pto.store %abs_i, %dst[%c0] : !pto.ptr<i32, ub>, i32
+    pto.store %sqrt_f32_i, %dst[%c1] : !pto.ptr<i32, ub>, i32
+    pto.store %sqrt_f16_i, %dst[%c2] : !pto.ptr<i32, ub>, i32
+    pto.store %fmin_i, %dst[%c3] : !pto.ptr<i32, ub>, i32
+    pto.store %fmax_i, %dst[%c4] : !pto.ptr<i32, ub>, i32
+    pto.store %exp_i, %dst[%c5] : !pto.ptr<i32, ub>, i32
+    pto.store %log_i, %dst[%c6] : !pto.ptr<i32, ub>, i32
+    pto.store %pow_i, %dst[%c7] : !pto.ptr<i32, ub>, i32
+    pto.store %pow16_i, %dst[%c8] : !pto.ptr<i32, ub>, i32
+    pto.store %ceil_i, %dst[%c9] : !pto.ptr<i32, ub>, i32
+    pto.store %floor_i, %dst[%c10] : !pto.ptr<i32, ub>, i32
+    pto.store %rint_i, %dst[%c11] : !pto.ptr<i32, ub>, i32
+    pto.store %round_i, %dst[%c12] : !pto.ptr<i32, ub>, i32
+    pto.store %fma_i, %dst[%c13] : !pto.ptr<i32, ub>, i32
+    pto.store %fma16_i, %dst[%c14] : !pto.ptr<i32, ub>, i32
+    pto.store %fmabf16_i, %dst[%c15] : !pto.ptr<i32, ub>, i32
+    %c16 = arith.constant 16 : index
+    %c17 = arith.constant 17 : index
+    pto.store %s32_f32_i, %dst[%c16] : !pto.ptr<i32, ub>, i32
+    pto.store %u32_f16_i, %dst[%c17] : !pto.ptr<i32, ub>, i32
+    return
+  }
+}

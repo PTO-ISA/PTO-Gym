@@ -18,7 +18,7 @@ NPU_VALIDATION_COMMON_DIR="${NPU_VALIDATION_COMMON_DIR:-${ROOT_DIR}/examples/npu
 WORK_SPACE="${WORK_SPACE:-}"
 ASCEND_HOME_PATH="${ASCEND_HOME_PATH:-}"
 PTOAS_BIN="${PTOAS_BIN:-${ROOT_DIR}/build/tools/ptoas/ptoas}"
-PTOAS_FLAGS="${PTOAS_FLAGS:---pto-arch a5}"
+PTOAS_FLAGS="${PTOAS_FLAGS:---pto-backend=vpto --pto-arch a5}"
 # set he HOST_RUNNER to "ssh root@localhost" if must change user to root to access the device 
 HOST_RUNNER="${HOST_RUNNER:-}"
 CASE_NAME="${CASE_NAME:-}"
@@ -76,7 +76,7 @@ resolve_sim_lib_dir() {
 
   local -a candidates=()
   readarray -t candidates < <(
-    find "${ASCEND_HOME_PATH}" -type d -path '*/simulator/dav_3510/lib' | sort
+    find "${ASCEND_HOME_PATH}" -type d -path '*/simulator/dav_3510/lib' 2>/dev/null | sort
   )
 
   if [[ "${#candidates[@]}" -eq 1 ]]; then
@@ -105,6 +105,7 @@ mkdir -p "${WORK_SPACE}"
 WORK_SPACE="$(cd "${WORK_SPACE}" && pwd)"
 
 discover_cases() {
+  local onboard_only_prefix="onboard-only/"
   local required_files=(
     launch.cpp
     main.cpp
@@ -114,6 +115,10 @@ discover_cases() {
 
   if [[ -n "${CASE_NAME}" ]]; then
     [[ "${CASE_NAME}" != /* ]] || die "CASE_NAME must be relative to CASES_ROOT: ${CASE_NAME}"
+    if [[ "${DEVICE}" == "SIM" && "${COMPILE_ONLY}" != "1" &&
+          "${CASE_NAME}" == "${onboard_only_prefix}"* ]]; then
+      die "case ${CASE_NAME} is onboard-only and cannot run with DEVICE=SIM"
+    fi
     local requested_dir="${CASES_ROOT}/${CASE_NAME}"
     [[ -d "${requested_dir}" ]] || die "unknown case: ${CASE_NAME}"
     for f in "${required_files[@]}"; do
@@ -136,6 +141,10 @@ discover_cases() {
     [[ "${ok}" -eq 1 ]] || continue
     [[ -f "${dir}/kernel.pto" ]] || continue
     local rel="${dir#${CASES_ROOT}/}"
+    if [[ "${DEVICE}" == "SIM" && "${COMPILE_ONLY}" != "1" &&
+          "${rel}" == "${onboard_only_prefix}"* ]]; then
+      continue
+    fi
     printf "%s\n" "${rel}"
   done
 }
@@ -241,6 +250,7 @@ build_one_impl() {
   local launch_obj="${out_dir}/launch.o"
   local kernel_fatobj="${out_dir}/kernel.fatobj.o"
   local kernel_so="${out_dir}/lib${case_token}_kernel.so"
+  local -a ptoas_args=()
 
   [[ -f "${case_dir}/main.cpp" ]] || die "missing main.cpp for ${case_name}"
   [[ -f "${case_dir}/launch.cpp" ]] || die "missing launch.cpp for ${case_name}"
@@ -249,8 +259,14 @@ build_one_impl() {
   [[ -f "${case_dir}/kernel.pto" ]] ||
     die "missing kernel.pto for ${case_name}"
 
+  if [[ -f "${case_dir}/ptoas.flags" ]]; then
+    read -r -a ptoas_args < "${case_dir}/ptoas.flags"
+  else
+    read -r -a ptoas_args <<< "${PTOAS_FLAGS}"
+  fi
+
   log "[$case_name] step 1/4: emit kernel fatobj"
-  "${PTOAS_BIN}" ${PTOAS_FLAGS} \
+  "${PTOAS_BIN}" "${ptoas_args[@]}" \
     "${case_dir}/kernel.pto" -o "${kernel_fatobj}"
 
   log "[$case_name] step 2/4: build launch object"

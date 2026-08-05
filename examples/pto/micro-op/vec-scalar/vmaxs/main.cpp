@@ -28,8 +28,8 @@ using namespace PtoTestCommon;
     }                                                                            \
   } while (0)
 
-void LaunchVec_max_scalar_kernel_2d(float *v1, float *v2, void *stream);
 
+void LaunchVmaxsDeepMerged(float * p0, float * p1, void *stream);
 int main() {
   size_t elemCount_v1 = 1024;
   size_t fileSize_v1 = elemCount_v1 * sizeof(float);
@@ -62,7 +62,7 @@ int main() {
                         ACL_MEMCPY_HOST_TO_DEVICE));
   ACL_CHECK(aclrtMemcpy(v2Device, fileSize_v2, v2Host, fileSize_v2,
                         ACL_MEMCPY_HOST_TO_DEVICE));
-  LaunchVec_max_scalar_kernel_2d(v1Device, v2Device, stream);
+    LaunchVmaxsDeepMerged(v1Device, v2Device, stream);
   ACL_CHECK(aclrtSynchronizeStream(stream));
   ACL_CHECK(aclrtMemcpy(v2Host, fileSize_v2, v2Device, fileSize_v2,
                         ACL_MEMCPY_DEVICE_TO_HOST));

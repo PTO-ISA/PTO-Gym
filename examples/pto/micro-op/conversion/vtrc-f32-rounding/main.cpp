@@ -47,9 +47,8 @@ struct MrgSortExecutedNumList {
         }                                                                                        \
     } while (0)
 
-void LaunchVtrc_f32_rounding_kernel_2d(float *v1, float *v2, float *v3,
-                                       float *v4, void *stream);
 
+void LaunchVtrcF32RoundingDeepMerged(float * p0, float * p1, float * p2, float * p3, void *stream);
 int main() {
         size_t elemCount_v1 = 1024;
     size_t fileSize_v1 = elemCount_v1 * sizeof(float);
@@ -100,7 +99,13 @@ int main() {
     ACL_CHECK(aclrtMemcpy(v2Device, fileSize_v2, v2Host, fileSize_v2, ACL_MEMCPY_HOST_TO_DEVICE));
     ACL_CHECK(aclrtMemcpy(v3Device, fileSize_v3, v3Host, fileSize_v3, ACL_MEMCPY_HOST_TO_DEVICE));
     ACL_CHECK(aclrtMemcpy(v4Device, fileSize_v4, v4Host, fileSize_v4, ACL_MEMCPY_HOST_TO_DEVICE));
-        LaunchVtrc_f32_rounding_kernel_2d(v1Device, v2Device, v3Device, v4Device, stream);
+                LaunchVtrcF32RoundingDeepMerged(
+            v1Device,
+            v2Device,
+            v3Device,
+            v4Device,
+            stream
+        );
 
     ACL_CHECK(aclrtSynchronizeStream(stream));
         ACL_CHECK(aclrtMemcpy(v2Host, fileSize_v2, v2Device, fileSize_v2, ACL_MEMCPY_DEVICE_TO_HOST));

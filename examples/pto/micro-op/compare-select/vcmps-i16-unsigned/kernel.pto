@@ -1,5 +1,5 @@
 module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
-  func.func @vcmps_i16_unsigned_kernel_2d(%arg0: !pto.ptr<ui16, gm>, %arg1: !pto.ptr<ui8, gm>) attributes {pto.aicore} {
+  func.func @vcmps_i16_unsigned_kernel_2d(%arg0: !pto.ptr<ui16, gm>, %arg1: !pto.ptr<ui8, gm>) attributes {pto.kernel} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c0_i64 = arith.constant 0 : i64

@@ -15,7 +15,8 @@ from pathlib import Path
 import numpy as np
 
 
-ELEMS = 1024
+ELEMS = 32
+ACTIVE_ELEMS = 8
 SEED = 19
 
 
@@ -23,7 +24,8 @@ def generate(output_dir: Path, seed: int) -> None:
     rng = np.random.default_rng(seed)
     v1 = rng.integers(-20000, 20000, size=ELEMS, dtype=np.int16)
     v2 = np.zeros(ELEMS, dtype=np.int16)
-    golden_v2 = (v1.astype(np.int32) + 4).astype(np.int16)
+    golden_v2 = v1.copy()
+    golden_v2[:ACTIVE_ELEMS] = (v1[:ACTIVE_ELEMS].astype(np.int32) + 4).astype(np.int16)
 
     output_dir.mkdir(parents=True, exist_ok=True)
     v1.tofile(output_dir / "v1.bin")

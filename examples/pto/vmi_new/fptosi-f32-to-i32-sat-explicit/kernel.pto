@@ -1,0 +1,60 @@
+// Copyright (c) 2026 Huawei Technologies Co., Ltd.
+// This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+// CANN Open Software License Agreement Version 2.0 (the "License").
+// Please refer to the License for details. You may not use this file except in compliance with the License.
+// THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+// INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+// See LICENSE in the root of the software repository for the full text of the License.
+
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
+  // f32 -> si32 with saturate = "SAT" explicitly requested by the user.
+  //
+  // FpToSi is the direction that was newly opened up on this branch (the old
+  // VMICvtOp verifier used to reject any saturate attr on fp-to-int).  This
+  // case exercises the SAT semantics end-to-end at runtime: out-of-range f32
+  // inputs must clamp to INT32_MIN / INT32_MAX and NaN inputs must reach
+  // zero (V300 hardware saturation policy).  Without SAT, out-of-range and
+  // NaN inputs are architecturally undefined, so this case both:
+  //   (a) proves the explicit "SAT" attr does not get rejected/dropped, and
+  //   (b) validates the saturation numerics against a Python golden.
+  //
+  // 256 f32 lanes -> 256 si32 lanes  (1024 bytes each side).
+  func.func @vmi_fptosi_f32_to_i32_sat_explicit_kernel(
+      %src_gm: !pto.ptr<f32, gm>,
+      %dst_gm: !pto.ptr<si32, gm>) attributes {pto.kernel} {
+    %c0 = arith.constant 0 : index
+    %c0_i64 = arith.constant 0 : i64
+    %c1_i64 = arith.constant 1 : i64
+    %c1024_i64 = arith.constant 1024 : i64
+    %c4096_i64 = arith.constant 4096 : i64
+    %c8192_i64 = arith.constant 8192 : i64
+
+    %ub_src = pto.castptr %c0_i64 : i64 -> !pto.ptr<f32, ub>
+    %ub_dst = pto.castptr %c4096_i64 : i64 -> !pto.ptr<si32, ub>
+
+    pto.mte_gm_ub %src_gm, %ub_src, %c0_i64, %c1024_i64
+      nburst(%c1_i64, %c1024_i64, %c1024_i64)
+      : !pto.ptr<f32, gm>, !pto.ptr<f32, ub>, i64, i64, i64, i64, i64
+
+    pto.set_flag["PIPE_MTE2", "PIPE_V", "EVENT_ID0"]
+    pto.wait_flag["PIPE_MTE2", "PIPE_V", "EVENT_ID0"]
+
+    pto.vecscope {
+      %wide = pto.vmi.vload %ub_src[%c0] : !pto.ptr<f32, ub> -> !pto.vmi.vreg<256xf32>
+      // Explicit saturate = "SAT" on the FpToSi direction.  Under V300 SAT
+      // policy: overflow clamps to INT32_MIN/INT32_MAX, NaN saturates to 0.
+      %narrow = pto.vmi.vcvt %wide {saturate = "SAT"}
+          : !pto.vmi.vreg<256xf32> -> !pto.vmi.vreg<256xsi32>
+      pto.vmi.vstore %narrow, %ub_dst[%c0]
+          : !pto.vmi.vreg<256xsi32>, !pto.ptr<si32, ub>
+    }
+
+    pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+    pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+    pto.mte_ub_gm %ub_dst, %dst_gm, %c1024_i64
+      nburst(%c1_i64, %c1024_i64, %c1024_i64)
+      : !pto.ptr<si32, ub>, !pto.ptr<si32, gm>, i64, i64, i64, i64
+    pto.barrier #pto.pipe<PIPE_ALL>
+    return
+  }
+}

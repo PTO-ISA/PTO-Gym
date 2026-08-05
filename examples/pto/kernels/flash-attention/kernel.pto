@@ -96,10 +96,10 @@ module attributes {pto.target_arch = "a5"} {
 
       // Step 2: stage Q into L0A and K into L0B. K is transposed here so
       // MAD computes Q * K^T and produces a 16x32 score tile in L0C.
-      pto.mte_l1_l0a %l1_q, %l0a, %c16_i64, %c16_i64
-        : !pto.ptr<f32, l1>, !pto.ptr<f32, l0a>, i64, i64
-      pto.mte_l1_l0b %l1_k0, %l0b, %c16_i64, %c32_i64 {transpose = true}
-        : !pto.ptr<f32, l1>, !pto.ptr<f32, l0b>, i64, i64
+      pto.mte_l1_l0a %l1_q, %l0a, %c16_i64, %c16_i64, %c0_i64, %c0_i64
+        : !pto.ptr<f32, l1>, !pto.ptr<f32, l0a>, i64, i64, i64, i64
+      pto.mte_l1_l0b %l1_k0, %l0b, %c16_i64, %c32_i64, %c0_i64, %c0_i64 {transpose = true}
+        : !pto.ptr<f32, l1>, !pto.ptr<f32, l0b>, i64, i64, i64, i64
       pto.set_flag["PIPE_MTE1", "PIPE_M", "EVENT_ID0"]
       pto.wait_flag["PIPE_MTE1", "PIPE_M", "EVENT_ID0"]
       // Step 3: cube matrix multiply. Result score[row, col] is kept in L0C

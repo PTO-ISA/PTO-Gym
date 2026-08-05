@@ -1,0 +1,35 @@
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
+  func.func @simt_ldst_policy_core_kernel(%arg0: !pto.ptr<i32, gm>) attributes {pto.aicore} {
+    %dim_z = arith.constant 1 : i32
+    %dim_y = arith.constant 1 : i32
+    %dim_x = arith.constant 2 : i32
+
+    pto.simt_launch @simt_ldst_policy_core_body<<<%dim_x, %dim_y, %dim_z>>>(%arg0)
+      : (!pto.ptr<i32, gm>) -> ()
+    pto.barrier #pto.pipe<PIPE_ALL>
+    return
+  }
+
+  func.func @simt_ldst_policy_core_body(%arg0: !pto.ptr<i32, gm>) attributes {pto.simt_entry} {
+    %c1 = arith.constant 1 : index
+    %c2 = arith.constant 2 : index
+    %c3 = arith.constant 3 : index
+    %c4 = arith.constant 4 : index
+    %c8_i32 = arith.constant 8 : i32
+    %laneid = pto.get_laneid : i32
+    %base_i32 = arith.muli %laneid, %c8_i32 : i32
+    %idx0 = arith.index_castui %base_i32 : i32 to index
+    %idx1 = arith.addi %idx0, %c1 : index
+    %idx2 = arith.addi %idx0, %c2 : index
+    %idx3 = arith.addi %idx0, %c3 : index
+    %idx4 = arith.addi %idx0, %c4 : index
+
+    %v_cache = pto.ldg %arg0[%idx0] l1cache(cache) l2cache(nmfv) : !pto.ptr<i32, gm> -> i32
+    %v_uncache = pto.ldg %arg0[%idx1] l1cache(uncache) l2cache(nmfv) : !pto.ptr<i32, gm> -> i32
+    %sum = arith.addi %v_cache, %v_uncache : i32
+    pto.stg %v_cache, %arg0[%idx2] l1cache(cache) l2cache(nmfv) : !pto.ptr<i32, gm>, i32
+    pto.stg %v_uncache, %arg0[%idx3] l1cache(uncache) l2cache(nmfv) : !pto.ptr<i32, gm>, i32
+    pto.stg %sum, %arg0[%idx4] l1cache(cache) l2cache(nmfv) : !pto.ptr<i32, gm>, i32
+    return
+  }
+}

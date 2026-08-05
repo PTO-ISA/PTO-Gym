@@ -1,0 +1,140 @@
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
+  func.func @simt_packed_math_core_kernel(%arg0: !pto.ptr<i32, gm>) attributes {pto.aicore} {
+    %c0_i64 = arith.constant 0 : i64
+    %c1_i64 = arith.constant 1 : i64
+    %c128_i64 = arith.constant 128 : i64
+    %dim_z = arith.constant 1 : i32
+    %dim_y = arith.constant 1 : i32
+    %dim_x = arith.constant 1 : i32
+
+    %ub_i32 = pto.castptr %c0_i64 : i64 -> !pto.ptr<i32, ub>
+    %ub_i64 = pto.castptr %c0_i64 : i64 -> !pto.ptr<i64, ub>
+    pto.simt_launch @simt_packed_math_core_body<<<%dim_x, %dim_y, %dim_z>>>(%ub_i32, %ub_i64) : (!pto.ptr<i32, ub>, !pto.ptr<i64, ub>) -> ()
+    pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+    pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+    pto.mte_ub_gm %ub_i32, %arg0, %c128_i64
+      nburst(%c1_i64, %c128_i64, %c128_i64)
+      : !pto.ptr<i32, ub>, !pto.ptr<i32, gm>, i64, i64, i64, i64
+    pto.barrier #pto.pipe<PIPE_ALL>
+    return
+  }
+
+  func.func @simt_packed_math_core_body(%ub_i32: !pto.ptr<i32, ub>, %ub_i64: !pto.ptr<i64, ub>) attributes {pto.simt_entry} {
+    %c0 = arith.constant 0 : index
+    %c1 = arith.constant 1 : index
+    %c2 = arith.constant 2 : index
+    %c3 = arith.constant 3 : index
+    %c4 = arith.constant 4 : index
+    %c5 = arith.constant 5 : index
+    %c6 = arith.constant 6 : index
+    %c7 = arith.constant 7 : index
+    %c8 = arith.constant 8 : index
+    %c9 = arith.constant 9 : index
+    %c10 = arith.constant 10 : index
+    %c11 = arith.constant 11 : index
+    %c12 = arith.constant 12 : index
+    %c13 = arith.constant 13 : index
+    %c14 = arith.constant 14 : index
+    %c15 = arith.constant 15 : index
+    %c26 = arith.constant 26 : index
+    %c27 = arith.constant 27 : index
+    %f2_off0 = arith.constant 8 : index
+    %f2_off1 = arith.constant 9 : index
+    %f2_off2 = arith.constant 10 : index
+    %f2_off3 = arith.constant 11 : index
+    %f2_off4 = arith.constant 12 : index
+    %c0_i64 = arith.constant 0 : i64
+    %shfl_idx = arith.constant 0 : i32
+
+    %h2_zero = arith.constant dense<0.000000e+00> : vector<2xf16>
+    %h2_one = arith.constant dense<1.000000e+00> : vector<2xf16>
+    %h2_two = arith.constant dense<2.000000e+00> : vector<2xf16>
+    %h2_four = arith.constant dense<4.000000e+00> : vector<2xf16>
+    %h2_neg = arith.constant dense<[-1.000000e+00, -2.000000e+00]> : vector<2xf16>
+    %h2_12 = arith.constant dense<[1.000000e+00, 2.000000e+00]> : vector<2xf16>
+    %h2_21 = arith.constant dense<[2.000000e+00, 1.000000e+00]> : vector<2xf16>
+    %b2_one = arith.constant dense<1.000000e+00> : vector<2xbf16>
+    %b2_two = arith.constant dense<2.000000e+00> : vector<2xbf16>
+    %b2_neg = arith.constant dense<[-1.000000e+00, -2.000000e+00]> : vector<2xbf16>
+    %b2_12 = arith.constant dense<[1.000000e+00, 2.000000e+00]> : vector<2xbf16>
+    %b2_21 = arith.constant dense<[2.000000e+00, 1.000000e+00]> : vector<2xbf16>
+    %f2_12 = arith.constant dense<[1.000000e+00, 2.000000e+00]> : vector<2xf32>
+
+    %shfl = pto.shuffle_idx %h2_one, %shfl_idx {width = 16 : i32} : vector<2xf16>, i32 -> vector<2xf16>
+    %sqrt_h2 = pto.sqrt %h2_four : vector<2xf16> -> vector<2xf16>
+    %abs_h2 = pto.absf %h2_neg : vector<2xf16> -> vector<2xf16>
+    %exp_h2 = pto.exp %h2_zero : vector<2xf16> -> vector<2xf16>
+    %log_h2 = pto.log %h2_one : vector<2xf16> -> vector<2xf16>
+    %min_h2 = pto.fmin %h2_12, %h2_21 : vector<2xf16>, vector<2xf16> -> vector<2xf16>
+    %pow_h2 = pto.pow %h2_two, %h2_two : vector<2xf16>, vector<2xf16> -> vector<2xf16>
+    %fma_h2 = pto.fma %h2_one, %h2_two, %h2_one : vector<2xf16>, vector<2xf16>, vector<2xf16> -> vector<2xf16>
+    %f32_to_h2 = pto.convert %f2_12 round(r) nosat : vector<2xf32> -> vector<2xf16>
+    %abs_b2 = pto.absf %b2_neg : vector<2xbf16> -> vector<2xbf16>
+    %max_b2 = pto.fmax %b2_12, %b2_21 : vector<2xbf16>, vector<2xbf16> -> vector<2xbf16>
+    %fma_b2 = pto.fma %b2_one, %b2_two, %b2_one : vector<2xbf16>, vector<2xbf16>, vector<2xbf16> -> vector<2xbf16>
+    %f32_to_b2 = pto.convert %f2_12 round(r) nosat : vector<2xf32> -> vector<2xbf16>
+    %h2_to_f32 = pto.convert %h2_12 round(r) nosat : vector<2xf16> -> vector<2xf32>
+    %b2_to_f32 = pto.convert %b2_12 round(r) nosat : vector<2xbf16> -> vector<2xf32>
+    %f32_to_f8e4 = pto.convert %f2_12 round(r) nosat : vector<2xf32> -> vector<2xf8E4M3FN>
+    %f32_to_f8e5 = pto.convert %f2_12 round(r) nosat : vector<2xf32> -> vector<2xf8E5M2>
+    %f32_to_hif8 = pto.convert %f2_12 round(a) nosat : vector<2xf32> -> !pto.hif8x2
+    %f8e4_to_f32 = pto.convert %f32_to_f8e4 round(r) nosat : vector<2xf8E4M3FN> -> vector<2xf32>
+    %f8e5_to_f32 = pto.convert %f32_to_f8e5 round(r) nosat : vector<2xf8E5M2> -> vector<2xf32>
+    %hif8_to_f32 = pto.convert %f32_to_hif8 round(a) nosat : !pto.hif8x2 -> vector<2xf32>
+
+    %shfl_bits = llvm.bitcast %shfl : vector<2xf16> to i32
+    %sqrt_h2_bits = llvm.bitcast %sqrt_h2 : vector<2xf16> to i32
+    %abs_h2_bits = llvm.bitcast %abs_h2 : vector<2xf16> to i32
+    %exp_h2_bits = llvm.bitcast %exp_h2 : vector<2xf16> to i32
+    %log_h2_bits = llvm.bitcast %log_h2 : vector<2xf16> to i32
+    %min_h2_bits = llvm.bitcast %min_h2 : vector<2xf16> to i32
+    %pow_h2_bits = llvm.bitcast %pow_h2 : vector<2xf16> to i32
+    %fma_h2_bits = llvm.bitcast %fma_h2 : vector<2xf16> to i32
+    %f32_to_h2_bits = llvm.bitcast %f32_to_h2 : vector<2xf16> to i32
+    %abs_b2_bits = llvm.bitcast %abs_b2 : vector<2xbf16> to i32
+    %max_b2_bits = llvm.bitcast %max_b2 : vector<2xbf16> to i32
+    %fma_b2_bits = llvm.bitcast %fma_b2 : vector<2xbf16> to i32
+    %f32_to_b2_bits = llvm.bitcast %f32_to_b2 : vector<2xbf16> to i32
+    %h2_to_f32_bits = llvm.bitcast %h2_to_f32 : vector<2xf32> to i64
+    %b2_to_f32_bits = llvm.bitcast %b2_to_f32 : vector<2xf32> to i64
+    %ub_f8e4 = pto.castptr %c0_i64 : i64 -> !pto.ptr<vector<2xf8E4M3FN>, ub>
+    %ub_f8e5 = pto.castptr %c0_i64 : i64 -> !pto.ptr<vector<2xf8E5M2>, ub>
+    %ub_hif8 = pto.castptr %c0_i64 : i64 -> !pto.ptr<!pto.hif8x2, ub>
+    %ub_i16 = pto.castptr %c0_i64 : i64 -> !pto.ptr<i16, ub>
+    pto.store %f32_to_f8e4, %ub_f8e4[%c26] : !pto.ptr<vector<2xf8E4M3FN>, ub>, vector<2xf8E4M3FN>
+    pto.store %f32_to_f8e5, %ub_f8e5[%c27] : !pto.ptr<vector<2xf8E5M2>, ub>, vector<2xf8E5M2>
+    pto.store %f32_to_hif8, %ub_hif8[%c15] : !pto.ptr<!pto.hif8x2, ub>, !pto.hif8x2
+    %f8e4_bits16 = pto.load %ub_i16[%c26] : !pto.ptr<i16, ub> -> i16
+    %f8e5_bits16 = pto.load %ub_i16[%c27] : !pto.ptr<i16, ub> -> i16
+    %hif8_bits16 = pto.load %ub_i16[%c15] : !pto.ptr<i16, ub> -> i16
+    %f8e4_bits = arith.extui %f8e4_bits16 : i16 to i32
+    %f8e5_bits = arith.extui %f8e5_bits16 : i16 to i32
+    %hif8_bits = arith.extui %hif8_bits16 : i16 to i32
+    %f8e4_to_f32_bits = llvm.bitcast %f8e4_to_f32 : vector<2xf32> to i64
+    %f8e5_to_f32_bits = llvm.bitcast %f8e5_to_f32 : vector<2xf32> to i64
+    %hif8_to_f32_bits = llvm.bitcast %hif8_to_f32 : vector<2xf32> to i64
+
+    pto.store %shfl_bits, %ub_i32[%c0] : !pto.ptr<i32, ub>, i32
+    pto.store %sqrt_h2_bits, %ub_i32[%c1] : !pto.ptr<i32, ub>, i32
+    pto.store %abs_h2_bits, %ub_i32[%c2] : !pto.ptr<i32, ub>, i32
+    pto.store %exp_h2_bits, %ub_i32[%c3] : !pto.ptr<i32, ub>, i32
+    pto.store %log_h2_bits, %ub_i32[%c4] : !pto.ptr<i32, ub>, i32
+    pto.store %min_h2_bits, %ub_i32[%c5] : !pto.ptr<i32, ub>, i32
+    pto.store %pow_h2_bits, %ub_i32[%c6] : !pto.ptr<i32, ub>, i32
+    pto.store %fma_h2_bits, %ub_i32[%c7] : !pto.ptr<i32, ub>, i32
+    pto.store %f32_to_h2_bits, %ub_i32[%c8] : !pto.ptr<i32, ub>, i32
+    pto.store %abs_b2_bits, %ub_i32[%c9] : !pto.ptr<i32, ub>, i32
+    pto.store %max_b2_bits, %ub_i32[%c10] : !pto.ptr<i32, ub>, i32
+    pto.store %fma_b2_bits, %ub_i32[%c11] : !pto.ptr<i32, ub>, i32
+    pto.store %f32_to_b2_bits, %ub_i32[%c12] : !pto.ptr<i32, ub>, i32
+    pto.store %f8e4_bits, %ub_i32[%c13] : !pto.ptr<i32, ub>, i32
+    pto.store %f8e5_bits, %ub_i32[%c14] : !pto.ptr<i32, ub>, i32
+    pto.store %hif8_bits, %ub_i32[%c15] : !pto.ptr<i32, ub>, i32
+    pto.store %h2_to_f32_bits, %ub_i64[%f2_off0] : !pto.ptr<i64, ub>, i64
+    pto.store %b2_to_f32_bits, %ub_i64[%f2_off1] : !pto.ptr<i64, ub>, i64
+    pto.store %f8e4_to_f32_bits, %ub_i64[%f2_off2] : !pto.ptr<i64, ub>, i64
+    pto.store %f8e5_to_f32_bits, %ub_i64[%f2_off3] : !pto.ptr<i64, ub>, i64
+    pto.store %hif8_to_f32_bits, %ub_i64[%f2_off4] : !pto.ptr<i64, ub>, i64
+    return
+  }
+}

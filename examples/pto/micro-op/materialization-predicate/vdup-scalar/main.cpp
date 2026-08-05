@@ -47,8 +47,8 @@ struct MrgSortExecutedNumList {
         }                                                                                        \
     } while (0)
 
-void LaunchVdup_scalar_kernel_2d(float *v1, void *stream);
 
+void LaunchVdupScalarDeepMerged(float * p0, void *stream);
 int main() {
         size_t elemCount_v1 = 1024;
     size_t fileSize_v1 = elemCount_v1 * sizeof(float);
@@ -75,7 +75,7 @@ int main() {
 
         ReadFile("./v1.bin", fileSize_v1, v1Host, fileSize_v1);
         ACL_CHECK(aclrtMemcpy(v1Device, fileSize_v1, v1Host, fileSize_v1, ACL_MEMCPY_HOST_TO_DEVICE));
-        LaunchVdup_scalar_kernel_2d(v1Device, stream);
+                LaunchVdupScalarDeepMerged(v1Device, stream);
 
     ACL_CHECK(aclrtSynchronizeStream(stream));
         ACL_CHECK(aclrtMemcpy(v1Host, fileSize_v1, v1Device, fileSize_v1, ACL_MEMCPY_DEVICE_TO_HOST));

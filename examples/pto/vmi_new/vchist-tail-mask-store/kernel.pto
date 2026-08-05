@@ -1,0 +1,56 @@
+// Copyright (c) 2026 Huawei Technologies Co., Ltd.
+// This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+// CANN Open Software License Agreement Version 2.0 (the "License").
+// Please refer to the License for details. You may not use this file except in compliance with the License.
+// THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+// INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+// See LICENSE in the root of the software repository for the full text of the License.
+
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
+  func.func @vmi_vchist_tail_mask_store_kernel(
+      %src_gm: !pto.ptr<ui8, gm>, %acc_gm: !pto.ptr<ui16, gm>,
+      %dst_gm: !pto.ptr<ui16, gm>) attributes {pto.kernel} {
+    %c0 = arith.constant 0 : index
+    %c300 = arith.constant 300 : index
+    %c0_i64 = arith.constant 0 : i64
+    %c1_i64 = arith.constant 1 : i64
+    %c512_i64 = arith.constant 512 : i64
+    %c1024_i64 = arith.constant 1024 : i64
+    %c2048_i64 = arith.constant 2048 : i64
+
+    %ub_src = pto.castptr %c0_i64 : i64 -> !pto.ptr<ui8, ub>
+    %ub_acc = pto.castptr %c1024_i64 : i64 -> !pto.ptr<ui16, ub>
+    %ub_dst = pto.castptr %c2048_i64 : i64 -> !pto.ptr<ui16, ub>
+
+    pto.mte_gm_ub %src_gm, %ub_src, %c0_i64, %c512_i64
+      nburst(%c1_i64, %c512_i64, %c512_i64)
+      : !pto.ptr<ui8, gm>, !pto.ptr<ui8, ub>, i64, i64, i64, i64, i64
+    pto.mte_gm_ub %acc_gm, %ub_acc, %c0_i64, %c512_i64
+      nburst(%c1_i64, %c512_i64, %c512_i64)
+      : !pto.ptr<ui16, gm>, !pto.ptr<ui16, ub>, i64, i64, i64, i64, i64
+
+    pto.set_flag["PIPE_MTE2", "PIPE_V", "EVENT_ID0"]
+    pto.wait_flag["PIPE_MTE2", "PIPE_V", "EVENT_ID0"]
+
+    pto.vecscope {
+      %source = pto.vmi.vload %ub_src[%c0]
+          : !pto.ptr<ui8, ub> -> !pto.vmi.vreg<512xui8>
+      %acc = pto.vmi.vload %ub_acc[%c0]
+          : !pto.ptr<ui16, ub> -> !pto.vmi.vreg<256xui16>
+      %mask = pto.vmi.create_mask %c300 : index -> !pto.vmi.mask<512xpred>
+      %hist = pto.vmi.vchist %acc, %source, %mask
+          : !pto.vmi.vreg<256xui16>, !pto.vmi.vreg<512xui8>,
+            !pto.vmi.mask<512xpred> -> !pto.vmi.vreg<256xui16>
+      pto.vmi.vstore %hist, %ub_dst[%c0]
+          : !pto.vmi.vreg<256xui16>, !pto.ptr<ui16, ub>
+    }
+
+    pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+    pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+    pto.mte_ub_gm %ub_dst, %dst_gm, %c512_i64
+      nburst(%c1_i64, %c512_i64, %c512_i64)
+      : !pto.ptr<ui16, ub>, !pto.ptr<ui16, gm>, i64, i64, i64, i64
+    pto.barrier #pto.pipe<PIPE_ALL>
+    return
+  }
+}

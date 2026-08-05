@@ -1,0 +1,45 @@
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
+  func.func @simt_memory_core_kernel(%arg0: !pto.ptr<i32, gm>) attributes {pto.aicore} {
+    %c0_i64 = arith.constant 0 : i64
+    %c128_i64 = arith.constant 128 : i64
+    %c32_i64 = arith.constant 32 : i64
+    %dim_z = arith.constant 1 : i32
+    %dim_y = arith.constant 32 : i32
+    %dim_x = arith.constant 32 : i32
+
+    %ub = pto.castptr %c0_i64 : i64 -> !pto.ptr<i32, ub>
+    pto.mte_gm_ub %arg0, %ub, %c0_i64, %c128_i64
+      nburst(%c32_i64, %c128_i64, %c128_i64)
+      : !pto.ptr<i32, gm>, !pto.ptr<i32, ub>, i64, i64, i64, i64, i64
+
+    pto.set_flag["PIPE_MTE2", "PIPE_V", "EVENT_ID0"]
+    pto.wait_flag["PIPE_MTE2", "PIPE_V", "EVENT_ID0"]
+
+    pto.simt_launch @simt_memory_core_body<<<%dim_x, %dim_y, %dim_z>>>(%ub) : (!pto.ptr<i32, ub>) -> ()
+
+    pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+    pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+    pto.mte_ub_gm %ub, %arg0, %c128_i64
+      nburst(%c32_i64, %c128_i64, %c128_i64)
+      : !pto.ptr<i32, ub>, !pto.ptr<i32, gm>, i64, i64, i64, i64
+    pto.barrier #pto.pipe<PIPE_ALL>
+    return
+  }
+
+  func.func @simt_memory_core_body(%buf: !pto.ptr<i32, ub>) attributes {pto.simt_entry} {
+    %tx = pto.get_tid_x : i32
+    %ty = pto.get_tid_y : i32
+    %c32_i32 = arith.constant 32 : i32
+    %c1000_i32 = arith.constant 1000 : i32
+    %c10_i32 = arith.constant 10 : i32
+    %row = arith.muli %ty, %c32_i32 : i32
+    %dst_i32 = arith.addi %row, %tx : i32
+    %dst_idx = arith.index_castui %dst_i32 : i32 to index
+
+    %scaled_y = arith.muli %ty, %c10_i32 : i32
+    %value = arith.addi %dst_i32, %scaled_y : i32
+    %final = arith.addi %value, %c1000_i32 : i32
+    pto.store %final, %buf[%dst_idx] : !pto.ptr<i32, ub>, i32
+    return
+  }
+}
