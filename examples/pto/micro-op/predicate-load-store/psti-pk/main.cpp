@@ -31,8 +31,8 @@ using namespace PtoTestCommon;
     }                                                                            \
   } while (0)
 
-void LaunchPsti_pk_kernel_2d(uint32_t *v1, void *stream);
 
+void LaunchPstiPkDeepMerged(uint32_t * p0, void *stream);
 int main() {
   size_t elemCount_v1 = 8;
   size_t fileSize_v1 = elemCount_v1 * sizeof(uint32_t);
@@ -59,7 +59,7 @@ int main() {
   ReadFile("./v1.bin", fileSize_v1, v1Host, fileSize_v1);
   ACL_CHECK(aclrtMemcpy(v1Device, fileSize_v1, v1Host, fileSize_v1, ACL_MEMCPY_HOST_TO_DEVICE));
 
-  LaunchPsti_pk_kernel_2d(v1Device, stream);
+    LaunchPstiPkDeepMerged(v1Device, stream);
 
   ACL_CHECK(aclrtSynchronizeStream(stream));
   ACL_CHECK(aclrtMemcpy(v1Host, fileSize_v1, v1Device, fileSize_v1, ACL_MEMCPY_DEVICE_TO_HOST));

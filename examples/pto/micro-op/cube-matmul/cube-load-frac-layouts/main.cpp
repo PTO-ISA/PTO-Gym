@@ -47,7 +47,6 @@ struct MrgSortExecutedNumList {
     }                                                                            \
   } while (0)
 
-void LaunchCube_load_frac_nd2nz_kernel(__fp16 *src, __fp16 *id, float *out, void *stream);
 
 static bool readExact(const char *path, void *dst, size_t size) {
     size_t inputSize = size;
@@ -58,6 +57,7 @@ static bool writeExact(const char *path, void *src, size_t size) {
     return WriteFile(path, src, size);
 }
 
+void LaunchCubeLoadFracLayoutsDeepMerged(__fp16 * p0, __fp16 * p1, float * p2, void *stream);
 int main() {
     constexpr size_t kNd2NzCase1LhsElem = 40 * 50;
     constexpr size_t kNd2NzCase1RhsElem = 50 * 60;
@@ -114,8 +114,7 @@ int main() {
     ACL_CHECK(aclrtMemcpy(outNd2nzCase1Device, kNd2NzCase1OutSize, outNd2nzCase1Host,
                           kNd2NzCase1OutSize, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    LaunchCube_load_frac_nd2nz_kernel(nd2nzCase1RhsDevice, nd2nzCase1LhsDevice,
-                                      outNd2nzCase1Device, stream);
+        LaunchCubeLoadFracLayoutsDeepMerged(nd2nzCase1RhsDevice, nd2nzCase1LhsDevice, outNd2nzCase1Device, stream);
     ACL_CHECK(aclrtSynchronizeStream(stream));
 
     ACL_CHECK(aclrtMemcpy(outNd2nzCase1Host, kNd2NzCase1OutSize, outNd2nzCase1Device,

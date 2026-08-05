@@ -1,0 +1,41 @@
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
+  func.func @simt_atomic_f32_core_kernel(%arg0: !pto.ptr<f32, gm>) attributes {pto.aicore} {
+    %c0 = arith.constant 0 : index
+    %c1 = arith.constant 1 : index
+    %c2 = arith.constant 2 : index
+    %c3 = arith.constant 3 : index
+    %c4 = arith.constant 4 : index
+    %c5 = arith.constant 5 : index
+    %c6 = arith.constant 6 : index
+    %c7 = arith.constant 7 : index
+    %c8 = arith.constant 8 : index
+    %c9 = arith.constant 9 : index
+    %c16 = arith.constant 16 : index
+    %c17 = arith.constant 17 : index
+    %c18 = arith.constant 18 : index
+    %c19 = arith.constant 19 : index
+    %c20 = arith.constant 20 : index
+    %v5 = arith.constant 5.000000e+00 : f32
+    %v10 = arith.constant 1.000000e+01 : f32
+    %v15 = arith.constant 1.500000e+01 : f32
+
+    %ptr_max = pto.addptr %arg0, %c0 : !pto.ptr<f32, gm> -> !pto.ptr<f32, gm>
+    %old_max = pto.atomic_max %ptr_max, %v15 l2cache(nmfv) : !pto.ptr<f32, gm>, f32 -> f32
+    %ptr_min = pto.addptr %arg0, %c1 : !pto.ptr<f32, gm> -> !pto.ptr<f32, gm>
+    %old_min = pto.atomic_min %ptr_min, %v5 l2cache(nmfv) : !pto.ptr<f32, gm>, f32 -> f32
+    %ptr_exch = pto.addptr %arg0, %c2 : !pto.ptr<f32, gm> -> !pto.ptr<f32, gm>
+    %old_exch = pto.atomic_exch %ptr_exch, %v15 l2cache(nmfv) : !pto.ptr<f32, gm>, f32 -> f32
+    %ptr_cas_success = pto.addptr %arg0, %c3 : !pto.ptr<f32, gm> -> !pto.ptr<f32, gm>
+    %old_cas_success = pto.atomic_cas %ptr_cas_success, %v10, %v15 l2cache(nmfv) : !pto.ptr<f32, gm>, f32 -> f32
+    %ptr_cas_fail = pto.addptr %arg0, %c4 : !pto.ptr<f32, gm> -> !pto.ptr<f32, gm>
+    %old_cas_fail = pto.atomic_cas %ptr_cas_fail, %v10, %v15 l2cache(nmfv) : !pto.ptr<f32, gm>, f32 -> f32
+
+    pto.store %old_max, %arg0[%c16] : !pto.ptr<f32, gm>, f32
+    pto.store %old_min, %arg0[%c17] : !pto.ptr<f32, gm>, f32
+    pto.store %old_exch, %arg0[%c18] : !pto.ptr<f32, gm>, f32
+    pto.store %old_cas_success, %arg0[%c19] : !pto.ptr<f32, gm>, f32
+    pto.store %old_cas_fail, %arg0[%c20] : !pto.ptr<f32, gm>, f32
+    pto.barrier #pto.pipe<PIPE_ALL>
+    return
+  }
+}

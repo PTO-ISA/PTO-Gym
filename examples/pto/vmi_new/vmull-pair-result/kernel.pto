@@ -1,0 +1,97 @@
+// Copyright (c) 2026 Huawei Technologies Co., Ltd.
+// This program is free software, you can redistribute it and/or modify it under
+// the terms and conditions of CANN Open Software License Agreement Version 2.0
+// (the "License"). Please refer to the License for details. You may not use
+// this file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON
+// AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+// INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS
+// FOR A PARTICULAR PURPOSE. See LICENSE in the root of the software repository
+// for the full text of the License.
+
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
+  func.func @vmi_vmull_pair_result_kernel(
+      %lhs_gm: !pto.ptr<i32, gm>, %rhs_gm: !pto.ptr<i32, gm>,
+      %low_gm: !pto.ptr<i32, gm>, %high_gm: !pto.ptr<i32, gm>)
+      attributes {pto.kernel} {
+    %c0 = arith.constant 0 : index
+    %c64 = arith.constant 64 : index
+    %c128 = arith.constant 128 : index
+    %c0_i64 = arith.constant 0 : i64
+    %c1_i64 = arith.constant 1 : i64
+    %c768_i64 = arith.constant 768 : i64
+    %c1024_i64 = arith.constant 1024 : i64
+    %c2048_i64 = arith.constant 2048 : i64
+    %c3072_i64 = arith.constant 3072 : i64
+
+    %ub_lhs = pto.castptr %c0_i64 : i64 -> !pto.ptr<i32, ub>
+    %ub_rhs = pto.castptr %c1024_i64 : i64 -> !pto.ptr<i32, ub>
+    %ub_low = pto.castptr %c2048_i64 : i64 -> !pto.ptr<i32, ub>
+    %ub_high = pto.castptr %c3072_i64 : i64 -> !pto.ptr<i32, ub>
+    %ub_lhs_u = pto.castptr %c0_i64 : i64 -> !pto.ptr<ui32, ub>
+    %ub_rhs_u = pto.castptr %c1024_i64 : i64 -> !pto.ptr<ui32, ub>
+    %ub_low_u = pto.castptr %c2048_i64 : i64 -> !pto.ptr<ui32, ub>
+    %ub_high_u = pto.castptr %c3072_i64 : i64 -> !pto.ptr<ui32, ub>
+
+    pto.mte_gm_ub %lhs_gm, %ub_lhs, %c0_i64, %c768_i64
+      nburst(%c1_i64, %c768_i64, %c768_i64)
+      : !pto.ptr<i32, gm>, !pto.ptr<i32, ub>, i64, i64, i64, i64, i64
+    pto.mte_gm_ub %rhs_gm, %ub_rhs, %c0_i64, %c768_i64
+      nburst(%c1_i64, %c768_i64, %c768_i64)
+      : !pto.ptr<i32, gm>, !pto.ptr<i32, ub>, i64, i64, i64, i64, i64
+
+    pto.set_flag["PIPE_MTE2", "PIPE_V", "EVENT_ID0"]
+    pto.wait_flag["PIPE_MTE2", "PIPE_V", "EVENT_ID0"]
+
+    pto.vecscope {
+      // One physical register: signed high half and sparse-mask zeroing.
+      %signed_lhs = pto.vmi.vload %ub_lhs[%c0]
+          : !pto.ptr<i32, ub> -> !pto.vmi.vreg<64xi32>
+      %signed_rhs = pto.vmi.vload %ub_rhs[%c0]
+          : !pto.ptr<i32, ub> -> !pto.vmi.vreg<64xi32>
+      %signed_mask = "pto.vmi.constant_mask"() {
+        value = dense<[
+          true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false,
+          false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false,
+          false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false,
+          false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true
+        ]> : tensor<64xi1>
+      } : () -> !pto.vmi.mask<64xpred>
+      %signed_low, %signed_high = pto.vmi.vmull
+          %signed_lhs, %signed_rhs, %signed_mask {pmode = "zero"}
+          : !pto.vmi.vreg<64xi32>, !pto.vmi.vreg<64xi32>,
+            !pto.vmi.mask<64xpred>
+          -> !pto.vmi.vreg<64xi32>, !pto.vmi.vreg<64xi32>
+      pto.vmi.vstore %signed_low, %ub_low[%c0]
+          : !pto.vmi.vreg<64xi32>, !pto.ptr<i32, ub>
+      pto.vmi.vstore %signed_high, %ub_high[%c0]
+          : !pto.vmi.vreg<64xi32>, !pto.ptr<i32, ub>
+
+      // Two physical registers: unsigned high-half semantics and expansion.
+      %unsigned_lhs = pto.vmi.vload %ub_lhs_u[%c64]
+          : !pto.ptr<ui32, ub> -> !pto.vmi.vreg<128xui32>
+      %unsigned_rhs = pto.vmi.vload %ub_rhs_u[%c64]
+          : !pto.ptr<ui32, ub> -> !pto.vmi.vreg<128xui32>
+      %unsigned_mask = pto.vmi.create_mask %c128 : index -> !pto.vmi.mask<128xpred>
+      %unsigned_low, %unsigned_high = pto.vmi.vmull
+          %unsigned_lhs, %unsigned_rhs, %unsigned_mask
+          : !pto.vmi.vreg<128xui32>, !pto.vmi.vreg<128xui32>,
+            !pto.vmi.mask<128xpred>
+          -> !pto.vmi.vreg<128xui32>, !pto.vmi.vreg<128xui32>
+      pto.vmi.vstore %unsigned_low, %ub_low_u[%c64]
+          : !pto.vmi.vreg<128xui32>, !pto.ptr<ui32, ub>
+      pto.vmi.vstore %unsigned_high, %ub_high_u[%c64]
+          : !pto.vmi.vreg<128xui32>, !pto.ptr<ui32, ub>
+    }
+
+    pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+    pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+    pto.mte_ub_gm %ub_low, %low_gm, %c768_i64
+      nburst(%c1_i64, %c768_i64, %c768_i64)
+      : !pto.ptr<i32, ub>, !pto.ptr<i32, gm>, i64, i64, i64, i64
+    pto.mte_ub_gm %ub_high, %high_gm, %c768_i64
+      nburst(%c1_i64, %c768_i64, %c768_i64)
+      : !pto.ptr<i32, ub>, !pto.ptr<i32, gm>, i64, i64, i64, i64
+    pto.barrier #pto.pipe<PIPE_ALL>
+    return
+  }
+}

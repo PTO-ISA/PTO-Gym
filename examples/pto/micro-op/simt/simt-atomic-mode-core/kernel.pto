@@ -1,0 +1,33 @@
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
+  func.func @simt_atomic_mode_core_kernel(%arg0: !pto.ptr<i32, gm>) attributes {pto.aicore} {
+    %c0 = arith.constant 0 : index
+    %c1 = arith.constant 1 : index
+    %c2 = arith.constant 2 : index
+    %c3 = arith.constant 3 : index
+    %c4 = arith.constant 4 : index
+    %c5 = arith.constant 5 : index
+    %c6 = arith.constant 6 : index
+    %c7 = arith.constant 7 : index
+    %c16 = arith.constant 16 : index
+    %c17 = arith.constant 17 : index
+    %c18 = arith.constant 18 : index
+    %c19 = arith.constant 19 : index
+    %v5 = arith.constant 5 : i32
+
+    %ptr0 = pto.addptr %arg0, %c0 : !pto.ptr<i32, gm> -> !pto.ptr<i32, gm>
+    %old0 = pto.atomic_add %ptr0, %v5 l2cache(nmfv) signed : !pto.ptr<i32, gm>, i32 -> i32
+    %ptr1 = pto.addptr %arg0, %c1 : !pto.ptr<i32, gm> -> !pto.ptr<i32, gm>
+    %old1 = pto.atomic_add %ptr1, %v5 l2cache(naci) signed : !pto.ptr<i32, gm>, i32 -> i32
+    %ptr2 = pto.addptr %arg0, %c2 : !pto.ptr<i32, gm> -> !pto.ptr<i32, gm>
+    %old2 = pto.atomic_add %ptr2, %v5 l2cache(wbhred) signed : !pto.ptr<i32, gm>, i32 -> i32
+    %ptr3 = pto.addptr %arg0, %c3 : !pto.ptr<i32, gm> -> !pto.ptr<i32, gm>
+    %old3 = pto.atomic_add %ptr3, %v5 l2cache(wtsred) signed : !pto.ptr<i32, gm>, i32 -> i32
+
+    pto.store %old0, %arg0[%c16] : !pto.ptr<i32, gm>, i32
+    pto.store %old1, %arg0[%c17] : !pto.ptr<i32, gm>, i32
+    pto.store %old2, %arg0[%c18] : !pto.ptr<i32, gm>, i32
+    pto.store %old3, %arg0[%c19] : !pto.ptr<i32, gm>, i32
+    pto.barrier #pto.pipe<PIPE_ALL>
+    return
+  }
+}

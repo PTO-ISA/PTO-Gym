@@ -7,7 +7,7 @@
 // Validate one representative `BRC_BLK` load.
 
 module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
-  func.func @vabs_kernel_2d(%arg0: !pto.ptr<ui8, gm>, %arg1: !pto.ptr<ui8, gm>) attributes {pto.aicore} {
+  func.func @vabs_kernel_2d(%arg0: !pto.ptr<ui8, gm>, %arg1: !pto.ptr<ui8, gm>) attributes {pto.kernel} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c256 = arith.constant 256 : index

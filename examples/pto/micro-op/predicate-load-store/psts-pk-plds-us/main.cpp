@@ -30,9 +30,8 @@ using namespace PtoTestCommon;
     }                                                                            \
   } while (0)
 
-void LaunchPsts_pk_plds_us_kernel_2d(float *v1, unsigned char *v2,
-                                     unsigned char *v3, void *stream);
 
+void LaunchPstsPkPldsUsDeepMerged(float * p0, unsigned char * p1, unsigned char * p2, void *stream);
 int main() {
   size_t fileSize_v1 = 1024 * sizeof(float);
   size_t fileSize_v2 = 1024 * sizeof(unsigned char);
@@ -72,7 +71,7 @@ int main() {
   ACL_CHECK(aclrtMemcpy(v2Device, fileSize_v2, v2Host, fileSize_v2, ACL_MEMCPY_HOST_TO_DEVICE));
   ACL_CHECK(aclrtMemcpy(v3Device, fileSize_v3, v3Host, fileSize_v3, ACL_MEMCPY_HOST_TO_DEVICE));
 
-  LaunchPsts_pk_plds_us_kernel_2d(v1Device, v2Device, v3Device, stream);
+    LaunchPstsPkPldsUsDeepMerged(v1Device, v2Device, v3Device, stream);
 
   ACL_CHECK(aclrtSynchronizeStream(stream));
   ACL_CHECK(aclrtMemcpy(v3Host, fileSize_v3, v3Device, fileSize_v3, ACL_MEMCPY_DEVICE_TO_HOST));

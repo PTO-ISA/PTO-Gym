@@ -5,17 +5,9 @@
 // THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
 // INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 // See LICENSE in the root of the software repository for the full text of the License.
-
-// -----------------------------------------------------------------------------
-// case: micro-op/rearrangement/vusqz
-// family: rearrangement
-// target_ops: pto.vusqz
-// scenarios: predicate-driven-rearrangement, prefix-count
-// -----------------------------------------------------------------------------
 #ifndef __VEC_SCOPE__
 #define __VEC_SCOPE__
 #endif
-
 #if defined(__CCE_AICORE__) && defined(__NPU_ARCH__) && (__NPU_ARCH__ == 2201)
 typedef struct { unsigned char v; } hifloat8_t;
 typedef struct { unsigned char v; } float8_e4m3_t;
@@ -25,28 +17,30 @@ typedef struct { unsigned char v; } float4_e1m2x2_t;
 typedef struct { unsigned char v; } float4_e2m1x2_t;
 #endif
 #include <stdint.h>
-
 #if defined(__CCE_AICORE__) && defined(PTOAS_ENABLE_CCE_PRINT)
 #include <ccelib/print/print.h>
 #endif
-
 #if !defined(__CCE_AICORE__) && !defined(TMRGSORT_HPP)
-struct MrgSortExecutedNumList {
-    uint16_t mrgSortList0;
-    uint16_t mrgSortList1;
-    uint16_t mrgSortList2;
-    uint16_t mrgSortList3;
-};
+struct MrgSortExecutedNumList { uint16_t mrgSortList0,mrgSortList1,mrgSortList2,mrgSortList3; };
 #endif
 #ifndef __CPU_SIM
 #include "acl/acl.h"
 #endif
 
-extern "C" __global__ [aicore] void vusqz_kernel_2d(__gm__ int32_t *v1,
-                                                  __gm__ float *v2,
-                                                  __gm__ int32_t *v3);
+extern "C" __global__ [aicore] void vusqz_deep_merged_kernel(
+    __gm__ int32_t * arg0,
+    __gm__ float * arg1,
+    __gm__ int32_t * arg2,
+    __gm__ int32_t * arg3,
+    __gm__ float * arg4,
+    __gm__ int32_t * arg5);
 
-void LaunchVusqz_kernel_2d(int32_t *v1, float *v2, int32_t *v3, void *stream) {
-  vusqz_kernel_2d<<<1, nullptr, stream>>>(
-      (__gm__ int32_t *)v1, (__gm__ float *)v2, (__gm__ int32_t *)v3);
+void LaunchVusqzDeepMerged(int32_t * p0, float * p1, int32_t * p2, void *stream) {
+  vusqz_deep_merged_kernel<<<1, nullptr, stream>>>(
+      (__gm__ int32_t *)p0,
+      (__gm__ float *)p0,
+      (__gm__ int32_t *)p0,
+      (__gm__ int32_t *)p0,
+      (__gm__ float *)p1,
+      (__gm__ int32_t *)p2);
 }

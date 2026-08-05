@@ -1,6 +1,6 @@
 module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
   func.func @vcvt_f32_special_kernel_2d(%arg0: !pto.ptr<f32, gm>,
-                                        %arg1: !pto.ptr<f16, gm>) attributes {pto.aicore} {
+                                        %arg1: !pto.ptr<f16, gm>) attributes {pto.kernel} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c64 = arith.constant 64 : index

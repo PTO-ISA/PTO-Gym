@@ -35,8 +35,8 @@ using namespace PtoTestCommon;
         }                                                                                \
     } while (0)
 
-void LaunchVusqz_kernel_2d(int32_t *v1, float *v2, int32_t *v3, void *stream);
 
+void LaunchVusqzDeepMerged(int32_t * p0, float * p1, int32_t * p2, void *stream);
 int main() {
     constexpr size_t elemCount = 1024;
     size_t fileSizeV1 = elemCount * sizeof(int32_t);
@@ -77,7 +77,7 @@ int main() {
     ACL_CHECK(aclrtMemcpy(v2Device, fileSizeV2, v2Host, fileSizeV2, ACL_MEMCPY_HOST_TO_DEVICE));
     ACL_CHECK(aclrtMemcpy(v3Device, fileSizeV3, v3Host, fileSizeV3, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    LaunchVusqz_kernel_2d(v1Device, v2Device, v3Device, stream);
+        LaunchVusqzDeepMerged(v1Device, v2Device, v3Device, stream);
 
     ACL_CHECK(aclrtSynchronizeStream(stream));
     ACL_CHECK(aclrtMemcpy(v3Host, fileSizeV3, v3Device, fileSizeV3, ACL_MEMCPY_DEVICE_TO_HOST));

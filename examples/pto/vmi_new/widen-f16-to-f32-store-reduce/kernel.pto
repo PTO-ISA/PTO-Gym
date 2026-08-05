@@ -1,0 +1,67 @@
+// Copyright (c) 2026 Huawei Technologies Co., Ltd.
+// This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+// CANN Open Software License Agreement Version 2.0 (the "License").
+// Please refer to the License for details. You may not use this file except in compliance with the License.
+// THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+// INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+// See LICENSE in the root of the software repository for the full text of the License.
+
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
+  func.func @vmi_widen_f16_to_f32_store_reduce_kernel(%src_gm: !pto.ptr<f16, gm>,
+                                                      %sum_gm: !pto.ptr<f32, gm>,
+                                                      %dense_gm: !pto.ptr<f32, gm>) attributes {pto.kernel} {
+    %c0 = arith.constant 0 : index
+    %c1 = arith.constant 1 : index
+    %c128 = arith.constant 128 : index
+    %c0_i64 = arith.constant 0 : i64
+    %c1_i64 = arith.constant 1 : i64
+    %c32_i64 = arith.constant 32 : i64
+    %c256_i64 = arith.constant 256 : i64
+    %c512_i64 = arith.constant 512 : i64
+    %c4096_i64 = arith.constant 4096 : i64
+    %c8192_i64 = arith.constant 8192 : i64
+
+    %ub_src = pto.castptr %c0_i64 : i64 -> !pto.ptr<f16, ub>
+    %ub_sum = pto.castptr %c4096_i64 : i64 -> !pto.ptr<f32, ub>
+    %ub_dense = pto.castptr %c8192_i64 : i64 -> !pto.ptr<f32, ub>
+
+    pto.mte_gm_ub %src_gm, %ub_src, %c0_i64, %c256_i64
+      nburst(%c1_i64, %c256_i64, %c256_i64)
+      : !pto.ptr<f16, gm>, !pto.ptr<f16, ub>, i64, i64, i64, i64, i64
+    pto.mte_gm_ub %sum_gm, %ub_sum, %c0_i64, %c32_i64
+      nburst(%c1_i64, %c32_i64, %c32_i64)
+      : !pto.ptr<f32, gm>, !pto.ptr<f32, ub>, i64, i64, i64, i64, i64
+    pto.mte_gm_ub %dense_gm, %ub_dense, %c0_i64, %c512_i64
+      nburst(%c1_i64, %c512_i64, %c512_i64)
+      : !pto.ptr<f32, gm>, !pto.ptr<f32, ub>, i64, i64, i64, i64, i64
+
+    pto.set_flag["PIPE_MTE2", "PIPE_V", "EVENT_ID0"]
+    pto.wait_flag["PIPE_MTE2", "PIPE_V", "EVENT_ID0"]
+
+    pto.vecscope {
+      %x16 = pto.vmi.vload %ub_src[%c0]
+          : !pto.ptr<f16, ub> -> !pto.vmi.vreg<128xf16>
+      %x32 = pto.vmi.vcvt %x16
+          : !pto.vmi.vreg<128xf16> -> !pto.vmi.vreg<128xf32>
+      %mask = pto.vmi.create_mask %c128 : index -> !pto.vmi.mask<128xpred>
+      %sum = pto.vmi.vcadd %x32, %mask {group = 8, reassoc}
+          : !pto.vmi.vreg<128xf32>, !pto.vmi.mask<128xpred>
+          -> !pto.vmi.vreg<8xf32>
+      pto.vmi.vstore %sum, %ub_sum[%c0], %c1 {group = 8}
+          : !pto.vmi.vreg<8xf32>, !pto.ptr<f32, ub>
+      pto.vmi.vstore %x32, %ub_dense[%c0]
+          : !pto.vmi.vreg<128xf32>, !pto.ptr<f32, ub>
+    }
+
+    pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+    pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+    pto.mte_ub_gm %ub_sum, %sum_gm, %c32_i64
+      nburst(%c1_i64, %c32_i64, %c32_i64)
+      : !pto.ptr<f32, ub>, !pto.ptr<f32, gm>, i64, i64, i64, i64
+    pto.mte_ub_gm %ub_dense, %dense_gm, %c512_i64
+      nburst(%c1_i64, %c512_i64, %c512_i64)
+      : !pto.ptr<f32, ub>, !pto.ptr<f32, gm>, i64, i64, i64, i64
+    pto.barrier #pto.pipe<PIPE_ALL>
+    return
+  }
+}

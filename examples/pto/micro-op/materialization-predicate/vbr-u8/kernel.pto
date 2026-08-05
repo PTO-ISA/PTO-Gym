@@ -18,7 +18,7 @@
 // =============================================================================
 
 module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
-  func.func @vbr_u8_kernel_2d(%arg0: !pto.ptr<ui8, gm>) attributes {pto.aicore} {
+  func.func @vbr_u8_kernel_2d(%arg0: !pto.ptr<ui8, gm>) attributes {pto.kernel} {
     %c0 = arith.constant 0 : index
     %c256 = arith.constant 256 : index
     %c1024 = arith.constant 1024 : index

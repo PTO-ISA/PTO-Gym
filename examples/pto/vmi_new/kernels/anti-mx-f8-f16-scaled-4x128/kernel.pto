@@ -1,0 +1,84 @@
+// Copyright (c) 2026 Huawei Technologies Co., Ltd.
+// This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+// CANN Open Software License Agreement Version 2.0 (the "License").
+// Please refer to the License for details. You may not use this file except in compliance with the License.
+// THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+// INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+// See LICENSE in the root of the software repository for the full text of the License.
+
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
+  func.func @vmi_anti_mx_f8_f16_scaled_4x128_kernel(
+      %src_gm: !pto.ptr<ui8, gm>, %mxscale_gm: !pto.ptr<ui8, gm>,
+      %dst_gm: !pto.ptr<f16, gm>) attributes {pto.kernel} {
+    %c0 = arith.constant 0 : index
+    %c1 = arith.constant 1 : index
+    %c32 = arith.constant 32 : index
+    %c256 = arith.constant 256 : index
+    %c512 = arith.constant 512 : index
+    %c23_i32 = arith.constant 23 : i32
+    %c0_i64 = arith.constant 0 : i64
+    %c1_i64 = arith.constant 1 : i64
+    %c2_i64 = arith.constant 2 : i64
+    %c8_i64 = arith.constant 8 : i64
+    %c32_i64 = arith.constant 32 : i64
+    %c512_i64 = arith.constant 512 : i64
+    %c1024_i64 = arith.constant 1024 : i64
+    %c2048_i64 = arith.constant 2048 : i64
+
+    %ub_src_u8 = pto.castptr %c0_i64 : i64 -> !pto.ptr<ui8, ub>
+    %ub_src_f8 = pto.castptr %c0_i64 : i64 -> !pto.ptr<f8E4M3FN, ub>
+    %ub_mxscale = pto.castptr %c1024_i64 : i64 -> !pto.ptr<ui8, ub>
+    %ub_dst = pto.castptr %c2048_i64 : i64 -> !pto.ptr<f16, ub>
+
+    pto.mte_gm_ub %src_gm, %ub_src_u8, %c0_i64, %c512_i64
+      nburst(%c1_i64, %c512_i64, %c512_i64)
+      : !pto.ptr<ui8, gm>, !pto.ptr<ui8, ub>, i64, i64, i64, i64, i64
+    pto.mte_gm_ub %mxscale_gm, %ub_mxscale, %c0_i64, %c8_i64
+      nburst(%c2_i64, %c8_i64, %c32_i64)
+      : !pto.ptr<ui8, gm>, !pto.ptr<ui8, ub>, i64, i64, i64, i64, i64
+
+    pto.set_flag["PIPE_MTE2", "PIPE_V", "EVENT_ID0"]
+    pto.wait_flag["PIPE_MTE2", "PIPE_V", "EVENT_ID0"]
+
+    pto.vecscope {
+      %_:1 = scf.for %offset = %c0 to %c512 step %c256 iter_args(%dummy = %c0) -> (index) {
+        %packed = pto.vmi.vload %ub_src_f8[%offset]
+            : !pto.ptr<f8E4M3FN, ub> -> !pto.vmi.vreg<256xf8E4M3FN>
+        %wide = pto.vmi.vcvt %packed
+            : !pto.vmi.vreg<256xf8E4M3FN> -> !pto.vmi.vreg<256xf32>
+        %scale_tile = arith.divui %offset, %c256 : index
+        %scale_off = arith.muli %scale_tile, %c32 : index
+        %scale_u8 = pto.vmi.vload %ub_mxscale[%scale_off], %c1 {group = 8}
+            : !pto.ptr<ui8, ub> -> !pto.vmi.vreg<8xui8>
+        %scale_u32 = pto.vmi.vcvt %scale_u8            : !pto.vmi.vreg<8xui8> -> !pto.vmi.vreg<8xui32>
+        %scale_i32 = pto.vmi.vinterpret_cast %scale_u32
+            : !pto.vmi.vreg<8xui32> -> !pto.vmi.vreg<8xi32>
+        %shift = pto.vmi.vbrc %c23_i32
+            : i32 -> !pto.vmi.vreg<8xi32>
+        %scale_bits = pto.vmi.vshl %scale_i32, %shift
+            : !pto.vmi.vreg<8xi32>, !pto.vmi.vreg<8xi32>
+            -> !pto.vmi.vreg<8xi32>
+        %scale = pto.vmi.vinterpret_cast %scale_bits
+            : !pto.vmi.vreg<8xi32> -> !pto.vmi.vreg<8xf32>
+        %scale_vec = pto.vmi.vbrc %scale {group = 8}
+            : !pto.vmi.vreg<8xf32> -> !pto.vmi.vreg<256xf32>
+        %scaled = pto.vmi.vmul %wide, %scale_vec
+            : !pto.vmi.vreg<256xf32>, !pto.vmi.vreg<256xf32>
+            -> !pto.vmi.vreg<256xf32>
+        %out = pto.vmi.vcvt %scaled {saturate = "SAT"}
+            : !pto.vmi.vreg<256xf32> -> !pto.vmi.vreg<256xf16>
+        pto.vmi.vstore %out, %ub_dst[%offset]
+            : !pto.vmi.vreg<256xf16>, !pto.ptr<f16, ub>
+        scf.yield %dummy : index
+      }
+    }
+
+    pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+    pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+    pto.mte_ub_gm %ub_dst, %dst_gm, %c1024_i64
+      nburst(%c1_i64, %c1024_i64, %c1024_i64)
+      : !pto.ptr<f16, ub>, !pto.ptr<f16, gm>, i64, i64, i64, i64
+    pto.barrier #pto.pipe<PIPE_ALL>
+    return
+  }
+}

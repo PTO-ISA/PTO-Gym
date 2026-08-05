@@ -5,20 +5,9 @@
 // THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
 // INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 // See LICENSE in the root of the software repository for the full text of the License.
-
-// -----------------------------------------------------------------------------
-// case: micro-op/compare-select/vselr
-// family: compare-select
-// target_ops: pto.vselr
-// scenarios: core-f32, full-mask, explicit-lane-index
-// -----------------------------------------------------------------------------
-// ---------------------------------------------------------------------------
-// PTOAS compatibility layer
-// ---------------------------------------------------------------------------
 #ifndef __VEC_SCOPE__
 #define __VEC_SCOPE__
 #endif
-
 #if defined(__CCE_AICORE__) && defined(__NPU_ARCH__) && (__NPU_ARCH__ == 2201)
 typedef struct { unsigned char v; } hifloat8_t;
 typedef struct { unsigned char v; } float8_e4m3_t;
@@ -28,30 +17,36 @@ typedef struct { unsigned char v; } float4_e1m2x2_t;
 typedef struct { unsigned char v; } float4_e2m1x2_t;
 #endif
 #include <stdint.h>
-
 #if defined(__CCE_AICORE__) && defined(PTOAS_ENABLE_CCE_PRINT)
 #include <ccelib/print/print.h>
 #endif
-
 #if !defined(__CCE_AICORE__) && !defined(TMRGSORT_HPP)
-struct MrgSortExecutedNumList {
-  uint16_t mrgSortList0;
-  uint16_t mrgSortList1;
-  uint16_t mrgSortList2;
-  uint16_t mrgSortList3;
-};
+struct MrgSortExecutedNumList { uint16_t mrgSortList0,mrgSortList1,mrgSortList2,mrgSortList3; };
 #endif
 #ifndef __CPU_SIM
 #include "acl/acl.h"
 #endif
 
-extern "C" __global__ [aicore] void vselr_kernel_2d(__gm__ float *v1,
-                                                  __gm__ int *v2,
-                                                  __gm__ float *v3);
+extern "C" __global__ [aicore] void vselr_deep_merged_kernel(
+    __gm__ half * arg0,
+    __gm__ uint16_t * arg1,
+    __gm__ half * arg2,
+    __gm__ uint8_t * arg3,
+    __gm__ uint8_t * arg4,
+    __gm__ uint8_t * arg5,
+    __gm__ float * arg6,
+    __gm__ int32_t * arg7,
+    __gm__ float * arg8);
 
-void LaunchVselr_kernel_2d(float *v1, int *v2, float *v3,
-                             void *stream) {
-  vselr_kernel_2d<<<1, nullptr, stream>>>((__gm__ float *)v1,
-                                          (__gm__ int *)v2,
-                                          (__gm__ float *)v3);
+void LaunchVselrDeepMerged(float * p0, int * p1, float * p2, void *stream) {
+  vselr_deep_merged_kernel<<<1, nullptr, stream>>>(
+      (__gm__ half *)p0,
+      (__gm__ uint16_t *)p0,
+      (__gm__ half *)p0,
+      (__gm__ uint8_t *)p0,
+      (__gm__ uint8_t *)p0,
+      (__gm__ uint8_t *)p0,
+      (__gm__ float *)p0,
+      (__gm__ int32_t *)p1,
+      (__gm__ float *)p2);
 }

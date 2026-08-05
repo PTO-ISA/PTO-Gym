@@ -5,99 +5,118 @@
 // THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
 // INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 // See LICENSE in the root of the software repository for the full text of the License.
-
-// -----------------------------------------------------------------------------
-// case: micro-op/binary-vector/vor
-// family: binary-vector
-// target_ops: pto.vor
-// scenarios: core-i16-unsigned, full-mask
-// NOTE: bulk-generated coverage skeleton. Parser/verifier/lowering failure is
-// still a valid test conclusion in the current coverage-first phase.
-// -----------------------------------------------------------------------------
-/**
-Copyright (c) 2025 Huawei Technologies Co., Ltd.
-*/
+// Merged vor test case.
 
 #include "test_common.h"
 #include "acl/acl.h"
 #include <cstdio>
 #include <cstdlib>
-
+#include <cstdint>
 using namespace PtoTestCommon;
 
-#define ACL_CHECK(expr)                                                          \
-  do {                                                                           \
-    const aclError _ret = (expr);                                                \
-    if (_ret != ACL_SUCCESS) {                                                   \
-      std::fprintf(stderr, "[ERROR] %s failed: %d (%s:%d)\n", #expr,             \
-                   (int)_ret, __FILE__, __LINE__);                               \
-      rc = 1;                                                                    \
-      goto cleanup;                                                              \
-    }                                                                            \
-  } while (0)
+#define ACL_CHECK(expr) do {   const aclError _r=(expr);   if(_r!=ACL_SUCCESS){std::fprintf(stderr,"[ERROR] %s:%d acle=%d\n",#expr,__LINE__,(int)_r);rc=1;goto cleanup;} }while(0)
+#define FCK(expr,path) do{if(!(expr)){std::fprintf(stderr,"[ERROR] file:%s\n",path);rc=1;goto cleanup;}}while(0)
 
-void LaunchVor_i16_unsigned_kernel(uint16_t *v1, uint16_t *v2, uint16_t *v3,
-                                   void *stream);
 
+
+
+void LaunchVorDeepMerged(uint16_t * p0, uint16_t * p1, uint16_t * p2, uint16_t * p3, uint16_t * p4, uint16_t * p5, uint16_t * p6, uint16_t * p7, uint16_t * p8, void *stream);
 int main() {
-  size_t elemCount_v1 = 1024;
-  size_t fileSize_v1 = elemCount_v1 * sizeof(uint16_t);
-  size_t elemCount_v2 = 1024;
-  size_t fileSize_v2 = elemCount_v2 * sizeof(uint16_t);
-  size_t elemCount_v3 = 1024;
-  size_t fileSize_v3 = elemCount_v3 * sizeof(uint16_t);
-  uint16_t *v1Host = nullptr;
-  uint16_t *v1Device = nullptr;
-  uint16_t *v2Host = nullptr;
-  uint16_t *v2Device = nullptr;
-  uint16_t *v3Host = nullptr;
-  uint16_t *v3Device = nullptr;
-  int rc = 0;
-  bool aclInited = false;
-  bool deviceSet = false;
-  int deviceId = 0;
-  aclrtStream stream = nullptr;
+  constexpr size_t SZ_f32 = 2048;
+  constexpr size_t SZ_f16 = 2048;
+  constexpr size_t SZ_mask_edge = 2048;
 
-  ACL_CHECK(aclInit(nullptr));
-  aclInited = true;
-  if (const char *envDevice = std::getenv("ACL_DEVICE_ID"))
-    deviceId = std::atoi(envDevice);
-  ACL_CHECK(aclrtSetDevice(deviceId));
-  deviceSet = true;
+  uint16_t *h_f32_v1=nullptr, *d_f32_v1=nullptr;
+  uint16_t *h_f32_v2=nullptr, *d_f32_v2=nullptr;
+  uint16_t *h_f32_v3=nullptr, *d_f32_v3=nullptr;
+  uint16_t *h_f16_v1=nullptr, *d_f16_v1=nullptr;
+  uint16_t *h_f16_v2=nullptr, *d_f16_v2=nullptr;
+  uint16_t *h_f16_v3=nullptr, *d_f16_v3=nullptr;
+  uint16_t *h_mask_edge_v1=nullptr, *d_mask_edge_v1=nullptr;
+  uint16_t *h_mask_edge_v2=nullptr, *d_mask_edge_v2=nullptr;
+  uint16_t *h_mask_edge_v3=nullptr, *d_mask_edge_v3=nullptr;
+  int rc=0; bool aclInited=false,deviceSet=false; int deviceId=0; aclrtStream stream=nullptr; size_t fsz=0;
+  ACL_CHECK(aclInit(nullptr)); aclInited=true;
+  if(const char*e=std::getenv("ACL_DEVICE_ID")) deviceId=std::atoi(e);
+  ACL_CHECK(aclrtSetDevice(deviceId)); deviceSet=true;
   ACL_CHECK(aclrtCreateStream(&stream));
-  ACL_CHECK(aclrtMallocHost((void **)(&v1Host), fileSize_v1));
-  ACL_CHECK(aclrtMallocHost((void **)(&v2Host), fileSize_v2));
-  ACL_CHECK(aclrtMallocHost((void **)(&v3Host), fileSize_v3));
-  ACL_CHECK(aclrtMalloc((void **)&v1Device, fileSize_v1, ACL_MEM_MALLOC_HUGE_FIRST));
-  ACL_CHECK(aclrtMalloc((void **)&v2Device, fileSize_v2, ACL_MEM_MALLOC_HUGE_FIRST));
-  ACL_CHECK(aclrtMalloc((void **)&v3Device, fileSize_v3, ACL_MEM_MALLOC_HUGE_FIRST));
-  ReadFile("./v1.bin", fileSize_v1, v1Host, fileSize_v1);
-  ReadFile("./v2.bin", fileSize_v2, v2Host, fileSize_v2);
-  ReadFile("./v3.bin", fileSize_v3, v3Host, fileSize_v3);
-  ACL_CHECK(aclrtMemcpy(v1Device, fileSize_v1, v1Host, fileSize_v1,
-                        ACL_MEMCPY_HOST_TO_DEVICE));
-  ACL_CHECK(aclrtMemcpy(v2Device, fileSize_v2, v2Host, fileSize_v2,
-                        ACL_MEMCPY_HOST_TO_DEVICE));
-  ACL_CHECK(aclrtMemcpy(v3Device, fileSize_v3, v3Host, fileSize_v3,
-                        ACL_MEMCPY_HOST_TO_DEVICE));
-  LaunchVor_i16_unsigned_kernel(v1Device, v2Device, v3Device, stream);
+  ACL_CHECK(aclrtMallocHost((void**)&h_f32_v1,SZ_f32));
+  ACL_CHECK(aclrtMallocHost((void**)&h_f32_v2,SZ_f32));
+  ACL_CHECK(aclrtMallocHost((void**)&h_f32_v3,SZ_f32));
+  ACL_CHECK(aclrtMallocHost((void**)&h_f16_v1,SZ_f16));
+  ACL_CHECK(aclrtMallocHost((void**)&h_f16_v2,SZ_f16));
+  ACL_CHECK(aclrtMallocHost((void**)&h_f16_v3,SZ_f16));
+  ACL_CHECK(aclrtMallocHost((void**)&h_mask_edge_v1,SZ_mask_edge));
+  ACL_CHECK(aclrtMallocHost((void**)&h_mask_edge_v2,SZ_mask_edge));
+  ACL_CHECK(aclrtMallocHost((void**)&h_mask_edge_v3,SZ_mask_edge));
+  ACL_CHECK(aclrtMalloc((void**)&d_f32_v1,SZ_f32,ACL_MEM_MALLOC_HUGE_FIRST));
+  ACL_CHECK(aclrtMalloc((void**)&d_f32_v2,SZ_f32,ACL_MEM_MALLOC_HUGE_FIRST));
+  ACL_CHECK(aclrtMalloc((void**)&d_f32_v3,SZ_f32,ACL_MEM_MALLOC_HUGE_FIRST));
+  ACL_CHECK(aclrtMalloc((void**)&d_f16_v1,SZ_f16,ACL_MEM_MALLOC_HUGE_FIRST));
+  ACL_CHECK(aclrtMalloc((void**)&d_f16_v2,SZ_f16,ACL_MEM_MALLOC_HUGE_FIRST));
+  ACL_CHECK(aclrtMalloc((void**)&d_f16_v3,SZ_f16,ACL_MEM_MALLOC_HUGE_FIRST));
+  ACL_CHECK(aclrtMalloc((void**)&d_mask_edge_v1,SZ_mask_edge,ACL_MEM_MALLOC_HUGE_FIRST));
+  ACL_CHECK(aclrtMalloc((void**)&d_mask_edge_v2,SZ_mask_edge,ACL_MEM_MALLOC_HUGE_FIRST));
+  ACL_CHECK(aclrtMalloc((void**)&d_mask_edge_v3,SZ_mask_edge,ACL_MEM_MALLOC_HUGE_FIRST));
+  fsz=SZ_f32; FCK(ReadFile("v1.bin",fsz,h_f32_v1,SZ_f32)&&fsz==SZ_f32,"v1.bin");
+  fsz=SZ_f32; FCK(ReadFile("v2.bin",fsz,h_f32_v2,SZ_f32)&&fsz==SZ_f32,"v2.bin");
+  fsz=SZ_f32; FCK(ReadFile("v3.bin",fsz,h_f32_v3,SZ_f32)&&fsz==SZ_f32,"v3.bin");
+  fsz=SZ_f16; FCK(ReadFile("v1_f16.bin",fsz,h_f16_v1,SZ_f16)&&fsz==SZ_f16,"v1_f16.bin");
+  fsz=SZ_f16; FCK(ReadFile("v2_f16.bin",fsz,h_f16_v2,SZ_f16)&&fsz==SZ_f16,"v2_f16.bin");
+  fsz=SZ_f16; FCK(ReadFile("v3_f16.bin",fsz,h_f16_v3,SZ_f16)&&fsz==SZ_f16,"v3_f16.bin");
+  fsz=SZ_mask_edge; FCK(ReadFile("v1_mask_edge.bin",fsz,h_mask_edge_v1,SZ_mask_edge)&&fsz==SZ_mask_edge,"v1_mask_edge.bin");
+  fsz=SZ_mask_edge; FCK(ReadFile("v2_mask_edge.bin",fsz,h_mask_edge_v2,SZ_mask_edge)&&fsz==SZ_mask_edge,"v2_mask_edge.bin");
+  fsz=SZ_mask_edge; FCK(ReadFile("v3_mask_edge.bin",fsz,h_mask_edge_v3,SZ_mask_edge)&&fsz==SZ_mask_edge,"v3_mask_edge.bin");
+  ACL_CHECK(aclrtMemcpy(d_f32_v1,SZ_f32,h_f32_v1,SZ_f32,ACL_MEMCPY_HOST_TO_DEVICE));
+  ACL_CHECK(aclrtMemcpy(d_f32_v2,SZ_f32,h_f32_v2,SZ_f32,ACL_MEMCPY_HOST_TO_DEVICE));
+  ACL_CHECK(aclrtMemcpy(d_f32_v3,SZ_f32,h_f32_v3,SZ_f32,ACL_MEMCPY_HOST_TO_DEVICE));
+  ACL_CHECK(aclrtMemcpy(d_f16_v1,SZ_f16,h_f16_v1,SZ_f16,ACL_MEMCPY_HOST_TO_DEVICE));
+  ACL_CHECK(aclrtMemcpy(d_f16_v2,SZ_f16,h_f16_v2,SZ_f16,ACL_MEMCPY_HOST_TO_DEVICE));
+  ACL_CHECK(aclrtMemcpy(d_f16_v3,SZ_f16,h_f16_v3,SZ_f16,ACL_MEMCPY_HOST_TO_DEVICE));
+  ACL_CHECK(aclrtMemcpy(d_mask_edge_v1,SZ_mask_edge,h_mask_edge_v1,SZ_mask_edge,ACL_MEMCPY_HOST_TO_DEVICE));
+  ACL_CHECK(aclrtMemcpy(d_mask_edge_v2,SZ_mask_edge,h_mask_edge_v2,SZ_mask_edge,ACL_MEMCPY_HOST_TO_DEVICE));
+  ACL_CHECK(aclrtMemcpy(d_mask_edge_v3,SZ_mask_edge,h_mask_edge_v3,SZ_mask_edge,ACL_MEMCPY_HOST_TO_DEVICE));
+    LaunchVorDeepMerged(
+      d_f32_v1,
+      d_f32_v2,
+      d_f32_v3,
+      d_f16_v1,
+      d_f16_v2,
+      d_f16_v3,
+      d_mask_edge_v1,
+      d_mask_edge_v2,
+      d_mask_edge_v3,
+      stream
+  );
   ACL_CHECK(aclrtSynchronizeStream(stream));
-  ACL_CHECK(aclrtMemcpy(v3Host, fileSize_v3, v3Device, fileSize_v3,
-                        ACL_MEMCPY_DEVICE_TO_HOST));
-  WriteFile("./v3.bin", v3Host, fileSize_v3);
+  ACL_CHECK(aclrtMemcpy(h_f32_v3,SZ_f32,d_f32_v3,SZ_f32,ACL_MEMCPY_DEVICE_TO_HOST));
+  ACL_CHECK(aclrtMemcpy(h_f16_v3,SZ_f16,d_f16_v3,SZ_f16,ACL_MEMCPY_DEVICE_TO_HOST));
+  ACL_CHECK(aclrtMemcpy(h_mask_edge_v3,SZ_mask_edge,d_mask_edge_v3,SZ_mask_edge,ACL_MEMCPY_DEVICE_TO_HOST));
+  FCK(WriteFile("v3.bin",h_f32_v3,SZ_f32),"v3.bin");
+  FCK(WriteFile("v3_f16.bin",h_f16_v3,SZ_f16),"v3_f16.bin");
+  FCK(WriteFile("v3_mask_edge.bin",h_mask_edge_v3,SZ_mask_edge),"v3_mask_edge.bin");
 
 cleanup:
-  aclrtFree(v1Device);
-  aclrtFree(v2Device);
-  aclrtFree(v3Device);
-  aclrtFreeHost(v1Host);
-  aclrtFreeHost(v2Host);
-  aclrtFreeHost(v3Host);
-  if (stream != nullptr)
-    aclrtDestroyStream(stream);
-  if (deviceSet)
-    aclrtResetDevice(deviceId);
-  if (aclInited)
-    aclFinalize();
+  aclrtFree(d_f32_v1);
+  aclrtFree(d_f32_v2);
+  aclrtFree(d_f32_v3);
+  aclrtFree(d_f16_v1);
+  aclrtFree(d_f16_v2);
+  aclrtFree(d_f16_v3);
+  aclrtFree(d_mask_edge_v1);
+  aclrtFree(d_mask_edge_v2);
+  aclrtFree(d_mask_edge_v3);
+  aclrtFreeHost(h_f32_v1);
+  aclrtFreeHost(h_f32_v2);
+  aclrtFreeHost(h_f32_v3);
+  aclrtFreeHost(h_f16_v1);
+  aclrtFreeHost(h_f16_v2);
+  aclrtFreeHost(h_f16_v3);
+  aclrtFreeHost(h_mask_edge_v1);
+  aclrtFreeHost(h_mask_edge_v2);
+  aclrtFreeHost(h_mask_edge_v3);
+  if(stream) aclrtDestroyStream(stream);
+  if(deviceSet) aclrtResetDevice(deviceId);
+  if(aclInited) aclFinalize();
   return rc;
 }

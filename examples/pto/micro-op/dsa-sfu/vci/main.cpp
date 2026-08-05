@@ -25,8 +25,8 @@ using namespace PtoTestCommon;
     }                                                                            \
   } while (0)
 
-void LaunchVci_kernel_2d(int32_t *v1, int32_t *v2, void *stream);
 
+void LaunchVciDeepMerged(int32_t * p0, int32_t * p1, void *stream);
 int main() {
   size_t elemCount_v1 = 1024;
   size_t fileSize_v1 = elemCount_v1 * sizeof(int32_t);
@@ -59,7 +59,7 @@ int main() {
                         ACL_MEMCPY_HOST_TO_DEVICE));
   ACL_CHECK(aclrtMemcpy(v2Device, fileSize_v2, v2Host, fileSize_v2,
                         ACL_MEMCPY_HOST_TO_DEVICE));
-  LaunchVci_kernel_2d(v1Device, v2Device, stream);
+    LaunchVciDeepMerged(v1Device, v2Device, stream);
   ACL_CHECK(aclrtSynchronizeStream(stream));
   ACL_CHECK(aclrtMemcpy(v2Host, fileSize_v2, v2Device, fileSize_v2,
                         ACL_MEMCPY_DEVICE_TO_HOST));

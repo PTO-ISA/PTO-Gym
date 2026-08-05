@@ -1,38 +1,749 @@
-// -----------------------------------------------------------------------------
-// case: micro-op/materialization-predicate/pdintlv_b16
-// family: materialization-predicate
-// target_ops: pto.pdintlv_b16
-// scenarios: predicate-transform, lane-order
-// -----------------------------------------------------------------------------
 module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
-  func.func @pdintlv_b16_kernel_2d(%arg0: !pto.ptr<ui32, gm>) attributes {pto.aicore} {
-    %c0 = arith.constant 0 : index
-    %c1 = arith.constant 1 : index
-    %c32 = arith.constant 32 : index
-    %c16 = arith.constant 16 : index
-    %c0_i64 = arith.constant 0 : i64
-    %c1_i64 = arith.constant 1 : i64
-    %c64_i64 = arith.constant 64 : i64
+    func.func @pdintlv_b16_deep_merged_kernel(%arg0: !pto.ptr<ui32, gm>, %arg1: !pto.ptr<ui32, gm>) attributes {pto.kernel} {
+    %__deep_merge_guard = arith.constant false
+    // inactive merged from pdintlv_b16_nontrivial_kernel_2d
+    scf.if %__deep_merge_guard {
 
-    %ub_out = pto.castptr %c0_i64 : i64 -> !pto.ptr<ui8, ub>
-    %gm_out = pto.castptr %arg0 : !pto.ptr<ui32, gm> -> !pto.ptr<ui8, gm>
+    %c0_m0 = arith.constant 0 : index
+    %c1_m0 = arith.constant 1 : index
+    %c32_m0 = arith.constant 32 : index
+    %c16_m0 = arith.constant 16 : index
+    %c0_i64_m0 = arith.constant 0 : i64
+    %c1_i64_m0 = arith.constant 1 : i64
+    %c64_i64_m0 = arith.constant 64 : i64
+
+    %ub_out_m0 = pto.castptr %c0_i64_m0 : i64 -> !pto.ptr<ui8, ub>
+    %gm_out_m0 = pto.castptr %arg0 : !pto.ptr<ui32, gm> -> !pto.ptr<ui8, gm>
 
     pto.vecscope {
-      scf.for %iter = %c0 to %c1 step %c1 {
-        %lhs = pto.pset_b16 "PAT_ALL" : !pto.mask<b16>
-        %rhs = pto.pset_b16 "PAT_ALLF" : !pto.mask<b16>
-        %low, %high = pto.pdintlv_b16 %lhs, %rhs : !pto.mask<b16>, !pto.mask<b16> -> !pto.mask<b16>, !pto.mask<b16>
-        pto.psts %low, %ub_out[%c0], "NORM" : !pto.mask<b16>, !pto.ptr<ui8, ub>, index
-        pto.psts %high, %ub_out[%c32], "NORM" : !pto.mask<b16>, !pto.ptr<ui8, ub>, index
+      scf.for %iter_m0 = %c0_m0 to %c1_m0 step %c1_m0 {
+        %lhs_m0 = pto.pset_b16 "PAT_VL8" : !pto.mask<b16>
+        %rhs_m0 = pto.pset_b16 "PAT_M4" : !pto.mask<b16>
+        %low_m0, %high_m0 = pto.pdintlv_b16 %lhs_m0, %rhs_m0 : !pto.mask<b16>, !pto.mask<b16> -> !pto.mask<b16>, !pto.mask<b16>
+        pto.psts %low_m0, %ub_out_m0[%c0_m0], "NORM" : !pto.mask<b16>, !pto.ptr<ui8, ub>, index
+        pto.psts %high_m0, %ub_out_m0[%c32_m0], "NORM" : !pto.mask<b16>, !pto.ptr<ui8, ub>, index
       }
     }
 
     pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
     pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
-    pto.mte_ub_gm %ub_out, %gm_out, %c64_i64
-      nburst(%c1_i64, %c64_i64, %c64_i64)
+    pto.mte_ub_gm %ub_out_m0, %gm_out_m0, %c64_i64_m0
+      nburst(%c1_i64_m0, %c64_i64_m0, %c64_i64_m0)
       : !pto.ptr<ui8, ub>, !pto.ptr<ui8, gm>, i64, i64, i64, i64
     pto.barrier #pto.pipe<PIPE_ALL>
+
+    }
+    // active merged from pdintlv_b16_kernel_2d
+
+    %c0_m1 = arith.constant 0 : index
+    %c1_m1 = arith.constant 1 : index
+    %c32_m1 = arith.constant 32 : index
+    %c16_m1 = arith.constant 16 : index
+    %c0_i64_m1 = arith.constant 0 : i64
+    %c1_i64_m1 = arith.constant 1 : i64
+    %c64_i64_m1 = arith.constant 64 : i64
+
+    %ub_out_m1 = pto.castptr %c0_i64_m1 : i64 -> !pto.ptr<ui8, ub>
+    %gm_out_m1 = pto.castptr %arg1 : !pto.ptr<ui32, gm> -> !pto.ptr<ui8, gm>
+
+    pto.vecscope {
+      scf.for %iter_m1 = %c0_m1 to %c1_m1 step %c1_m1 {
+        %lhs_m1 = pto.pset_b16 "PAT_ALL" : !pto.mask<b16>
+        %rhs_m1 = pto.pset_b16 "PAT_ALLF" : !pto.mask<b16>
+        %low_m1, %high_m1 = pto.pdintlv_b16 %lhs_m1, %rhs_m1 : !pto.mask<b16>, !pto.mask<b16> -> !pto.mask<b16>, !pto.mask<b16>
+        pto.psts %low_m1, %ub_out_m1[%c0_m1], "NORM" : !pto.mask<b16>, !pto.ptr<ui8, ub>, index
+        pto.psts %high_m1, %ub_out_m1[%c32_m1], "NORM" : !pto.mask<b16>, !pto.ptr<ui8, ub>, index
+      }
+    }
+
+    pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+    pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+    pto.mte_ub_gm %ub_out_m1, %gm_out_m1, %c64_i64_m1
+      nburst(%c1_i64_m1, %c64_i64_m1, %c64_i64_m1)
+      : !pto.ptr<ui8, ub>, !pto.ptr<ui8, gm>, i64, i64, i64, i64
+    pto.barrier #pto.pipe<PIPE_ALL>
+    %__case_merge_guard = arith.constant false
+
+    // inactive cross-case merge from micro-op/materialization-predicate/pdintlv_b32
+    scf.if %__case_merge_guard {
+
+          %__deep_merge_guard_cmg8_1 = arith.constant false
+          // inactive merged from pdintlv_b32_nontrivial_kernel_2d
+          scf.if %__deep_merge_guard_cmg8_1 {
+
+          %c0_m0_cmg8_1 = arith.constant 0 : index
+          %c1_m0_cmg8_1 = arith.constant 1 : index
+          %c32_m0_cmg8_1 = arith.constant 32 : index
+          %c16_m0_cmg8_1 = arith.constant 16 : index
+          %c0_i64_m0_cmg8_1 = arith.constant 0 : i64
+          %c1_i64_m0_cmg8_1 = arith.constant 1 : i64
+          %c64_i64_m0_cmg8_1 = arith.constant 64 : i64
+
+          %ub_out_m0_cmg8_1 = pto.castptr %c0_i64_m0_cmg8_1 : i64 -> !pto.ptr<ui8, ub>
+          %gm_out_m0_cmg8_1 = pto.castptr %arg0 : !pto.ptr<ui32, gm> -> !pto.ptr<ui8, gm>
+
+          pto.vecscope {
+            scf.for %iter_m0_cmg8_1 = %c0_m0_cmg8_1 to %c1_m0_cmg8_1 step %c1_m0_cmg8_1 {
+              %lhs_m0_cmg8_1 = pto.pset_b32 "PAT_VL8" : !pto.mask<b32>
+              %rhs_m0_cmg8_1 = pto.pset_b32 "PAT_M4" : !pto.mask<b32>
+              %low_m0_cmg8_1, %high_m0_cmg8_1 = pto.pdintlv_b32 %lhs_m0_cmg8_1, %rhs_m0_cmg8_1 : !pto.mask<b32>, !pto.mask<b32> -> !pto.mask<b32>, !pto.mask<b32>
+              pto.psts %low_m0_cmg8_1, %ub_out_m0_cmg8_1[%c0_m0_cmg8_1], "NORM" : !pto.mask<b32>, !pto.ptr<ui8, ub>, index
+              pto.psts %high_m0_cmg8_1, %ub_out_m0_cmg8_1[%c32_m0_cmg8_1], "NORM" : !pto.mask<b32>, !pto.ptr<ui8, ub>, index
+            }
+          }
+
+          pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+          pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+          pto.mte_ub_gm %ub_out_m0_cmg8_1, %gm_out_m0_cmg8_1, %c64_i64_m0_cmg8_1
+            nburst(%c1_i64_m0_cmg8_1, %c64_i64_m0_cmg8_1, %c64_i64_m0_cmg8_1)
+            : !pto.ptr<ui8, ub>, !pto.ptr<ui8, gm>, i64, i64, i64, i64
+          pto.barrier #pto.pipe<PIPE_ALL>
+
+          }
+          // active merged from pdintlv_b32_kernel_2d
+
+          %c0_m1_cmg8_1 = arith.constant 0 : index
+          %c1_m1_cmg8_1 = arith.constant 1 : index
+          %c32_m1_cmg8_1 = arith.constant 32 : index
+          %c16_m1_cmg8_1 = arith.constant 16 : index
+          %c0_i64_m1_cmg8_1 = arith.constant 0 : i64
+          %c1_i64_m1_cmg8_1 = arith.constant 1 : i64
+          %c64_i64_m1_cmg8_1 = arith.constant 64 : i64
+
+          %ub_out_m1_cmg8_1 = pto.castptr %c0_i64_m1_cmg8_1 : i64 -> !pto.ptr<ui8, ub>
+          %gm_out_m1_cmg8_1 = pto.castptr %arg1 : !pto.ptr<ui32, gm> -> !pto.ptr<ui8, gm>
+
+          pto.vecscope {
+            scf.for %iter_m1_cmg8_1 = %c0_m1_cmg8_1 to %c1_m1_cmg8_1 step %c1_m1_cmg8_1 {
+              %lhs_m1_cmg8_1 = pto.pset_b32 "PAT_ALL" : !pto.mask<b32>
+              %rhs_m1_cmg8_1 = pto.pset_b32 "PAT_ALLF" : !pto.mask<b32>
+              %low_m1_cmg8_1, %high_m1_cmg8_1 = pto.pdintlv_b32 %lhs_m1_cmg8_1, %rhs_m1_cmg8_1 : !pto.mask<b32>, !pto.mask<b32> -> !pto.mask<b32>, !pto.mask<b32>
+              pto.psts %low_m1_cmg8_1, %ub_out_m1_cmg8_1[%c0_m1_cmg8_1], "NORM" : !pto.mask<b32>, !pto.ptr<ui8, ub>, index
+              pto.psts %high_m1_cmg8_1, %ub_out_m1_cmg8_1[%c32_m1_cmg8_1], "NORM" : !pto.mask<b32>, !pto.ptr<ui8, ub>, index
+            }
+          }
+
+          pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+          pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+          pto.mte_ub_gm %ub_out_m1_cmg8_1, %gm_out_m1_cmg8_1, %c64_i64_m1_cmg8_1
+            nburst(%c1_i64_m1_cmg8_1, %c64_i64_m1_cmg8_1, %c64_i64_m1_cmg8_1)
+            : !pto.ptr<ui8, ub>, !pto.ptr<ui8, gm>, i64, i64, i64, i64
+          pto.barrier #pto.pipe<PIPE_ALL>
+    }
+
+    // inactive cross-case merge from micro-op/materialization-predicate/pdintlv_b8
+    scf.if %__case_merge_guard {
+
+          %__deep_merge_guard_cmg8_2 = arith.constant false
+          // inactive merged from pdintlv_b8_nontrivial_kernel_2d
+          scf.if %__deep_merge_guard_cmg8_2 {
+
+          %c0_m0_cmg8_2 = arith.constant 0 : index
+          %c1_m0_cmg8_2 = arith.constant 1 : index
+          %c32_m0_cmg8_2 = arith.constant 32 : index
+          %c16_m0_cmg8_2 = arith.constant 16 : index
+          %c0_i64_m0_cmg8_2 = arith.constant 0 : i64
+          %c1_i64_m0_cmg8_2 = arith.constant 1 : i64
+          %c64_i64_m0_cmg8_2 = arith.constant 64 : i64
+
+          %ub_out_m0_cmg8_2 = pto.castptr %c0_i64_m0_cmg8_2 : i64 -> !pto.ptr<ui8, ub>
+          %gm_out_m0_cmg8_2 = pto.castptr %arg0 : !pto.ptr<ui32, gm> -> !pto.ptr<ui8, gm>
+
+          pto.vecscope {
+            scf.for %iter_m0_cmg8_2 = %c0_m0_cmg8_2 to %c1_m0_cmg8_2 step %c1_m0_cmg8_2 {
+              %lhs_m0_cmg8_2 = pto.pset_b8 "PAT_VL8" : !pto.mask<b8>
+              %rhs_m0_cmg8_2 = pto.pset_b8 "PAT_M4" : !pto.mask<b8>
+              %low_m0_cmg8_2, %high_m0_cmg8_2 = pto.pdintlv_b8 %lhs_m0_cmg8_2, %rhs_m0_cmg8_2 : !pto.mask<b8>, !pto.mask<b8> -> !pto.mask<b8>, !pto.mask<b8>
+              pto.psts %low_m0_cmg8_2, %ub_out_m0_cmg8_2[%c0_m0_cmg8_2], "NORM" : !pto.mask<b8>, !pto.ptr<ui8, ub>, index
+              pto.psts %high_m0_cmg8_2, %ub_out_m0_cmg8_2[%c32_m0_cmg8_2], "NORM" : !pto.mask<b8>, !pto.ptr<ui8, ub>, index
+            }
+          }
+
+          pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+          pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+          pto.mte_ub_gm %ub_out_m0_cmg8_2, %gm_out_m0_cmg8_2, %c64_i64_m0_cmg8_2
+            nburst(%c1_i64_m0_cmg8_2, %c64_i64_m0_cmg8_2, %c64_i64_m0_cmg8_2)
+            : !pto.ptr<ui8, ub>, !pto.ptr<ui8, gm>, i64, i64, i64, i64
+          pto.barrier #pto.pipe<PIPE_ALL>
+
+          }
+          // active merged from pdintlv_b8_kernel_2d
+
+          %c0_m1_cmg8_2 = arith.constant 0 : index
+          %c1_m1_cmg8_2 = arith.constant 1 : index
+          %c32_m1_cmg8_2 = arith.constant 32 : index
+          %c16_m1_cmg8_2 = arith.constant 16 : index
+          %c0_i64_m1_cmg8_2 = arith.constant 0 : i64
+          %c1_i64_m1_cmg8_2 = arith.constant 1 : i64
+          %c64_i64_m1_cmg8_2 = arith.constant 64 : i64
+
+          %ub_out_m1_cmg8_2 = pto.castptr %c0_i64_m1_cmg8_2 : i64 -> !pto.ptr<ui8, ub>
+          %gm_out_m1_cmg8_2 = pto.castptr %arg1 : !pto.ptr<ui32, gm> -> !pto.ptr<ui8, gm>
+
+          pto.vecscope {
+            scf.for %iter_m1_cmg8_2 = %c0_m1_cmg8_2 to %c1_m1_cmg8_2 step %c1_m1_cmg8_2 {
+              %lhs_m1_cmg8_2 = pto.pset_b8 "PAT_ALL" : !pto.mask<b8>
+              %rhs_m1_cmg8_2 = pto.pset_b8 "PAT_ALLF" : !pto.mask<b8>
+              %low_m1_cmg8_2, %high_m1_cmg8_2 = pto.pdintlv_b8 %lhs_m1_cmg8_2, %rhs_m1_cmg8_2 : !pto.mask<b8>, !pto.mask<b8> -> !pto.mask<b8>, !pto.mask<b8>
+              pto.psts %low_m1_cmg8_2, %ub_out_m1_cmg8_2[%c0_m1_cmg8_2], "NORM" : !pto.mask<b8>, !pto.ptr<ui8, ub>, index
+              pto.psts %high_m1_cmg8_2, %ub_out_m1_cmg8_2[%c32_m1_cmg8_2], "NORM" : !pto.mask<b8>, !pto.ptr<ui8, ub>, index
+            }
+          }
+
+          pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+          pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+          pto.mte_ub_gm %ub_out_m1_cmg8_2, %gm_out_m1_cmg8_2, %c64_i64_m1_cmg8_2
+            nburst(%c1_i64_m1_cmg8_2, %c64_i64_m1_cmg8_2, %c64_i64_m1_cmg8_2)
+            : !pto.ptr<ui8, ub>, !pto.ptr<ui8, gm>, i64, i64, i64, i64
+          pto.barrier #pto.pipe<PIPE_ALL>
+    }
+
+    // inactive cross-case merge from micro-op/materialization-predicate/pge-tail-mask
+    scf.if %__case_merge_guard {
+
+          %__deep_merge_guard_cmg8_3 = arith.constant false
+          // inactive merged from pge_tail_mask_boundary_kernel_2d
+          scf.if %__deep_merge_guard_cmg8_3 {
+
+          %c0_m0_cmg8_3 = arith.constant 0 : index
+          %c1_m0_cmg8_3 = arith.constant 1 : index
+          %c32_m0_cmg8_3 = arith.constant 32 : index
+          %c64_m0_cmg8_3 = arith.constant 64 : index
+          %c0_i64_m0_cmg8_3 = arith.constant 0 : i64
+          %c1_i64_m0_cmg8_3 = arith.constant 1 : i64
+          %c96_i64_m0_cmg8_3 = arith.constant 96 : i64
+
+          %ub_out_m0_cmg8_3 = pto.castptr %c0_i64_m0_cmg8_3 : i64 -> !pto.ptr<ui8, ub>
+          %gm_out_m0_cmg8_3 = pto.castptr %arg0 : !pto.ptr<ui32, gm> -> !pto.ptr<ui8, gm>
+
+          pto.vecscope {
+            scf.for %iter_m0_cmg8_3 = %c0_m0_cmg8_3 to %c1_m0_cmg8_3 step %c1_m0_cmg8_3 {
+              %m0_m0_cmg8_3 = pto.pge_b8 "PAT_VL1" : !pto.mask<b8>
+              %m1_m0_cmg8_3 = pto.pge_b16 "PAT_VL1" : !pto.mask<b16>
+              %m2_m0_cmg8_3 = pto.pge_b32 "PAT_VL1" : !pto.mask<b32>
+              pto.psts %m0_m0_cmg8_3, %ub_out_m0_cmg8_3[%c0_m0_cmg8_3], "NORM" : !pto.mask<b8>, !pto.ptr<ui8, ub>, index
+              pto.psts %m1_m0_cmg8_3, %ub_out_m0_cmg8_3[%c32_m0_cmg8_3], "NORM" : !pto.mask<b16>, !pto.ptr<ui8, ub>, index
+              pto.psts %m2_m0_cmg8_3, %ub_out_m0_cmg8_3[%c64_m0_cmg8_3], "NORM" : !pto.mask<b32>, !pto.ptr<ui8, ub>, index
+            }
+          }
+
+          pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+          pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+          pto.mte_ub_gm %ub_out_m0_cmg8_3, %gm_out_m0_cmg8_3, %c96_i64_m0_cmg8_3
+            nburst(%c1_i64_m0_cmg8_3, %c96_i64_m0_cmg8_3, %c96_i64_m0_cmg8_3)
+            : !pto.ptr<ui8, ub>, !pto.ptr<ui8, gm>, i64, i64, i64, i64
+          pto.barrier #pto.pipe<PIPE_ALL>
+
+          }
+          // active merged from pge_tail_mask_kernel_2d
+
+          %c0_m1_cmg8_3 = arith.constant 0 : index
+          %c1_m1_cmg8_3 = arith.constant 1 : index
+          %c32_m1_cmg8_3 = arith.constant 32 : index
+          %c64_m1_cmg8_3 = arith.constant 64 : index
+          %c0_i64_m1_cmg8_3 = arith.constant 0 : i64
+          %c1_i64_m1_cmg8_3 = arith.constant 1 : i64
+          %c96_i64_m1_cmg8_3 = arith.constant 96 : i64
+
+          %ub_out_m1_cmg8_3 = pto.castptr %c0_i64_m1_cmg8_3 : i64 -> !pto.ptr<ui8, ub>
+          %gm_out_m1_cmg8_3 = pto.castptr %arg1 : !pto.ptr<ui32, gm> -> !pto.ptr<ui8, gm>
+
+          pto.vecscope {
+            scf.for %iter_m1_cmg8_3 = %c0_m1_cmg8_3 to %c1_m1_cmg8_3 step %c1_m1_cmg8_3 {
+              %m0_m1_cmg8_3 = pto.pge_b8 "PAT_VL8" : !pto.mask<b8>
+              %m1_m1_cmg8_3 = pto.pge_b16 "PAT_VL8" : !pto.mask<b16>
+              %m2_m1_cmg8_3 = pto.pge_b32 "PAT_VL8" : !pto.mask<b32>
+              pto.psts %m0_m1_cmg8_3, %ub_out_m1_cmg8_3[%c0_m1_cmg8_3], "NORM" : !pto.mask<b8>, !pto.ptr<ui8, ub>, index
+              pto.psts %m1_m1_cmg8_3, %ub_out_m1_cmg8_3[%c32_m1_cmg8_3], "NORM" : !pto.mask<b16>, !pto.ptr<ui8, ub>, index
+              pto.psts %m2_m1_cmg8_3, %ub_out_m1_cmg8_3[%c64_m1_cmg8_3], "NORM" : !pto.mask<b32>, !pto.ptr<ui8, ub>, index
+            }
+          }
+
+          pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+          pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+          pto.mte_ub_gm %ub_out_m1_cmg8_3, %gm_out_m1_cmg8_3, %c96_i64_m1_cmg8_3
+            nburst(%c1_i64_m1_cmg8_3, %c96_i64_m1_cmg8_3, %c96_i64_m1_cmg8_3)
+            : !pto.ptr<ui8, ub>, !pto.ptr<ui8, gm>, i64, i64, i64, i64
+          pto.barrier #pto.pipe<PIPE_ALL>
+    }
+
+    // inactive cross-case merge from micro-op/materialization-predicate/pintlv_b16
+    scf.if %__case_merge_guard {
+
+          %__deep_merge_guard_cmg8_4 = arith.constant false
+          // inactive merged from pintlv_b16_nontrivial_kernel_2d
+          scf.if %__deep_merge_guard_cmg8_4 {
+
+          %c0_m0_cmg8_4 = arith.constant 0 : index
+          %c1_m0_cmg8_4 = arith.constant 1 : index
+          %c32_m0_cmg8_4 = arith.constant 32 : index
+          %c16_m0_cmg8_4 = arith.constant 16 : index
+          %c0_i64_m0_cmg8_4 = arith.constant 0 : i64
+          %c1_i64_m0_cmg8_4 = arith.constant 1 : i64
+          %c64_i64_m0_cmg8_4 = arith.constant 64 : i64
+
+          %ub_out_m0_cmg8_4 = pto.castptr %c0_i64_m0_cmg8_4 : i64 -> !pto.ptr<ui8, ub>
+          %gm_out_m0_cmg8_4 = pto.castptr %arg0 : !pto.ptr<ui32, gm> -> !pto.ptr<ui8, gm>
+
+          pto.vecscope {
+            scf.for %iter_m0_cmg8_4 = %c0_m0_cmg8_4 to %c1_m0_cmg8_4 step %c1_m0_cmg8_4 {
+              %lhs_m0_cmg8_4 = pto.pset_b16 "PAT_VL8" : !pto.mask<b16>
+              %rhs_m0_cmg8_4 = pto.pset_b16 "PAT_M4" : !pto.mask<b16>
+              %low_m0_cmg8_4, %high_m0_cmg8_4 = pto.pintlv_b16 %lhs_m0_cmg8_4, %rhs_m0_cmg8_4 : !pto.mask<b16>, !pto.mask<b16> -> !pto.mask<b16>, !pto.mask<b16>
+              pto.psts %low_m0_cmg8_4, %ub_out_m0_cmg8_4[%c0_m0_cmg8_4], "NORM" : !pto.mask<b16>, !pto.ptr<ui8, ub>, index
+              pto.psts %high_m0_cmg8_4, %ub_out_m0_cmg8_4[%c32_m0_cmg8_4], "NORM" : !pto.mask<b16>, !pto.ptr<ui8, ub>, index
+            }
+          }
+
+          pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+          pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+          pto.mte_ub_gm %ub_out_m0_cmg8_4, %gm_out_m0_cmg8_4, %c64_i64_m0_cmg8_4
+            nburst(%c1_i64_m0_cmg8_4, %c64_i64_m0_cmg8_4, %c64_i64_m0_cmg8_4)
+            : !pto.ptr<ui8, ub>, !pto.ptr<ui8, gm>, i64, i64, i64, i64
+          pto.barrier #pto.pipe<PIPE_ALL>
+
+          }
+          // active merged from pintlv_b16_kernel_2d
+
+          %c0_m1_cmg8_4 = arith.constant 0 : index
+          %c1_m1_cmg8_4 = arith.constant 1 : index
+          %c32_m1_cmg8_4 = arith.constant 32 : index
+          %c16_m1_cmg8_4 = arith.constant 16 : index
+          %c0_i64_m1_cmg8_4 = arith.constant 0 : i64
+          %c1_i64_m1_cmg8_4 = arith.constant 1 : i64
+          %c64_i64_m1_cmg8_4 = arith.constant 64 : i64
+
+          %ub_out_m1_cmg8_4 = pto.castptr %c0_i64_m1_cmg8_4 : i64 -> !pto.ptr<ui8, ub>
+          %gm_out_m1_cmg8_4 = pto.castptr %arg1 : !pto.ptr<ui32, gm> -> !pto.ptr<ui8, gm>
+
+          pto.vecscope {
+            scf.for %iter_m1_cmg8_4 = %c0_m1_cmg8_4 to %c1_m1_cmg8_4 step %c1_m1_cmg8_4 {
+              %lhs_m1_cmg8_4 = pto.pset_b16 "PAT_ALL" : !pto.mask<b16>
+              %rhs_m1_cmg8_4 = pto.pset_b16 "PAT_ALLF" : !pto.mask<b16>
+              %low_m1_cmg8_4, %high_m1_cmg8_4 = pto.pintlv_b16 %lhs_m1_cmg8_4, %rhs_m1_cmg8_4 : !pto.mask<b16>, !pto.mask<b16> -> !pto.mask<b16>, !pto.mask<b16>
+              pto.psts %low_m1_cmg8_4, %ub_out_m1_cmg8_4[%c0_m1_cmg8_4], "NORM" : !pto.mask<b16>, !pto.ptr<ui8, ub>, index
+              pto.psts %high_m1_cmg8_4, %ub_out_m1_cmg8_4[%c32_m1_cmg8_4], "NORM" : !pto.mask<b16>, !pto.ptr<ui8, ub>, index
+            }
+          }
+
+          pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+          pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+          pto.mte_ub_gm %ub_out_m1_cmg8_4, %gm_out_m1_cmg8_4, %c64_i64_m1_cmg8_4
+            nburst(%c1_i64_m1_cmg8_4, %c64_i64_m1_cmg8_4, %c64_i64_m1_cmg8_4)
+            : !pto.ptr<ui8, ub>, !pto.ptr<ui8, gm>, i64, i64, i64, i64
+          pto.barrier #pto.pipe<PIPE_ALL>
+    }
+
+    // inactive cross-case merge from micro-op/materialization-predicate/pintlv_b32
+    scf.if %__case_merge_guard {
+
+          %__deep_merge_guard_cmg8_5 = arith.constant false
+          // inactive merged from pintlv_b32_nontrivial_kernel_2d
+          scf.if %__deep_merge_guard_cmg8_5 {
+
+          %c0_m0_cmg8_5 = arith.constant 0 : index
+          %c1_m0_cmg8_5 = arith.constant 1 : index
+          %c32_m0_cmg8_5 = arith.constant 32 : index
+          %c16_m0_cmg8_5 = arith.constant 16 : index
+          %c0_i64_m0_cmg8_5 = arith.constant 0 : i64
+          %c1_i64_m0_cmg8_5 = arith.constant 1 : i64
+          %c64_i64_m0_cmg8_5 = arith.constant 64 : i64
+
+          %ub_out_m0_cmg8_5 = pto.castptr %c0_i64_m0_cmg8_5 : i64 -> !pto.ptr<ui8, ub>
+          %gm_out_m0_cmg8_5 = pto.castptr %arg0 : !pto.ptr<ui32, gm> -> !pto.ptr<ui8, gm>
+
+          pto.vecscope {
+            scf.for %iter_m0_cmg8_5 = %c0_m0_cmg8_5 to %c1_m0_cmg8_5 step %c1_m0_cmg8_5 {
+              %lhs_m0_cmg8_5 = pto.pset_b32 "PAT_VL8" : !pto.mask<b32>
+              %rhs_m0_cmg8_5 = pto.pset_b32 "PAT_M4" : !pto.mask<b32>
+              %low_m0_cmg8_5, %high_m0_cmg8_5 = pto.pintlv_b32 %lhs_m0_cmg8_5, %rhs_m0_cmg8_5 : !pto.mask<b32>, !pto.mask<b32> -> !pto.mask<b32>, !pto.mask<b32>
+              pto.psts %low_m0_cmg8_5, %ub_out_m0_cmg8_5[%c0_m0_cmg8_5], "NORM" : !pto.mask<b32>, !pto.ptr<ui8, ub>, index
+              pto.psts %high_m0_cmg8_5, %ub_out_m0_cmg8_5[%c32_m0_cmg8_5], "NORM" : !pto.mask<b32>, !pto.ptr<ui8, ub>, index
+            }
+          }
+
+          pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+          pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+          pto.mte_ub_gm %ub_out_m0_cmg8_5, %gm_out_m0_cmg8_5, %c64_i64_m0_cmg8_5
+            nburst(%c1_i64_m0_cmg8_5, %c64_i64_m0_cmg8_5, %c64_i64_m0_cmg8_5)
+            : !pto.ptr<ui8, ub>, !pto.ptr<ui8, gm>, i64, i64, i64, i64
+          pto.barrier #pto.pipe<PIPE_ALL>
+
+          }
+          // active merged from pintlv_b32_kernel_2d
+
+          %c0_m1_cmg8_5 = arith.constant 0 : index
+          %c1_m1_cmg8_5 = arith.constant 1 : index
+          %c32_m1_cmg8_5 = arith.constant 32 : index
+          %c16_m1_cmg8_5 = arith.constant 16 : index
+          %c0_i64_m1_cmg8_5 = arith.constant 0 : i64
+          %c1_i64_m1_cmg8_5 = arith.constant 1 : i64
+          %c64_i64_m1_cmg8_5 = arith.constant 64 : i64
+
+          %ub_out_m1_cmg8_5 = pto.castptr %c0_i64_m1_cmg8_5 : i64 -> !pto.ptr<ui8, ub>
+          %gm_out_m1_cmg8_5 = pto.castptr %arg1 : !pto.ptr<ui32, gm> -> !pto.ptr<ui8, gm>
+
+          pto.vecscope {
+            scf.for %iter_m1_cmg8_5 = %c0_m1_cmg8_5 to %c1_m1_cmg8_5 step %c1_m1_cmg8_5 {
+              %lhs_m1_cmg8_5 = pto.pset_b32 "PAT_ALL" : !pto.mask<b32>
+              %rhs_m1_cmg8_5 = pto.pset_b32 "PAT_ALLF" : !pto.mask<b32>
+              %low_m1_cmg8_5, %high_m1_cmg8_5 = pto.pintlv_b32 %lhs_m1_cmg8_5, %rhs_m1_cmg8_5 : !pto.mask<b32>, !pto.mask<b32> -> !pto.mask<b32>, !pto.mask<b32>
+              pto.psts %low_m1_cmg8_5, %ub_out_m1_cmg8_5[%c0_m1_cmg8_5], "NORM" : !pto.mask<b32>, !pto.ptr<ui8, ub>, index
+              pto.psts %high_m1_cmg8_5, %ub_out_m1_cmg8_5[%c32_m1_cmg8_5], "NORM" : !pto.mask<b32>, !pto.ptr<ui8, ub>, index
+            }
+          }
+
+          pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+          pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+          pto.mte_ub_gm %ub_out_m1_cmg8_5, %gm_out_m1_cmg8_5, %c64_i64_m1_cmg8_5
+            nburst(%c1_i64_m1_cmg8_5, %c64_i64_m1_cmg8_5, %c64_i64_m1_cmg8_5)
+            : !pto.ptr<ui8, ub>, !pto.ptr<ui8, gm>, i64, i64, i64, i64
+          pto.barrier #pto.pipe<PIPE_ALL>
+    }
+
+    // inactive cross-case merge from micro-op/materialization-predicate/pintlv_b8
+    scf.if %__case_merge_guard {
+
+          %__deep_merge_guard_cmg8_6 = arith.constant false
+          // inactive merged from pintlv_b8_nontrivial_kernel_2d
+          scf.if %__deep_merge_guard_cmg8_6 {
+
+          %c0_m0_cmg8_6 = arith.constant 0 : index
+          %c1_m0_cmg8_6 = arith.constant 1 : index
+          %c32_m0_cmg8_6 = arith.constant 32 : index
+          %c16_m0_cmg8_6 = arith.constant 16 : index
+          %c0_i64_m0_cmg8_6 = arith.constant 0 : i64
+          %c1_i64_m0_cmg8_6 = arith.constant 1 : i64
+          %c64_i64_m0_cmg8_6 = arith.constant 64 : i64
+
+          %ub_out_m0_cmg8_6 = pto.castptr %c0_i64_m0_cmg8_6 : i64 -> !pto.ptr<ui8, ub>
+          %gm_out_m0_cmg8_6 = pto.castptr %arg0 : !pto.ptr<ui32, gm> -> !pto.ptr<ui8, gm>
+
+          pto.vecscope {
+            scf.for %iter_m0_cmg8_6 = %c0_m0_cmg8_6 to %c1_m0_cmg8_6 step %c1_m0_cmg8_6 {
+              %lhs_m0_cmg8_6 = pto.pset_b8 "PAT_VL8" : !pto.mask<b8>
+              %rhs_m0_cmg8_6 = pto.pset_b8 "PAT_M4" : !pto.mask<b8>
+              %low_m0_cmg8_6, %high_m0_cmg8_6 = pto.pintlv_b8 %lhs_m0_cmg8_6, %rhs_m0_cmg8_6 : !pto.mask<b8>, !pto.mask<b8> -> !pto.mask<b8>, !pto.mask<b8>
+              pto.psts %low_m0_cmg8_6, %ub_out_m0_cmg8_6[%c0_m0_cmg8_6], "NORM" : !pto.mask<b8>, !pto.ptr<ui8, ub>, index
+              pto.psts %high_m0_cmg8_6, %ub_out_m0_cmg8_6[%c32_m0_cmg8_6], "NORM" : !pto.mask<b8>, !pto.ptr<ui8, ub>, index
+            }
+          }
+
+          pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+          pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+          pto.mte_ub_gm %ub_out_m0_cmg8_6, %gm_out_m0_cmg8_6, %c64_i64_m0_cmg8_6
+            nburst(%c1_i64_m0_cmg8_6, %c64_i64_m0_cmg8_6, %c64_i64_m0_cmg8_6)
+            : !pto.ptr<ui8, ub>, !pto.ptr<ui8, gm>, i64, i64, i64, i64
+          pto.barrier #pto.pipe<PIPE_ALL>
+
+          }
+          // active merged from pintlv_b8_kernel_2d
+
+          %c0_m1_cmg8_6 = arith.constant 0 : index
+          %c1_m1_cmg8_6 = arith.constant 1 : index
+          %c32_m1_cmg8_6 = arith.constant 32 : index
+          %c16_m1_cmg8_6 = arith.constant 16 : index
+          %c0_i64_m1_cmg8_6 = arith.constant 0 : i64
+          %c1_i64_m1_cmg8_6 = arith.constant 1 : i64
+          %c64_i64_m1_cmg8_6 = arith.constant 64 : i64
+
+          %ub_out_m1_cmg8_6 = pto.castptr %c0_i64_m1_cmg8_6 : i64 -> !pto.ptr<ui8, ub>
+          %gm_out_m1_cmg8_6 = pto.castptr %arg1 : !pto.ptr<ui32, gm> -> !pto.ptr<ui8, gm>
+
+          pto.vecscope {
+            scf.for %iter_m1_cmg8_6 = %c0_m1_cmg8_6 to %c1_m1_cmg8_6 step %c1_m1_cmg8_6 {
+              %lhs_m1_cmg8_6 = pto.pset_b8 "PAT_ALL" : !pto.mask<b8>
+              %rhs_m1_cmg8_6 = pto.pset_b8 "PAT_ALLF" : !pto.mask<b8>
+              %low_m1_cmg8_6, %high_m1_cmg8_6 = pto.pintlv_b8 %lhs_m1_cmg8_6, %rhs_m1_cmg8_6 : !pto.mask<b8>, !pto.mask<b8> -> !pto.mask<b8>, !pto.mask<b8>
+              pto.psts %low_m1_cmg8_6, %ub_out_m1_cmg8_6[%c0_m1_cmg8_6], "NORM" : !pto.mask<b8>, !pto.ptr<ui8, ub>, index
+              pto.psts %high_m1_cmg8_6, %ub_out_m1_cmg8_6[%c32_m1_cmg8_6], "NORM" : !pto.mask<b8>, !pto.ptr<ui8, ub>, index
+            }
+          }
+
+          pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+          pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+          pto.mte_ub_gm %ub_out_m1_cmg8_6, %gm_out_m1_cmg8_6, %c64_i64_m1_cmg8_6
+            nburst(%c1_i64_m1_cmg8_6, %c64_i64_m1_cmg8_6, %c64_i64_m1_cmg8_6)
+            : !pto.ptr<ui8, ub>, !pto.ptr<ui8, gm>, i64, i64, i64, i64
+          pto.barrier #pto.pipe<PIPE_ALL>
+    }
+
+    // inactive cross-case merge from micro-op/materialization-predicate/plt-tail-mask
+    scf.if %__case_merge_guard {
+
+          %__deep_merge_guard_cmg8_7 = arith.constant false
+          // inactive merged from plt_tail_mask_boundary_kernel_2d
+          scf.if %__deep_merge_guard_cmg8_7 {
+
+          %c0_m0_cmg8_7 = arith.constant 0 : index
+          %c1_m0_cmg8_7 = arith.constant 1 : index
+          %c32_m0_cmg8_7 = arith.constant 32 : index
+          %c64_m0_cmg8_7 = arith.constant 64 : index
+          %c0_i64_m0_cmg8_7 = arith.constant 0 : i64
+          %c1_i64_m0_cmg8_7 = arith.constant 1 : i64
+          %c96_i64_m0_cmg8_7 = arith.constant 96 : i64
+          %c1_i32_m0_cmg8_7 = arith.constant 1 : i32
+
+          %ub_out_m0_cmg8_7 = pto.castptr %c0_i64_m0_cmg8_7 : i64 -> !pto.ptr<ui8, ub>
+          %gm_out_m0_cmg8_7 = pto.castptr %arg0 : !pto.ptr<ui32, gm> -> !pto.ptr<ui8, gm>
+
+          pto.vecscope {
+            scf.for %iter_m0_cmg8_7 = %c0_m0_cmg8_7 to %c1_m0_cmg8_7 step %c1_m0_cmg8_7 {
+              %m0_m0_cmg8_7, %s0_m0_cmg8_7 = pto.plt_b8 %c1_i32_m0_cmg8_7 : i32 -> !pto.mask<b8>, i32
+              %m1_m0_cmg8_7, %s1_m0_cmg8_7 = pto.plt_b16 %c1_i32_m0_cmg8_7 : i32 -> !pto.mask<b16>, i32
+              %m2_m0_cmg8_7, %s2_m0_cmg8_7 = pto.plt_b32 %c1_i32_m0_cmg8_7 : i32 -> !pto.mask<b32>, i32
+              pto.psts %m0_m0_cmg8_7, %ub_out_m0_cmg8_7[%c0_m0_cmg8_7], "NORM" : !pto.mask<b8>, !pto.ptr<ui8, ub>, index
+              pto.psts %m1_m0_cmg8_7, %ub_out_m0_cmg8_7[%c32_m0_cmg8_7], "NORM" : !pto.mask<b16>, !pto.ptr<ui8, ub>, index
+              pto.psts %m2_m0_cmg8_7, %ub_out_m0_cmg8_7[%c64_m0_cmg8_7], "NORM" : !pto.mask<b32>, !pto.ptr<ui8, ub>, index
+            }
+          }
+
+          pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+          pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+          pto.mte_ub_gm %ub_out_m0_cmg8_7, %gm_out_m0_cmg8_7, %c96_i64_m0_cmg8_7
+            nburst(%c1_i64_m0_cmg8_7, %c96_i64_m0_cmg8_7, %c96_i64_m0_cmg8_7)
+            : !pto.ptr<ui8, ub>, !pto.ptr<ui8, gm>, i64, i64, i64, i64
+          pto.barrier #pto.pipe<PIPE_ALL>
+
+          }
+          // active merged from plt_tail_mask_kernel_2d
+
+          %c0_m1_cmg8_7 = arith.constant 0 : index
+          %c1_m1_cmg8_7 = arith.constant 1 : index
+          %c32_m1_cmg8_7 = arith.constant 32 : index
+          %c64_m1_cmg8_7 = arith.constant 64 : index
+          %c0_i64_m1_cmg8_7 = arith.constant 0 : i64
+          %c1_i64_m1_cmg8_7 = arith.constant 1 : i64
+          %c96_i64_m1_cmg8_7 = arith.constant 96 : i64
+          %c13_m1_cmg8_7 = arith.constant 13 : i32
+          %c7_m1_cmg8_7 = arith.constant 7 : i32
+          %c3_m1_cmg8_7 = arith.constant 3 : i32
+
+          %ub_out_m1_cmg8_7 = pto.castptr %c0_i64_m1_cmg8_7 : i64 -> !pto.ptr<ui8, ub>
+          %gm_out_m1_cmg8_7 = pto.castptr %arg1 : !pto.ptr<ui32, gm> -> !pto.ptr<ui8, gm>
+
+          pto.vecscope {
+            scf.for %iter_m1_cmg8_7 = %c0_m1_cmg8_7 to %c1_m1_cmg8_7 step %c1_m1_cmg8_7 {
+              %m0_m1_cmg8_7, %s0_m1_cmg8_7 = pto.plt_b8 %c13_m1_cmg8_7 : i32 -> !pto.mask<b8>, i32
+              %m1_m1_cmg8_7, %s1_m1_cmg8_7 = pto.plt_b16 %c7_m1_cmg8_7 : i32 -> !pto.mask<b16>, i32
+              %m2_m1_cmg8_7, %s2_m1_cmg8_7 = pto.plt_b32 %c3_m1_cmg8_7 : i32 -> !pto.mask<b32>, i32
+              pto.psts %m0_m1_cmg8_7, %ub_out_m1_cmg8_7[%c0_m1_cmg8_7], "NORM" : !pto.mask<b8>, !pto.ptr<ui8, ub>, index
+              pto.psts %m1_m1_cmg8_7, %ub_out_m1_cmg8_7[%c32_m1_cmg8_7], "NORM" : !pto.mask<b16>, !pto.ptr<ui8, ub>, index
+              pto.psts %m2_m1_cmg8_7, %ub_out_m1_cmg8_7[%c64_m1_cmg8_7], "NORM" : !pto.mask<b32>, !pto.ptr<ui8, ub>, index
+            }
+          }
+
+          pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+          pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+          pto.mte_ub_gm %ub_out_m1_cmg8_7, %gm_out_m1_cmg8_7, %c96_i64_m1_cmg8_7
+            nburst(%c1_i64_m1_cmg8_7, %c96_i64_m1_cmg8_7, %c96_i64_m1_cmg8_7)
+            : !pto.ptr<ui8, ub>, !pto.ptr<ui8, gm>, i64, i64, i64, i64
+          pto.barrier #pto.pipe<PIPE_ALL>
+    }
+
+    // inactive cross-case merge from micro-op/materialization-predicate/ppack-punpack
+    scf.if %__case_merge_guard {
+
+          %__deep_merge_guard_cmg8_8 = arith.constant false
+          // inactive merged from ppack_punpack_nontrivial_kernel_2d
+          scf.if %__deep_merge_guard_cmg8_8 {
+
+          %c0_m0_cmg8_8 = arith.constant 0 : index
+          %c1_m0_cmg8_8 = arith.constant 1 : index
+          %c32_m0_cmg8_8 = arith.constant 32 : index
+          %c0_i64_m0_cmg8_8 = arith.constant 0 : i64
+          %c1_i64_m0_cmg8_8 = arith.constant 1 : i64
+          %c64_i64_m0_cmg8_8 = arith.constant 64 : i64
+
+          %ub_out_m0_cmg8_8 = pto.castptr %c0_i64_m0_cmg8_8 : i64 -> !pto.ptr<ui8, ub>
+          %gm_out_m0_cmg8_8 = pto.castptr %arg0 : !pto.ptr<ui32, gm> -> !pto.ptr<ui8, gm>
+
+          pto.vecscope {
+            scf.for %iter_m0_cmg8_8 = %c0_m0_cmg8_8 to %c1_m0_cmg8_8 step %c1_m0_cmg8_8 {
+              %src_m0_cmg8_8 = pto.pset_b32 "PAT_M4" : !pto.mask<b32>
+              %packed_m0_cmg8_8 = pto.ppack %src_m0_cmg8_8, "LOWER" : !pto.mask<b32> -> !pto.mask<b32>
+              %roundtrip_m0_cmg8_8 = pto.punpack %packed_m0_cmg8_8, "LOWER" : !pto.mask<b32> -> !pto.mask<b32>
+              pto.psts %packed_m0_cmg8_8, %ub_out_m0_cmg8_8[%c0_m0_cmg8_8], "NORM" : !pto.mask<b32>, !pto.ptr<ui8, ub>, index
+              pto.psts %roundtrip_m0_cmg8_8, %ub_out_m0_cmg8_8[%c32_m0_cmg8_8], "NORM" : !pto.mask<b32>, !pto.ptr<ui8, ub>, index
+            }
+          }
+
+          pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+          pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+          pto.mte_ub_gm %ub_out_m0_cmg8_8, %gm_out_m0_cmg8_8, %c64_i64_m0_cmg8_8
+            nburst(%c1_i64_m0_cmg8_8, %c64_i64_m0_cmg8_8, %c64_i64_m0_cmg8_8)
+            : !pto.ptr<ui8, ub>, !pto.ptr<ui8, gm>, i64, i64, i64, i64
+          pto.barrier #pto.pipe<PIPE_ALL>
+
+          }
+          // active merged from ppack_punpack_kernel_2d
+
+          %c0_m1_cmg8_8 = arith.constant 0 : index
+          %c1_m1_cmg8_8 = arith.constant 1 : index
+          %c32_m1_cmg8_8 = arith.constant 32 : index
+          %c0_i64_m1_cmg8_8 = arith.constant 0 : i64
+          %c1_i64_m1_cmg8_8 = arith.constant 1 : i64
+          %c64_i64_m1_cmg8_8 = arith.constant 64 : i64
+
+          %ub_out_m1_cmg8_8 = pto.castptr %c0_i64_m1_cmg8_8 : i64 -> !pto.ptr<ui8, ub>
+          %gm_out_m1_cmg8_8 = pto.castptr %arg1 : !pto.ptr<ui32, gm> -> !pto.ptr<ui8, gm>
+
+          pto.vecscope {
+            scf.for %iter_m1_cmg8_8 = %c0_m1_cmg8_8 to %c1_m1_cmg8_8 step %c1_m1_cmg8_8 {
+              %src_m1_cmg8_8 = pto.pset_b32 "PAT_ALL" : !pto.mask<b32>
+              %packed_m1_cmg8_8 = pto.ppack %src_m1_cmg8_8, "LOWER" : !pto.mask<b32> -> !pto.mask<b32>
+              %roundtrip_m1_cmg8_8 = pto.punpack %packed_m1_cmg8_8, "LOWER" : !pto.mask<b32> -> !pto.mask<b32>
+              pto.psts %packed_m1_cmg8_8, %ub_out_m1_cmg8_8[%c0_m1_cmg8_8], "NORM" : !pto.mask<b32>, !pto.ptr<ui8, ub>, index
+              pto.psts %roundtrip_m1_cmg8_8, %ub_out_m1_cmg8_8[%c32_m1_cmg8_8], "NORM" : !pto.mask<b32>, !pto.ptr<ui8, ub>, index
+            }
+          }
+
+          pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+          pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+          pto.mte_ub_gm %ub_out_m1_cmg8_8, %gm_out_m1_cmg8_8, %c64_i64_m1_cmg8_8
+            nburst(%c1_i64_m1_cmg8_8, %c64_i64_m1_cmg8_8, %c64_i64_m1_cmg8_8)
+            : !pto.ptr<ui8, ub>, !pto.ptr<ui8, gm>, i64, i64, i64, i64
+          pto.barrier #pto.pipe<PIPE_ALL>
+    }
+
+    // inactive cross-case merge from micro-op/materialization-predicate/psel
+    scf.if %__case_merge_guard {
+
+          %__deep_merge_guard_cmg8_9 = arith.constant false
+          // inactive merged from psel_tail_kernel_2d
+          scf.if %__deep_merge_guard_cmg8_9 {
+
+          %c0_m0_cmg8_9 = arith.constant 0 : index
+          %c1_m0_cmg8_9 = arith.constant 1 : index
+          %c32_m0_cmg8_9 = arith.constant 32 : index
+          %c64_m0_cmg8_9 = arith.constant 64 : index
+          %c0_i64_m0_cmg8_9 = arith.constant 0 : i64
+          %c1_i64_m0_cmg8_9 = arith.constant 1 : i64
+          %c32_i64_m0_cmg8_9 = arith.constant 32 : i64
+          %c64_i64_m0_cmg8_9 = arith.constant 64 : i64
+          %c13_m0_cmg8_9 = arith.constant 13 : i32
+
+          %ub_out_m0_cmg8_9 = pto.castptr %c0_i64_m0_cmg8_9 : i64 -> !pto.ptr<ui8, ub>
+          %gm_out_m0_cmg8_9 = pto.castptr %arg0 : !pto.ptr<ui32, gm> -> !pto.ptr<ui8, gm>
+
+          pto.vecscope {
+            scf.for %iter_m0_cmg8_9 = %c0_m0_cmg8_9 to %c1_m0_cmg8_9 step %c1_m0_cmg8_9 {
+              %src0_m0_cmg8_9 = pto.pset_b32 "PAT_ALL" : !pto.mask<b32>
+              %sel_m0_cmg8_9, %next_m0_cmg8_9 = pto.plt_b32 %c13_m0_cmg8_9 : i32 -> !pto.mask<b32>, i32
+              %out_m0_cmg8_9 = pto.psel %src0_m0_cmg8_9, %sel_m0_cmg8_9, %sel_m0_cmg8_9 : !pto.mask<b32>, !pto.mask<b32>, !pto.mask<b32> -> !pto.mask<b32>
+              pto.psts %out_m0_cmg8_9, %ub_out_m0_cmg8_9[%c0_m0_cmg8_9], "NORM" : !pto.mask<b32>, !pto.ptr<ui8, ub>, index
+              %out_next_m0_cmg8_9 = pto.psel %sel_m0_cmg8_9, %src0_m0_cmg8_9, %sel_m0_cmg8_9 : !pto.mask<b32>, !pto.mask<b32>, !pto.mask<b32> -> !pto.mask<b32>
+              pto.psts %out_next_m0_cmg8_9, %ub_out_m0_cmg8_9[%c32_m0_cmg8_9], "NORM" : !pto.mask<b32>, !pto.ptr<ui8, ub>, index
+            }
+          }
+
+          pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+          pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+          pto.mte_ub_gm %ub_out_m0_cmg8_9, %gm_out_m0_cmg8_9, %c64_i64_m0_cmg8_9
+            nburst(%c1_i64_m0_cmg8_9, %c64_i64_m0_cmg8_9, %c64_i64_m0_cmg8_9)
+            : !pto.ptr<ui8, ub>, !pto.ptr<ui8, gm>, i64, i64, i64, i64
+          pto.barrier #pto.pipe<PIPE_ALL>
+
+          }
+          // active merged from psel_kernel_2d
+
+          %c0_m1_cmg8_9 = arith.constant 0 : index
+          %c1_m1_cmg8_9 = arith.constant 1 : index
+          %c32_m1_cmg8_9 = arith.constant 32 : index
+          %c0_i64_m1_cmg8_9 = arith.constant 0 : i64
+          %c1_i64_m1_cmg8_9 = arith.constant 1 : i64
+          %c32_i64_m1_cmg8_9 = arith.constant 32 : i64
+          %c13_m1_cmg8_9 = arith.constant 13 : i32
+
+          %ub_out_m1_cmg8_9 = pto.castptr %c0_i64_m1_cmg8_9 : i64 -> !pto.ptr<ui8, ub>
+          %gm_out_m1_cmg8_9 = pto.castptr %arg1 : !pto.ptr<ui32, gm> -> !pto.ptr<ui8, gm>
+
+          pto.vecscope {
+            scf.for %iter_m1_cmg8_9 = %c0_m1_cmg8_9 to %c1_m1_cmg8_9 step %c1_m1_cmg8_9 {
+              %src0_m1_cmg8_9 = pto.pset_b32 "PAT_ALL" : !pto.mask<b32>
+              %sel_m1_cmg8_9, %next_m1_cmg8_9 = pto.plt_b32 %c13_m1_cmg8_9 : i32 -> !pto.mask<b32>, i32
+              %out_m1_cmg8_9 = pto.psel %src0_m1_cmg8_9, %sel_m1_cmg8_9, %sel_m1_cmg8_9 : !pto.mask<b32>, !pto.mask<b32>, !pto.mask<b32> -> !pto.mask<b32>
+              pto.psts %out_m1_cmg8_9, %ub_out_m1_cmg8_9[%c0_m1_cmg8_9], "NORM" : !pto.mask<b32>, !pto.ptr<ui8, ub>, index
+            }
+          }
+
+          pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+          pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+          pto.mte_ub_gm %ub_out_m1_cmg8_9, %gm_out_m1_cmg8_9, %c32_i64_m1_cmg8_9
+            nburst(%c1_i64_m1_cmg8_9, %c32_i64_m1_cmg8_9, %c32_i64_m1_cmg8_9)
+            : !pto.ptr<ui8, ub>, !pto.ptr<ui8, gm>, i64, i64, i64, i64
+          pto.barrier #pto.pipe<PIPE_ALL>
+    }
+
+    // inactive cross-case merge from micro-op/materialization-predicate/pset-pattern
+    scf.if %__case_merge_guard {
+
+          %__deep_merge_guard_cmg8_10 = arith.constant false
+          // inactive merged from pset_pattern_fragment_kernel_2d
+          scf.if %__deep_merge_guard_cmg8_10 {
+
+          %c0_m0_cmg8_10 = arith.constant 0 : index
+          %c1_m0_cmg8_10 = arith.constant 1 : index
+          %c32_m0_cmg8_10 = arith.constant 32 : index
+          %c64_m0_cmg8_10 = arith.constant 64 : index
+          %c0_i64_m0_cmg8_10 = arith.constant 0 : i64
+          %c1_i64_m0_cmg8_10 = arith.constant 1 : i64
+          %c96_i64_m0_cmg8_10 = arith.constant 96 : i64
+
+          %ub_out_m0_cmg8_10 = pto.castptr %c0_i64_m0_cmg8_10 : i64 -> !pto.ptr<ui8, ub>
+          %gm_out_m0_cmg8_10 = pto.castptr %arg0 : !pto.ptr<ui32, gm> -> !pto.ptr<ui8, gm>
+
+          pto.vecscope {
+            scf.for %iter_m0_cmg8_10 = %c0_m0_cmg8_10 to %c1_m0_cmg8_10 step %c1_m0_cmg8_10 {
+              %m0_m0_cmg8_10 = pto.pset_b8 "PAT_M3" : !pto.mask<b8>
+              %m1_m0_cmg8_10 = pto.pset_b16 "PAT_H" : !pto.mask<b16>
+              %m2_m0_cmg8_10 = pto.pset_b32 "PAT_Q" : !pto.mask<b32>
+              pto.psts %m0_m0_cmg8_10, %ub_out_m0_cmg8_10[%c0_m0_cmg8_10], "NORM" : !pto.mask<b8>, !pto.ptr<ui8, ub>, index
+              pto.psts %m1_m0_cmg8_10, %ub_out_m0_cmg8_10[%c32_m0_cmg8_10], "NORM" : !pto.mask<b16>, !pto.ptr<ui8, ub>, index
+              pto.psts %m2_m0_cmg8_10, %ub_out_m0_cmg8_10[%c64_m0_cmg8_10], "NORM" : !pto.mask<b32>, !pto.ptr<ui8, ub>, index
+            }
+          }
+
+          pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+          pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+          pto.mte_ub_gm %ub_out_m0_cmg8_10, %gm_out_m0_cmg8_10, %c96_i64_m0_cmg8_10
+            nburst(%c1_i64_m0_cmg8_10, %c96_i64_m0_cmg8_10, %c96_i64_m0_cmg8_10)
+            : !pto.ptr<ui8, ub>, !pto.ptr<ui8, gm>, i64, i64, i64, i64
+          pto.barrier #pto.pipe<PIPE_ALL>
+
+          }
+          // active merged from pset_pattern_kernel_2d
+
+          %c0_m1_cmg8_10 = arith.constant 0 : index
+          %c1_m1_cmg8_10 = arith.constant 1 : index
+          %c32_m1_cmg8_10 = arith.constant 32 : index
+          %c64_m1_cmg8_10 = arith.constant 64 : index
+          %c0_i64_m1_cmg8_10 = arith.constant 0 : i64
+          %c1_i64_m1_cmg8_10 = arith.constant 1 : i64
+          %c96_i64_m1_cmg8_10 = arith.constant 96 : i64
+
+          %ub_out_m1_cmg8_10 = pto.castptr %c0_i64_m1_cmg8_10 : i64 -> !pto.ptr<ui8, ub>
+          %gm_out_m1_cmg8_10 = pto.castptr %arg1 : !pto.ptr<ui32, gm> -> !pto.ptr<ui8, gm>
+
+          pto.vecscope {
+            scf.for %iter_m1_cmg8_10 = %c0_m1_cmg8_10 to %c1_m1_cmg8_10 step %c1_m1_cmg8_10 {
+              %m0_m1_cmg8_10 = pto.pset_b8 "PAT_ALL" : !pto.mask<b8>
+              %m1_m1_cmg8_10 = pto.pset_b16 "PAT_VL8" : !pto.mask<b16>
+              %m2_m1_cmg8_10 = pto.pset_b32 "PAT_VL16" : !pto.mask<b32>
+              pto.psts %m0_m1_cmg8_10, %ub_out_m1_cmg8_10[%c0_m1_cmg8_10], "NORM" : !pto.mask<b8>, !pto.ptr<ui8, ub>, index
+              pto.psts %m1_m1_cmg8_10, %ub_out_m1_cmg8_10[%c32_m1_cmg8_10], "NORM" : !pto.mask<b16>, !pto.ptr<ui8, ub>, index
+              pto.psts %m2_m1_cmg8_10, %ub_out_m1_cmg8_10[%c64_m1_cmg8_10], "NORM" : !pto.mask<b32>, !pto.ptr<ui8, ub>, index
+            }
+          }
+
+          pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+          pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+          pto.mte_ub_gm %ub_out_m1_cmg8_10, %gm_out_m1_cmg8_10, %c96_i64_m1_cmg8_10
+            nburst(%c1_i64_m1_cmg8_10, %c96_i64_m1_cmg8_10, %c96_i64_m1_cmg8_10)
+            : !pto.ptr<ui8, ub>, !pto.ptr<ui8, gm>, i64, i64, i64, i64
+          pto.barrier #pto.pipe<PIPE_ALL>
+    }
+
     return
   }
 }

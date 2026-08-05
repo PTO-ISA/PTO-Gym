@@ -1,0 +1,148 @@
+// Copyright (c) 2026 Huawei Technologies Co., Ltd.
+// This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+// CANN Open Software License Agreement Version 2.0 (the "License").
+// Please refer to the License for details. You may not use this file except in compliance with the License.
+// THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+// INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+// See LICENSE in the root of the software repository for the full text of the License.
+
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
+  func.func @vmi_interleave_layout_roundtrip_kernel(
+      %lhs_gm: !pto.ptr<f16, gm>, %rhs_gm: !pto.ptr<f16, gm>,
+      %intlv_low_gm: !pto.ptr<f32, gm>, %intlv_high_gm: !pto.ptr<f32, gm>,
+      %roundtrip_low_gm: !pto.ptr<f32, gm>,
+      %roundtrip_high_gm: !pto.ptr<f32, gm>,
+      %dense_lhs_gm: !pto.ptr<f32, gm>, %dense_rhs_gm: !pto.ptr<f32, gm>,
+      %dense_roundtrip_low_gm: !pto.ptr<f32, gm>,
+      %dense_roundtrip_high_gm: !pto.ptr<f32, gm>) attributes {pto.kernel} {
+    %c0 = arith.constant 0 : index
+    %c0_i64 = arith.constant 0 : i64
+    %c1_i64 = arith.constant 1 : i64
+    %c512_i64 = arith.constant 512 : i64
+    %c1024_i64 = arith.constant 1024 : i64
+    %c4096_i64 = arith.constant 4096 : i64
+    %c8192_i64 = arith.constant 8192 : i64
+    %c12288_i64 = arith.constant 12288 : i64
+    %c16384_i64 = arith.constant 16384 : i64
+    %c20480_i64 = arith.constant 20480 : i64
+    %c24576_i64 = arith.constant 24576 : i64
+    %c28672_i64 = arith.constant 28672 : i64
+    %c32768_i64 = arith.constant 32768 : i64
+    %c36864_i64 = arith.constant 36864 : i64
+    %c40960_i64 = arith.constant 40960 : i64
+    %c45056_i64 = arith.constant 45056 : i64
+
+    %ub_lhs = pto.castptr %c0_i64 : i64 -> !pto.ptr<f16, ub>
+    %ub_rhs = pto.castptr %c4096_i64 : i64 -> !pto.ptr<f16, ub>
+    %ub_intlv_low = pto.castptr %c8192_i64 : i64 -> !pto.ptr<f32, ub>
+    %ub_intlv_high = pto.castptr %c12288_i64 : i64 -> !pto.ptr<f32, ub>
+    %ub_roundtrip_low = pto.castptr %c16384_i64 : i64 -> !pto.ptr<f32, ub>
+    %ub_roundtrip_high = pto.castptr %c20480_i64 : i64 -> !pto.ptr<f32, ub>
+    %ub_dense_lhs = pto.castptr %c24576_i64 : i64 -> !pto.ptr<f32, ub>
+    %ub_dense_rhs = pto.castptr %c28672_i64 : i64 -> !pto.ptr<f32, ub>
+    %ub_dense_intlv_low = pto.castptr %c32768_i64 : i64 -> !pto.ptr<f32, ub>
+    %ub_dense_intlv_high = pto.castptr %c36864_i64 : i64 -> !pto.ptr<f32, ub>
+    %ub_dense_roundtrip_low = pto.castptr %c40960_i64 : i64 -> !pto.ptr<f32, ub>
+    %ub_dense_roundtrip_high = pto.castptr %c45056_i64 : i64 -> !pto.ptr<f32, ub>
+
+    pto.mte_gm_ub %lhs_gm, %ub_lhs, %c0_i64, %c512_i64
+      nburst(%c1_i64, %c512_i64, %c512_i64)
+      : !pto.ptr<f16, gm>, !pto.ptr<f16, ub>, i64, i64, i64, i64, i64
+    pto.mte_gm_ub %rhs_gm, %ub_rhs, %c0_i64, %c512_i64
+      nburst(%c1_i64, %c512_i64, %c512_i64)
+      : !pto.ptr<f16, gm>, !pto.ptr<f16, ub>, i64, i64, i64, i64, i64
+    pto.mte_gm_ub %dense_lhs_gm, %ub_dense_lhs, %c0_i64, %c512_i64
+      nburst(%c1_i64, %c512_i64, %c512_i64)
+      : !pto.ptr<f32, gm>, !pto.ptr<f32, ub>, i64, i64, i64, i64, i64
+    pto.mte_gm_ub %dense_rhs_gm, %ub_dense_rhs, %c0_i64, %c512_i64
+      nburst(%c1_i64, %c512_i64, %c512_i64)
+      : !pto.ptr<f32, gm>, !pto.ptr<f32, ub>, i64, i64, i64, i64, i64
+
+    pto.set_flag["PIPE_MTE2", "PIPE_V", "EVENT_ID0"]
+    pto.wait_flag["PIPE_MTE2", "PIPE_V", "EVENT_ID0"]
+
+    pto.vecscope {
+      %lhs_f16 = pto.vmi.vload %ub_lhs[%c0]
+          : !pto.ptr<f16, ub> -> !pto.vmi.vreg<256xf16>
+      %rhs_f16 = pto.vmi.vload %ub_rhs[%c0]
+          : !pto.ptr<f16, ub> -> !pto.vmi.vreg<256xf16>
+      %lhs = pto.vmi.vcvt %lhs_f16
+          : !pto.vmi.vreg<256xf16> -> !pto.vmi.vreg<256xf32>
+      %rhs = pto.vmi.vcvt %rhs_f16
+          : !pto.vmi.vreg<256xf16> -> !pto.vmi.vreg<256xf32>
+      %mask_d2 = pto.vmi.pset "PAT_ALL" : !pto.vmi.mask<256xpred>
+      %intlv_low, %intlv_high = pto.vmi.vintlv %lhs, %rhs, %mask_d2
+          : !pto.vmi.vreg<256xf32>, !pto.vmi.vreg<256xf32>,
+            !pto.vmi.mask<256xpred>
+          -> !pto.vmi.vreg<256xf32>, !pto.vmi.vreg<256xf32>
+      pto.vmi.vstore %intlv_low, %ub_intlv_low[%c0]
+          : !pto.vmi.vreg<256xf32>, !pto.ptr<f32, ub>
+      pto.vmi.vstore %intlv_high, %ub_intlv_high[%c0]
+          : !pto.vmi.vreg<256xf32>, !pto.ptr<f32, ub>
+
+      %mask_d4 = pto.vmi.pset "PAT_ALL" : !pto.vmi.mask<256xpred>
+      %roundtrip_low, %roundtrip_high =
+          pto.vmi.vdintlv %intlv_low, %intlv_high, %mask_d4
+          : !pto.vmi.vreg<256xf32>, !pto.vmi.vreg<256xf32>,
+            !pto.vmi.mask<256xpred>
+          -> !pto.vmi.vreg<256xf32>, !pto.vmi.vreg<256xf32>
+      pto.vmi.vstore %roundtrip_low, %ub_roundtrip_low[%c0]
+          : !pto.vmi.vreg<256xf32>, !pto.ptr<f32, ub>
+      pto.vmi.vstore %roundtrip_high, %ub_roundtrip_high[%c0]
+          : !pto.vmi.vreg<256xf32>, !pto.ptr<f32, ub>
+
+      %dense_lhs = pto.vmi.vload %ub_dense_lhs[%c0]
+          : !pto.ptr<f32, ub> -> !pto.vmi.vreg<128xf32>
+      %dense_rhs = pto.vmi.vload %ub_dense_rhs[%c0]
+          : !pto.ptr<f32, ub> -> !pto.vmi.vreg<128xf32>
+      %dense_mask = pto.vmi.pset "PAT_ALL" : !pto.vmi.mask<128xpred>
+      %dense_intlv_low, %dense_intlv_high =
+          pto.vmi.vintlv %dense_lhs, %dense_rhs, %dense_mask
+          : !pto.vmi.vreg<128xf32>, !pto.vmi.vreg<128xf32>,
+            !pto.vmi.mask<128xpred>
+          -> !pto.vmi.vreg<128xf32>, !pto.vmi.vreg<128xf32>
+      pto.vmi.vstore %dense_intlv_low, %ub_dense_intlv_low[%c0]
+          : !pto.vmi.vreg<128xf32>, !pto.ptr<f32, ub>
+      pto.vmi.vstore %dense_intlv_high, %ub_dense_intlv_high[%c0]
+          : !pto.vmi.vreg<128xf32>, !pto.ptr<f32, ub>
+      %dense_roundtrip_low, %dense_roundtrip_high =
+          pto.vmi.vdintlv %dense_intlv_low, %dense_intlv_high, %dense_mask
+          : !pto.vmi.vreg<128xf32>, !pto.vmi.vreg<128xf32>,
+            !pto.vmi.mask<128xpred>
+          -> !pto.vmi.vreg<128xf32>, !pto.vmi.vreg<128xf32>
+      pto.vmi.vstore %dense_roundtrip_low, %ub_dense_roundtrip_low[%c0]
+          : !pto.vmi.vreg<128xf32>, !pto.ptr<f32, ub>
+      pto.vmi.vstore %dense_roundtrip_high, %ub_dense_roundtrip_high[%c0]
+          : !pto.vmi.vreg<128xf32>, !pto.ptr<f32, ub>
+    }
+
+    pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+    pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+    pto.mte_ub_gm %ub_intlv_low, %intlv_low_gm, %c1024_i64
+      nburst(%c1_i64, %c1024_i64, %c1024_i64)
+      : !pto.ptr<f32, ub>, !pto.ptr<f32, gm>, i64, i64, i64, i64
+    pto.mte_ub_gm %ub_intlv_high, %intlv_high_gm, %c1024_i64
+      nburst(%c1_i64, %c1024_i64, %c1024_i64)
+      : !pto.ptr<f32, ub>, !pto.ptr<f32, gm>, i64, i64, i64, i64
+    pto.mte_ub_gm %ub_roundtrip_low, %roundtrip_low_gm, %c1024_i64
+      nburst(%c1_i64, %c1024_i64, %c1024_i64)
+      : !pto.ptr<f32, ub>, !pto.ptr<f32, gm>, i64, i64, i64, i64
+    pto.mte_ub_gm %ub_roundtrip_high, %roundtrip_high_gm, %c1024_i64
+      nburst(%c1_i64, %c1024_i64, %c1024_i64)
+      : !pto.ptr<f32, ub>, !pto.ptr<f32, gm>, i64, i64, i64, i64
+    pto.mte_ub_gm %ub_dense_intlv_low, %dense_lhs_gm, %c512_i64
+      nburst(%c1_i64, %c512_i64, %c512_i64)
+      : !pto.ptr<f32, ub>, !pto.ptr<f32, gm>, i64, i64, i64, i64
+    pto.mte_ub_gm %ub_dense_intlv_high, %dense_rhs_gm, %c512_i64
+      nburst(%c1_i64, %c512_i64, %c512_i64)
+      : !pto.ptr<f32, ub>, !pto.ptr<f32, gm>, i64, i64, i64, i64
+    pto.mte_ub_gm %ub_dense_roundtrip_low, %dense_roundtrip_low_gm, %c512_i64
+      nburst(%c1_i64, %c512_i64, %c512_i64)
+      : !pto.ptr<f32, ub>, !pto.ptr<f32, gm>, i64, i64, i64, i64
+    pto.mte_ub_gm %ub_dense_roundtrip_high, %dense_roundtrip_high_gm, %c512_i64
+      nburst(%c1_i64, %c512_i64, %c512_i64)
+      : !pto.ptr<f32, ub>, !pto.ptr<f32, gm>, i64, i64, i64, i64
+    pto.barrier #pto.pipe<PIPE_ALL>
+    return
+  }
+}

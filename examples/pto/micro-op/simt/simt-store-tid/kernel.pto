@@ -1,0 +1,40 @@
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
+  func.func @simt_store_tid_kernel(%arg0: !pto.ptr<i32, gm>) attributes {pto.kernel} {
+    %c0_i64 = arith.constant 0 : i64
+    %c32_i64 = arith.constant 32 : i64
+    %c128_i64 = arith.constant 128 : i64
+    %dim_z = arith.constant 1 : i32
+    %dim_y = arith.constant 32 : i32
+    %dim_x = arith.constant 32 : i32
+
+    %ub_out = pto.castptr %c0_i64 : i64 -> !pto.ptr<i32, ub>
+
+    pto.simt_launch @simt_write<<<%dim_x, %dim_y, %dim_z>>>(%ub_out) : (!pto.ptr<i32, ub>) -> ()
+
+    pto.set_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+    pto.wait_flag["PIPE_V", "PIPE_MTE3", "EVENT_ID0"]
+    pto.mte_ub_gm %ub_out, %arg0, %c128_i64
+      nburst(%c32_i64, %c128_i64, %c128_i64)
+      : !pto.ptr<i32, ub>, !pto.ptr<i32, gm>, i64, i64, i64, i64
+    pto.barrier #pto.pipe<PIPE_ALL>
+    return
+  }
+
+  func.func @simt_write(%dst: !pto.ptr<i32, ub>) attributes {pto.simt_entry} {
+    %tx = pto.get_tid_x : i32
+    %ty = pto.get_tid_y : i32
+    %tz = pto.get_tid_z : i32
+    %c8_i32 = arith.constant 8 : i32
+    %c16_i32 = arith.constant 16 : i32
+    %c32_i32 = arith.constant 32 : i32
+    %ty_shift = arith.shli %ty, %c8_i32 : i32
+    %tz_shift = arith.shli %tz, %c16_i32 : i32
+    %xy = arith.ori %tx, %ty_shift : i32
+    %xyz = arith.ori %xy, %tz_shift : i32
+    %lane_base = arith.muli %ty, %c32_i32 : i32
+    %tid = arith.addi %lane_base, %tx : i32
+    %tid_idx = arith.index_castui %tid : i32 to index
+    pto.store %xyz, %dst[%tid_idx] : !pto.ptr<i32, ub>, i32
+    return
+  }
+}

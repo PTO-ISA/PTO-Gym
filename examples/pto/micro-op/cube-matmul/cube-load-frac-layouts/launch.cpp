@@ -36,43 +36,44 @@ struct MrgSortExecutedNumList {
 #include "acl/acl.h"
 #endif
 
-extern "C" __global__ [aicore] void cube_load_frac_nd2nz_kernel(__gm__ __fp16 *src, __gm__ __fp16 *id,
-                                                                __gm__ float *out);
-extern "C" __global__ [aicore] void cube_load_frac_dn2nz_kernel(__gm__ __fp16 *id, __gm__ __fp16 *src,
-                                                                __gm__ float *out);
-extern "C" __global__ [aicore] void cube_load_frac_nchw_nc1hwc0_kernel(__gm__ __fp16 *id, __gm__ __fp16 *src,
-                                                                       __gm__ float *out);
-extern "C" __global__ [aicore] void cube_load_frac_nchw_fz4d_kernel(__gm__ __fp16 *id, __gm__ __fp16 *src,
-                                                                    __gm__ float *out);
-extern "C" __global__ [aicore] void cube_load_frac_ncdhw_ndc1hwc0_kernel(__gm__ __fp16 *id, __gm__ __fp16 *src,
-                                                                         __gm__ float *out);
-extern "C" __global__ [aicore] void cube_load_frac_ncdhw_fz3d_kernel(__gm__ __fp16 *id, __gm__ __fp16 *src,
-                                                                     __gm__ float *out);
+extern "C" __global__ [aicore] void cube_load_frac_layouts_deep_merged_kernel(
+    __gm__ half * arg0,
+    __gm__ half * arg1,
+    __gm__ float * arg2,
+    __gm__ half * arg3,
+    __gm__ half * arg4,
+    __gm__ float * arg5,
+    __gm__ half * arg6,
+    __gm__ half * arg7,
+    __gm__ float * arg8,
+    __gm__ half * arg9,
+    __gm__ half * arg10,
+    __gm__ float * arg11,
+    __gm__ half * arg12,
+    __gm__ half * arg13,
+    __gm__ float * arg14,
+    __gm__ half * arg15,
+    __gm__ half * arg16,
+    __gm__ float * arg17);
 
-void LaunchCube_load_frac_nd2nz_kernel(__fp16 *src, __fp16 *id, float *out, void *stream) {
-    cube_load_frac_nd2nz_kernel<<<1, nullptr, stream>>>((__gm__ __fp16 *)src, (__gm__ __fp16 *)id, (__gm__ float *)out);
-}
-
-void LaunchCube_load_frac_dn2nz_kernel(__fp16 *id, __fp16 *src, float *out, void *stream) {
-    cube_load_frac_dn2nz_kernel<<<1, nullptr, stream>>>((__gm__ __fp16 *)id, (__gm__ __fp16 *)src, (__gm__ float *)out);
-}
-
-void LaunchCube_load_frac_nchw_nc1hwc0_kernel(__fp16 *id, __fp16 *src, float *out, void *stream) {
-    cube_load_frac_nchw_nc1hwc0_kernel<<<1, nullptr, stream>>>((__gm__ __fp16 *)id, (__gm__ __fp16 *)src,
-                                                               (__gm__ float *)out);
-}
-
-void LaunchCube_load_frac_nchw_fz4d_kernel(__fp16 *id, __fp16 *src, float *out, void *stream) {
-    cube_load_frac_nchw_fz4d_kernel<<<1, nullptr, stream>>>((__gm__ __fp16 *)id, (__gm__ __fp16 *)src,
-                                                            (__gm__ float *)out);
-}
-
-void LaunchCube_load_frac_ncdhw_ndc1hwc0_kernel(__fp16 *id, __fp16 *src, float *out, void *stream) {
-    cube_load_frac_ncdhw_ndc1hwc0_kernel<<<1, nullptr, stream>>>((__gm__ __fp16 *)id, (__gm__ __fp16 *)src,
-                                                                 (__gm__ float *)out);
-}
-
-void LaunchCube_load_frac_ncdhw_fz3d_kernel(__fp16 *id, __fp16 *src, float *out, void *stream) {
-    cube_load_frac_ncdhw_fz3d_kernel<<<1, nullptr, stream>>>((__gm__ __fp16 *)id, (__gm__ __fp16 *)src,
-                                                             (__gm__ float *)out);
+void LaunchCubeLoadFracLayoutsDeepMerged(__fp16 * p0, __fp16 * p1, float * p2, void *stream) {
+  cube_load_frac_layouts_deep_merged_kernel<<<1, nullptr, stream>>>(
+      (__gm__ half *)p0,
+      (__gm__ half *)p0,
+      (__gm__ float *)p0,
+      (__gm__ half *)p0,
+      (__gm__ half *)p0,
+      (__gm__ float *)p0,
+      (__gm__ half *)p0,
+      (__gm__ half *)p0,
+      (__gm__ float *)p0,
+      (__gm__ half *)p0,
+      (__gm__ half *)p0,
+      (__gm__ float *)p0,
+      (__gm__ half *)p0,
+      (__gm__ half *)p0,
+      (__gm__ float *)p0,
+      (__gm__ half *)p0,
+      (__gm__ half *)p1,
+      (__gm__ float *)p2);
 }

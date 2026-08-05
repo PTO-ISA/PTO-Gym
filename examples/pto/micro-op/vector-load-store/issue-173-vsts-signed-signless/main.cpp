@@ -54,9 +54,8 @@ struct MrgSortExecutedNumList {
     }                                                                            \
   } while (0)
 
-void LaunchCopySignedI16Kernel(int16_t *v1, int16_t *v2, void *stream);
-void LaunchCopySignlessI16Kernel(int16_t *v3, int16_t *v4, void *stream);
 
+void LaunchIssue173VstsSignedSignlessDeepMerged(int16_t * p0, int16_t * p1, int16_t * p2, int16_t * p3, void *stream);
 int main() {
   constexpr size_t elemCount = 1024;
   constexpr size_t fileSize = elemCount * sizeof(int16_t);
@@ -119,8 +118,13 @@ int main() {
   ACL_CHECK(aclrtMemcpy(v4Device, fileSize, v4Host, fileSize,
                         ACL_MEMCPY_HOST_TO_DEVICE));
 
-  LaunchCopySignedI16Kernel(v1Device, v2Device, stream);
-  LaunchCopySignlessI16Kernel(v3Device, v4Device, stream);
+    LaunchIssue173VstsSignedSignlessDeepMerged(
+      v1Device,
+      v2Device,
+      v3Device,
+      v4Device,
+      stream
+  );
   ACL_CHECK(aclrtSynchronizeStream(stream));
 
   ACL_CHECK(aclrtMemcpy(v2Host, fileSize, v2Device, fileSize,

@@ -5,11 +5,9 @@
 // THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
 // INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 // See LICENSE in the root of the software repository for the full text of the License.
-
 #ifndef __VEC_SCOPE__
 #define __VEC_SCOPE__
 #endif
-
 #if defined(__CCE_AICORE__) && defined(__NPU_ARCH__) && (__NPU_ARCH__ == 2201)
 typedef struct { unsigned char v; } hifloat8_t;
 typedef struct { unsigned char v; } float8_e4m3_t;
@@ -22,23 +20,51 @@ typedef struct { unsigned char v; } float4_e2m1x2_t;
 #if defined(__CCE_AICORE__) && defined(PTOAS_ENABLE_CCE_PRINT)
 #include <ccelib/print/print.h>
 #endif
-
 #if !defined(__CCE_AICORE__) && !defined(TMRGSORT_HPP)
-struct MrgSortExecutedNumList {
-  uint16_t mrgSortList0;
-  uint16_t mrgSortList1;
-  uint16_t mrgSortList2;
-  uint16_t mrgSortList3;
-};
+struct MrgSortExecutedNumList { uint16_t mrgSortList0,mrgSortList1,mrgSortList2,mrgSortList3; };
 #endif
 #ifndef __CPU_SIM
 #include "acl/acl.h"
 #endif
 
-extern "C" __global__ [aicore] void vec_add_scalar_kernel_2d(__gm__ float *v1,
-                                                                __gm__ float *v2);
+extern "C" __global__ [aicore] void vadds_deep_merged_kernel(
+    __gm__ bfloat16_t * arg0,
+    __gm__ bfloat16_t * arg1,
+    __gm__ half * arg2,
+    __gm__ half * arg3,
+    __gm__ float * arg4,
+    __gm__ float * arg5,
+    __gm__ int16_t * arg6,
+    __gm__ int16_t * arg7,
+    __gm__ int16_t * arg8,
+    __gm__ int16_t * arg9,
+    __gm__ uint16_t * arg10,
+    __gm__ uint16_t * arg11,
+    __gm__ uint16_t * arg12,
+    __gm__ uint16_t * arg13,
+    __gm__ float * arg14,
+    __gm__ float * arg15,
+    __gm__ float * arg16,
+    __gm__ float * arg17);
 
-void LaunchVec_add_scalar_kernel_2d(float *v1, float *v2, void *stream) {
-  vec_add_scalar_kernel_2d<<<1, nullptr, stream>>>((__gm__ float *)v1,
-                                                        (__gm__ float *)v2);
+void LaunchVaddsDeepMerged(float * p0, float * p1, void *stream) {
+  vadds_deep_merged_kernel<<<1, nullptr, stream>>>(
+      (__gm__ bfloat16_t *)p0,
+      (__gm__ bfloat16_t *)p0,
+      (__gm__ half *)p0,
+      (__gm__ half *)p0,
+      (__gm__ float *)p0,
+      (__gm__ float *)p0,
+      (__gm__ int16_t *)p0,
+      (__gm__ int16_t *)p0,
+      (__gm__ int16_t *)p0,
+      (__gm__ int16_t *)p0,
+      (__gm__ uint16_t *)p0,
+      (__gm__ uint16_t *)p0,
+      (__gm__ uint16_t *)p0,
+      (__gm__ uint16_t *)p0,
+      (__gm__ float *)p0,
+      (__gm__ float *)p0,
+      (__gm__ float *)p0,
+      (__gm__ float *)p1);
 }

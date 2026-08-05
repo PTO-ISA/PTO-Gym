@@ -39,17 +39,16 @@ struct MrgSortExecutedNumList {
 #include "acl/acl.h"
 #endif
 
-extern "C" __global__ [aicore] void copy_signed_i16_kernel(__gm__ int16_t *v1,
-                                                           __gm__ int16_t *v2);
-extern "C" __global__ [aicore] void copy_signless_i16_kernel(
-    __gm__ int16_t *v3, __gm__ int16_t *v4);
+extern "C" __global__ [aicore] void issue_173_vsts_signed_signless_deep_merged_kernel(
+    __gm__ int16_t * arg0,
+    __gm__ int16_t * arg1,
+    __gm__ int16_t * arg2,
+    __gm__ int16_t * arg3);
 
-void LaunchCopySignedI16Kernel(int16_t *v1, int16_t *v2, void *stream) {
-  copy_signed_i16_kernel<<<1, nullptr, stream>>>((__gm__ int16_t *)v1,
-                                                 (__gm__ int16_t *)v2);
-}
-
-void LaunchCopySignlessI16Kernel(int16_t *v3, int16_t *v4, void *stream) {
-  copy_signless_i16_kernel<<<1, nullptr, stream>>>((__gm__ int16_t *)v3,
-                                                   (__gm__ int16_t *)v4);
+void LaunchIssue173VstsSignedSignlessDeepMerged(int16_t * p0, int16_t * p1, int16_t * p2, int16_t * p3, void *stream) {
+  issue_173_vsts_signed_signless_deep_merged_kernel<<<1, nullptr, stream>>>(
+      (__gm__ int16_t *)p0,
+      (__gm__ int16_t *)p1,
+      (__gm__ int16_t *)p2,
+      (__gm__ int16_t *)p3);
 }

@@ -10,7 +10,7 @@
 # case: micro-op/gather-scatter/vgather2
 # family: gather-scatter
 # target_ops: pto.vgather2
-# scenarios: core-f32, full-mask, non-contiguous, explicit-index-pattern, load-effect-validation, no-alias
+# scenarios: core-f32, core-f16-u16-offsets, core-u8-u16-offsets, core-i8-u16-offsets, full-mask, non-contiguous, explicit-index-pattern, load-effect-validation, no-alias
 # NOTE: bulk-generated coverage skeleton.
 # coding=utf-8
 
@@ -196,6 +196,9 @@ def main():
     strict = os.getenv("COMPARE_STRICT", "1") != "0"
     ok = True
     ok = compare_bin("golden_v3.bin", "v3.bin", np.float32, 0.0001) and ok
+    ok = compare_bin("golden_v6.bin", "v6.bin", np.float16, 0.001) and ok
+    ok = compare_bin("golden_v8.bin", "v8.bin", np.uint16, 0) and ok
+    ok = compare_bin("golden_v10.bin", "v10.bin", np.int16, 0) and ok
     if not ok:
         if strict:
             print("[ERROR] compare failed")

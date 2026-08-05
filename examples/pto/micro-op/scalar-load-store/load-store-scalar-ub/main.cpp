@@ -50,7 +50,7 @@ struct MrgSortExecutedNumList {
 void LaunchLoad_store_scalar_ub_kernel(int16_t *v1, int16_t *v2, void *stream);
 
 int main() {
-    size_t elemCount_v1 = 1024;
+    size_t elemCount_v1 = 32;
     size_t fileSize_v1 = elemCount_v1 * sizeof(int16_t);
     int16_t *v1Host = nullptr;
     int16_t *v2Host = nullptr;

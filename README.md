@@ -14,7 +14,8 @@ PTO-Gym is a developer-facing repository for PTO tile programming resources. It 
 
 This repository depends on the CANN package for validation and learning workflows.
 
-- Recommended CANN version: `9.0.0-beta.1`
+- Recommended CANN version: `9.0.0` official or newer; some `onboard-only/`
+  cases require `9.1.0` official for device compilation
 - Validation scripts use `ASCEND_HOME_PATH` to locate your local CANN installation
 - Example:
 
@@ -49,6 +50,10 @@ Each runnable case follows a stable structure:
 
 These cases currently focus on PTO micro-op scenarios and are useful for understanding instruction behavior through concrete examples.
 
+The suite is a published snapshot of PTOAS runtime tests rather than an
+independent test collection. See [examples/pto/README.md](examples/pto/README.md)
+for the source revision and export boundary.
+
 For more detailed validation guidance, see [examples/pto/README.md](examples/pto/README.md).
 
 Tile Instruction ST cases are provided under [examples/tileop/](examples/tileop/). They package the TileLang ST A5 examples together with runners that:
@@ -65,11 +70,11 @@ For usage details, see [examples/tileop/README.md](examples/tileop/README.md).
 
 ```bash
 mkdir -p .work/vpto-single
-rm -rf .work/vpto-single/*
 
 WORK_SPACE=$PWD/.work/vpto-single \
 ASCEND_HOME_PATH=$ASCEND_HOME_PATH \
 PTOAS_BIN=$PTOAS_BIN \
+PTOAS_FLAGS='--pto-backend=vpto --pto-arch a5' \
 CASE_NAME=micro-op/binary-vector/vadd \
 DEVICE=SIM \
 bash examples/pto/scripts/run_host_vpto_validation.sh
@@ -79,11 +84,11 @@ bash examples/pto/scripts/run_host_vpto_validation.sh
 
 ```bash
 mkdir -p .work/vpto-sim-microop-64
-rm -rf .work/vpto-sim-microop-64/*
 
 WORK_SPACE=$PWD/.work/vpto-sim-microop-64 \
 ASCEND_HOME_PATH=$ASCEND_HOME_PATH \
 PTOAS_BIN=$PTOAS_BIN \
+PTOAS_FLAGS='--pto-backend=vpto --pto-arch a5' \
 CASE_PREFIX=micro-op \
 DEVICE=SIM \
 JOBS=64 \

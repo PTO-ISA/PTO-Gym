@@ -13,7 +13,7 @@ module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<ve
                                              %arg5: !pto.ptr<f32, gm>,
                                              %arg6: !pto.ptr<f32, gm>,
                                              %arg7: i32,
-                                             %arg8: i32) attributes {pto.aicore} {
+                                             %arg8: i32) attributes {pto.kernel} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c8 = arith.constant 8 : index

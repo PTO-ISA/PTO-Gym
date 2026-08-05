@@ -1,0 +1,173 @@
+// Copyright (c) 2026 Huawei Technologies Co., Ltd.
+// This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+// CANN Open Software License Agreement Version 2.0 (the "License").
+// Please refer to the License for details. You may not use this file except in compliance with the License.
+// THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+// INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+// See LICENSE in the root of the software repository for the full text of the License.
+
+// Merged vector ldg/stg test for all packed types.
+//
+// Arithmetic (ldg + element-wise add + stg), A+B→C pattern, 2 lanes, 2 ops/lane:
+//   f32x2, f16x2, bf16x2, i16x2, i32x2
+//
+// Copy (ldg + stg, no arithmetic), input→output pattern, 2 lanes, 1 op/lane:
+//   hif8x2, i8x2, fp8e4x2, fp8e5x2
+//
+// Arithmetic buffer layout (12 vectors = 24 elements each):
+//   A[0..3]: region A   B[4..7]: region B   C[8..11]: region C
+// Lane: C[base+8] = A[base] + B[base+4],  C[base+9] = A[base+1] + B[base+5]
+//       where base = laneid * 2
+//
+// Copy buffer layout (4 elements each):
+//   input[0..1], output[2..3]
+// Lane: output[laneid+2] = input[laneid]
+
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
+  func.func @simt_vector_ldg_stg_core_kernel(
+      %buf_f32x2: !pto.ptr<vector<2xf32>, gm>,
+      %buf_f16x2: !pto.ptr<vector<2xf16>, gm>,
+      %buf_bf16x2: !pto.ptr<vector<2xbf16>, gm>,
+      %buf_i16x2: !pto.ptr<vector<2xi16>, gm>,
+      %buf_i32x2: !pto.ptr<vector<2xi32>, gm>,
+      %buf_hif8x2: !pto.ptr<!pto.hif8x2, gm>,
+      %buf_i8x2: !pto.ptr<vector<2xi8>, gm>,
+      %buf_fp8e4x2: !pto.ptr<vector<2xf8E4M3FN>, gm>,
+      %buf_fp8e5x2: !pto.ptr<vector<2xf8E5M2>, gm>
+  ) attributes {pto.aicore} {
+    %dim_z = arith.constant 1 : i32
+    %dim_y = arith.constant 1 : i32
+    %dim_x = arith.constant 2 : i32
+
+    pto.simt_launch @simt_vector_ldg_stg_core_body<<<%dim_x, %dim_y, %dim_z>>>(
+      %buf_f32x2, %buf_f16x2, %buf_bf16x2, %buf_i16x2, %buf_i32x2,
+      %buf_hif8x2, %buf_i8x2, %buf_fp8e4x2, %buf_fp8e5x2
+    ) : (!pto.ptr<vector<2xf32>, gm>, !pto.ptr<vector<2xf16>, gm>, !pto.ptr<vector<2xbf16>, gm>,
+        !pto.ptr<vector<2xi16>, gm>, !pto.ptr<vector<2xi32>, gm>,
+        !pto.ptr<!pto.hif8x2, gm>, !pto.ptr<vector<2xi8>, gm>,
+        !pto.ptr<vector<2xf8E4M3FN>, gm>, !pto.ptr<vector<2xf8E5M2>, gm>) -> ()
+
+    pto.barrier #pto.pipe<PIPE_ALL>
+    return
+  }
+
+  func.func @simt_vector_ldg_stg_core_body(
+      %buf_f32x2: !pto.ptr<vector<2xf32>, gm>,
+      %buf_f16x2: !pto.ptr<vector<2xf16>, gm>,
+      %buf_bf16x2: !pto.ptr<vector<2xbf16>, gm>,
+      %buf_i16x2: !pto.ptr<vector<2xi16>, gm>,
+      %buf_i32x2: !pto.ptr<vector<2xi32>, gm>,
+      %buf_hif8x2: !pto.ptr<!pto.hif8x2, gm>,
+      %buf_i8x2: !pto.ptr<vector<2xi8>, gm>,
+      %buf_fp8e4x2: !pto.ptr<vector<2xf8E4M3FN>, gm>,
+      %buf_fp8e5x2: !pto.ptr<vector<2xf8E5M2>, gm>
+  ) attributes {pto.simt_entry} {
+    %c0 = arith.constant 0 : i32
+    %c1 = arith.constant 1 : i32
+    %c2 = arith.constant 2 : i32
+    %c4 = arith.constant 4 : i32
+    %c8 = arith.constant 8 : i32
+
+    %laneid = pto.get_laneid : i32
+
+    // base = laneid * 2  (vector offset into each arithmetic region)
+    %base = arith.muli %laneid, %c2 : i32
+
+    // A offsets: base, base + 1
+    %a1_off = arith.addi %base, %c1 : i32
+
+    // B offsets: base + 4, base + 5
+    %b0_off = arith.addi %base, %c4 : i32
+    %b1_off = arith.addi %b0_off, %c1 : i32
+
+    // C offsets: base + 8, base + 9
+    %c0_off = arith.addi %base, %c8 : i32
+    %c1_off = arith.addi %c0_off, %c1 : i32
+
+    // Copy offsets: input=laneid, output=laneid+2
+    %out_off = arith.addi %laneid, %c2 : i32
+
+    // Cast to index (shared across arithmetic and copy ops)
+    %idx_a0 = arith.index_castui %base : i32 to index
+    %idx_a1 = arith.index_castui %a1_off : i32 to index
+    %idx_b0 = arith.index_castui %b0_off : i32 to index
+    %idx_b1 = arith.index_castui %b1_off : i32 to index
+    %idx_c0 = arith.index_castui %c0_off : i32 to index
+    %idx_c1 = arith.index_castui %c1_off : i32 to index
+    %idx_in = arith.index_castui %laneid : i32 to index
+    %idx_out = arith.index_castui %out_off : i32 to index
+
+    // ── Arithmetic: f32x2 (64-bit ldg/stg via s64/b64) ──
+    %a0_f32x2 = pto.ldg %buf_f32x2[%idx_a0] l1cache(cache) l2cache(nmfv) : !pto.ptr<vector<2xf32>, gm> -> vector<2xf32>
+    %b0_f32x2 = pto.ldg %buf_f32x2[%idx_b0] l1cache(cache) l2cache(nmfv) : !pto.ptr<vector<2xf32>, gm> -> vector<2xf32>
+    %s0_f32x2 = arith.addf %a0_f32x2, %b0_f32x2 : vector<2xf32>
+    pto.stg %s0_f32x2, %buf_f32x2[%idx_c0] l1cache(cache) l2cache(nmfv) : !pto.ptr<vector<2xf32>, gm>, vector<2xf32>
+
+    %a1_f32x2 = pto.ldg %buf_f32x2[%idx_a1] l1cache(cache) l2cache(nmfv) : !pto.ptr<vector<2xf32>, gm> -> vector<2xf32>
+    %b1_f32x2 = pto.ldg %buf_f32x2[%idx_b1] l1cache(cache) l2cache(nmfv) : !pto.ptr<vector<2xf32>, gm> -> vector<2xf32>
+    %s1_f32x2 = arith.addf %a1_f32x2, %b1_f32x2 : vector<2xf32>
+    pto.stg %s1_f32x2, %buf_f32x2[%idx_c1] l1cache(cache) l2cache(nmfv) : !pto.ptr<vector<2xf32>, gm>, vector<2xf32>
+
+    // ── Arithmetic: f16x2 (32-bit ldg/stg via s32/b32) ──
+    %a0_f16x2 = pto.ldg %buf_f16x2[%idx_a0] l1cache(cache) l2cache(nmfv) : !pto.ptr<vector<2xf16>, gm> -> vector<2xf16>
+    %b0_f16x2 = pto.ldg %buf_f16x2[%idx_b0] l1cache(cache) l2cache(nmfv) : !pto.ptr<vector<2xf16>, gm> -> vector<2xf16>
+    %s0_f16x2 = arith.addf %a0_f16x2, %b0_f16x2 : vector<2xf16>
+    pto.stg %s0_f16x2, %buf_f16x2[%idx_c0] l1cache(cache) l2cache(nmfv) : !pto.ptr<vector<2xf16>, gm>, vector<2xf16>
+
+    %a1_f16x2 = pto.ldg %buf_f16x2[%idx_a1] l1cache(cache) l2cache(nmfv) : !pto.ptr<vector<2xf16>, gm> -> vector<2xf16>
+    %b1_f16x2 = pto.ldg %buf_f16x2[%idx_b1] l1cache(cache) l2cache(nmfv) : !pto.ptr<vector<2xf16>, gm> -> vector<2xf16>
+    %s1_f16x2 = arith.addf %a1_f16x2, %b1_f16x2 : vector<2xf16>
+    pto.stg %s1_f16x2, %buf_f16x2[%idx_c1] l1cache(cache) l2cache(nmfv) : !pto.ptr<vector<2xf16>, gm>, vector<2xf16>
+
+    // ── Arithmetic: bf16x2 (32-bit ldg/stg via s32/b32) ──
+    %a0_bf16x2 = pto.ldg %buf_bf16x2[%idx_a0] l1cache(cache) l2cache(nmfv) : !pto.ptr<vector<2xbf16>, gm> -> vector<2xbf16>
+    %b0_bf16x2 = pto.ldg %buf_bf16x2[%idx_b0] l1cache(cache) l2cache(nmfv) : !pto.ptr<vector<2xbf16>, gm> -> vector<2xbf16>
+    %s0_bf16x2 = arith.addf %a0_bf16x2, %b0_bf16x2 : vector<2xbf16>
+    pto.stg %s0_bf16x2, %buf_bf16x2[%idx_c0] l1cache(cache) l2cache(nmfv) : !pto.ptr<vector<2xbf16>, gm>, vector<2xbf16>
+
+    %a1_bf16x2 = pto.ldg %buf_bf16x2[%idx_a1] l1cache(cache) l2cache(nmfv) : !pto.ptr<vector<2xbf16>, gm> -> vector<2xbf16>
+    %b1_bf16x2 = pto.ldg %buf_bf16x2[%idx_b1] l1cache(cache) l2cache(nmfv) : !pto.ptr<vector<2xbf16>, gm> -> vector<2xbf16>
+    %s1_bf16x2 = arith.addf %a1_bf16x2, %b1_bf16x2 : vector<2xbf16>
+    pto.stg %s1_bf16x2, %buf_bf16x2[%idx_c1] l1cache(cache) l2cache(nmfv) : !pto.ptr<vector<2xbf16>, gm>, vector<2xbf16>
+
+    // ── Arithmetic: i16x2 (32-bit ldg/stg via s32/b32) ──
+    %a0_i16x2 = pto.ldg %buf_i16x2[%idx_a0] l1cache(cache) l2cache(nmfv) : !pto.ptr<vector<2xi16>, gm> -> vector<2xi16>
+    %b0_i16x2 = pto.ldg %buf_i16x2[%idx_b0] l1cache(cache) l2cache(nmfv) : !pto.ptr<vector<2xi16>, gm> -> vector<2xi16>
+    %s0_i16x2 = arith.addi %a0_i16x2, %b0_i16x2 : vector<2xi16>
+    pto.stg %s0_i16x2, %buf_i16x2[%idx_c0] l1cache(cache) l2cache(nmfv) : !pto.ptr<vector<2xi16>, gm>, vector<2xi16>
+
+    %a1_i16x2 = pto.ldg %buf_i16x2[%idx_a1] l1cache(cache) l2cache(nmfv) : !pto.ptr<vector<2xi16>, gm> -> vector<2xi16>
+    %b1_i16x2 = pto.ldg %buf_i16x2[%idx_b1] l1cache(cache) l2cache(nmfv) : !pto.ptr<vector<2xi16>, gm> -> vector<2xi16>
+    %s1_i16x2 = arith.addi %a1_i16x2, %b1_i16x2 : vector<2xi16>
+    pto.stg %s1_i16x2, %buf_i16x2[%idx_c1] l1cache(cache) l2cache(nmfv) : !pto.ptr<vector<2xi16>, gm>, vector<2xi16>
+
+    // ── Arithmetic: i32x2 (64-bit ldg/stg via s64/b64) ──
+    %a0_i32x2 = pto.ldg %buf_i32x2[%idx_a0] l1cache(cache) l2cache(nmfv) : !pto.ptr<vector<2xi32>, gm> -> vector<2xi32>
+    %b0_i32x2 = pto.ldg %buf_i32x2[%idx_b0] l1cache(cache) l2cache(nmfv) : !pto.ptr<vector<2xi32>, gm> -> vector<2xi32>
+    %s0_i32x2 = arith.addi %a0_i32x2, %b0_i32x2 : vector<2xi32>
+    pto.stg %s0_i32x2, %buf_i32x2[%idx_c0] l1cache(cache) l2cache(nmfv) : !pto.ptr<vector<2xi32>, gm>, vector<2xi32>
+
+    %a1_i32x2 = pto.ldg %buf_i32x2[%idx_a1] l1cache(cache) l2cache(nmfv) : !pto.ptr<vector<2xi32>, gm> -> vector<2xi32>
+    %b1_i32x2 = pto.ldg %buf_i32x2[%idx_b1] l1cache(cache) l2cache(nmfv) : !pto.ptr<vector<2xi32>, gm> -> vector<2xi32>
+    %s1_i32x2 = arith.addi %a1_i32x2, %b1_i32x2 : vector<2xi32>
+    pto.stg %s1_i32x2, %buf_i32x2[%idx_c1] l1cache(cache) l2cache(nmfv) : !pto.ptr<vector<2xi32>, gm>, vector<2xi32>
+
+    // ── Copy: !pto.hif8x2 (16-bit ldg/stg via s16/b16) ──
+    %v_hif8x2 = pto.ldg %buf_hif8x2[%idx_in] : !pto.ptr<!pto.hif8x2, gm> -> !pto.hif8x2
+    pto.stg %v_hif8x2, %buf_hif8x2[%idx_out] : !pto.ptr<!pto.hif8x2, gm>, !pto.hif8x2
+
+    // ── Copy: vector<2xi8> (16-bit ldg/stg via s16/b16) ──
+    %v_i8x2 = pto.ldg %buf_i8x2[%idx_in] : !pto.ptr<vector<2xi8>, gm> -> vector<2xi8>
+    pto.stg %v_i8x2, %buf_i8x2[%idx_out] : !pto.ptr<vector<2xi8>, gm>, vector<2xi8>
+
+    // ── Copy: vector<2xf8E4M3FN> (16-bit ldg/stg via s16/b16) ──
+    %v_fp8e4 = pto.ldg %buf_fp8e4x2[%idx_in] : !pto.ptr<vector<2xf8E4M3FN>, gm> -> vector<2xf8E4M3FN>
+    pto.stg %v_fp8e4, %buf_fp8e4x2[%idx_out] : !pto.ptr<vector<2xf8E4M3FN>, gm>, vector<2xf8E4M3FN>
+
+    // ── Copy: vector<2xf8E5M2> (16-bit ldg/stg via s16/b16) ──
+    %v_fp8e5 = pto.ldg %buf_fp8e5x2[%idx_in] : !pto.ptr<vector<2xf8E5M2>, gm> -> vector<2xf8E5M2>
+    pto.stg %v_fp8e5, %buf_fp8e5x2[%idx_out] : !pto.ptr<vector<2xf8E5M2>, gm>, vector<2xf8E5M2>
+
+    return
+  }
+}
