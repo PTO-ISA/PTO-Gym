@@ -681,6 +681,85 @@ declaring the memory access pattern. Default is `"continuous"`.
   // → block-strided store (block=8), governed by mask
   ```
 
+### `pto.vmi.vsstb`
+
+- **semantics:** Block-strided store — a dedicated form of `vstore`'s
+  block-stride mode, where the store is read in 32B blocks with block `blk`
+  written to `base + blk * block_stride` (scattered access). Only the
+  `%block_stride` operand is exposed; the internal repeat stride is fixed to 0,
+  so this is the zero-repeat-stride alias of the `pto.mi.vsstb`
+  hardware op. Stores are predicated, so only lanes where `mask[i] != 0`
+  are written:
+
+  ```c
+  // repeat_stride fixed to 0; block = 32B / sizeof(T) lanes
+  for (int i = 0; i < L; i++)
+      if (mask[i])
+          ub[base + offset + block_index(i) * block_stride] = src[i];
+  ```
+
+  Equivalently, at the 32B-block granularity exposed by the hardware
+  (`E_v = 32 / sizeof(T)` lanes per block, i.e. one VLane per block):
+
+  ```c
+  for (int blk = 0; blk < L / E_v; ++blk) {
+      if (pg[blk])
+          UB_block[base + offset + blk * block_stride] = src_block[blk];
+  }
+  ```
+
+- **syntax:**
+  ```mlir
+  // block-strided store: %block_stride is a dynamic i16 operand (mask required)
+  pto.vmi.vsstb %value, %dest[%offset], %block_stride, %mask
+      : !pto.vmi.vreg<L×T>, !pto.ptr<T, ub>, i16, !pto.vmi.mask<L>
+  ```
+- **operands:**
+
+  | Operand | Type | Description |
+  |---|---|---|
+  | `value` | `!pto.vmi.vreg<L×T>` | Vector value to store |
+  | `dest` | `!pto.ptr<T, ub>` | UB destination base pointer |
+  | `offset` | `index` | Element offset from base |
+  | `block_stride` | `i16` | 32B-block stride between scattered blocks (block-stride mode) |
+  | `mask` | `!pto.vmi.mask<L>` | Governing predicate; `E_v` lanes per 32B block share one mask bit at block granularity |
+
+- **results:** *(none)*
+
+- **attributes:**
+
+  | Attribute | Values | Default | Description |
+  |---|---|---|---|
+  | `pmode` | `"zero"`, `"merge"` | `"zero"` | Inactive-lane behavior: `"zero"` (default) skips the write on inactive blocks; `"merge"` retains prior UB contents on inactive blocks |
+
+- **lowering to `pto.mi`:**
+  ```
+  1 × pto.mi.vsstb {repeat_stride = 0}  (per physical reg)
+  ```
+  `#mi = K`, `dep = 1`. Structurally 1:1 with `pto.mi.vsstb` at `repeat_stride = 0`
+  — one store op per physical register, each governed by the per-reg block mask.
+
+- **examples:**
+  ```mlir
+  // Block-strided store: block_stride = 8 (dynamic i16 operand + mask)
+  pto.vmi.vsstb %v, %ub_out[%off], %c8_i16, %mask
+      : !pto.vmi.vreg<64×f32>, !pto.ptr<f32, ub>, i16, !pto.vmi.mask<64>
+  // → block-strided store (block=8), governed by mask, repeat_stride = 0
+  ```
+
+- **notes:**
+  - `vsstb` is the **alias** of `vstore`'s block-stride mode:
+    `vstore ... %block_stride, %mask` and `vsstb ... %block_stride, %mask` denote
+    the same access pattern. `vsstb` exists so block-strided tile stores are
+    spelled by intent rather than overloaded onto `vstore`'s operand list.
+  - The `repeat_stride` field of the underlying `pto.mi.vsstb` hardware control
+    word is **not exposed** here; it is fixed to 0. A nonzero repeat stride is not
+    expressible on the `pto.vmi` surface (no op carries it).
+  - **Stores are predicated.** The mask gates 32B-block participation; an
+    implicit all-active mask is applied when the operand is omitted.
+  - Not combinable with `{dist_mode}`, `{group}`, or the `%block_stride` form of
+    `vstore` — `vsstb` is mutually exclusive with all other `vstore` access modes.
+
 ---
 
 ## Group 2: Index-gen
@@ -692,16 +771,27 @@ declaring the memory access pattern. Default is `"continuous"`.
 
 ### `pto.vmi.vci`
 
-- **semantics:** Generate a per-lane index/counter vector from a single scalar base such as `[base, base±1, base±2, ...]`,  lane `i` gets `base + i` (ASC) or `base - i` (DESC). It is the index source for `vgather`/`vscatter` offsets.
+- **semantics:** Generate a per-lane index/counter vector from a single scalar base such as `[base, base±1, base±2, ...]`, lane `i` gets `base + i` (ASC) or `base - i` (DESC). It is the index source for `vgather`/`vscatter` offsets.
 
   ```c
   for (int i = 0; i < L; i++)
       dst[i] = base + (order == "ASC" ? i : -i);
   ```
 
+  With `group=C>1`, each group of `S=L/C` lanes restarts the ramp:
+
+  ```c
+  dst[g*S + j] = base + (order == "ASC" ? j : -j);
+  ```
+
+  `group=1` is normalized to ordinary continuous `iota`, so it has exactly the
+  same semantics and tail support as omitting `group`. Group-periodic iota is
+  an internal contiguous-only producer; layout assignment inserts
+  `ensure_layout` when a consumer requests a deinterleaved layout.
+
 - **syntax:**
   ```mlir
-  %result = pto.vmi.vci %base {order = "ASC"} : T -> !pto.vmi.vreg<L×T>
+  %result = pto.vmi.vci %base {order = "ASC", group = 2} : T -> !pto.vmi.vreg<L×T>
   ```
 - **operands:**
 
@@ -720,6 +810,7 @@ declaring the memory access pattern. Default is `"continuous"`.
   | Attribute | Values | Default | Description |
   |---|---|---|---|
   | `order` | `"ASC"`, `"DESC"` | `"ASC"` | Index generation direction |
+  | `group` | positive integer | omitted | Number of equal groups. `1` is equivalent to omitted; values greater than one restart the ramp per group. |
 
 - **lowering to `pto.mi`:**
   ```
@@ -748,7 +839,9 @@ declaring the memory access pattern. Default is `"continuous"`.
 
 ## Group 3: Eltwise Compute
 
-> **Category:** A (layout-passthrough). **Mask:** `Pg` (optional governing predicate, except `vselr` which has none).
+> **Category:** A (layout-passthrough) for ordinary per-lane operations;
+> `vselr` is classified separately as Category C below. **Mask:** `Pg`
+> (optional governing predicate, except `vselr` which has none).
 >
 > Pure per-lane ops. Layout passes through unchanged. An operand whose
 > cardinality along an axis is 1 becomes a broadcast (replicate-read, never
@@ -762,7 +855,7 @@ declaring the memory access pattern. Default is `"continuous"`.
 - **semantics:** Unified fp/int elementwise add / subtract / multiply.
 
   ```c
-  for (int i = 0; i < L; i++)
+  for (int i = 0; i < N; i++)
       dst[i] = mask[i] ? lhs[i] + rhs[i] : (pmode_merge ? dst_old[i] : 0);
   ```
 
@@ -942,9 +1035,10 @@ declaring the memory access pattern. Default is `"continuous"`.
 #### `pto.vmi.vand` / `pto.vmi.vor` / `pto.vmi.vxor`
 
 - **semantics:** Elementwise bitwise AND / OR / XOR. Operands and result are
-  vregs by default; will also support mask-typed operands, performing a per-lane
-  predicate boolean op and yielding a mask (the data operands themselves are
-  masks, distinct from the governing `mask`).
+  vregs by default. These ops also accept mask-typed operands, performing a
+  per-lane predicate boolean op and yielding a mask. When the operands are
+  masks (predicate type), no governing `mask` operand may be given — a mask
+  operand would be ambiguous with the predicate data operands themselves.
 
   ```c
   for (int i = 0; i < L; i++)
@@ -953,9 +1047,14 @@ declaring the memory access pattern. Default is `"continuous"`.
 
 - **syntax:**
   ```mlir
+  // vreg operands (optional governing mask)
   %r = pto.vmi.vand %lhs, %rhs, %mask : !pto.vmi.vreg<L×T>, !pto.vmi.vreg<L×T>, !pto.vmi.mask<L> -> !pto.vmi.vreg<L×T>
+
+  // mask operands (no governing mask)
+  %r = pto.vmi.vand %lhs, %rhs : !pto.vmi.mask<L>, !pto.vmi.mask<L> -> !pto.vmi.mask<L>
+  %r = pto.vmi.vxor %lhs, %rhs : !pto.vmi.mask<L>, !pto.vmi.mask<L> -> !pto.vmi.mask<L>
   ```
-- **datatypes:** `i8`–`i32` (integer bitwise)
+- **datatypes:** `i8`–`i32` (integer bitwise); `pred` (per-lane boolean op)
 - **lowering to `pto.mi`:**
   ```
   K × pto.vand / pto.vor / pto.vxor
@@ -965,9 +1064,10 @@ declaring the memory access pattern. Default is `"continuous"`.
 #### `pto.vmi.vnot`
 
 - **semantics:** Elementwise bitwise NOT. Operand and result are vregs by
-  default; will also support a mask-typed operand, performing a per-lane predicate
-  complement and yielding a mask (the data operand itself is a mask, distinct
-  from the governing `mask`).
+  default. This op also accepts a mask-typed operand, performing a per-lane
+  predicate complement and yielding a mask. When the operand is a mask
+  (predicate type), no governing `mask` operand may be given — a mask operand
+  would be ambiguous with the predicate data operand itself.
 
   ```c
   for (int i = 0; i < L; i++)
@@ -976,9 +1076,13 @@ declaring the memory access pattern. Default is `"continuous"`.
 
 - **syntax:**
   ```mlir
+  // vreg operand (optional governing mask)
   %r = pto.vmi.vnot %src, %mask : !pto.vmi.vreg<L×T>, !pto.vmi.mask<L> -> !pto.vmi.vreg<L×T>
+
+  // mask operand (no governing mask)
+  %r = pto.vmi.vnot %src : !pto.vmi.mask<L> -> !pto.vmi.mask<L>
   ```
-- **datatypes:** `i8`–`i32`
+- **datatypes:** `i8`–`i32`; `pred` (predicate complement)
 - **lowering to `pto.mi`:**
   ```
   K × pto.vnot
@@ -1067,9 +1171,12 @@ scalar type must match the vector element type.
 
 - **syntax:**
   ```mlir
-  %r = pto.vmi.vshls %src, %scalar, %mask : !pto.vmi.vreg<L×T>, T, !pto.vmi.mask<L> -> !pto.vmi.vreg<L×T>
+  %r = pto.vmi.vshls %src, %shift, %mask : !pto.vmi.vreg<L×T>, i16, !pto.vmi.mask<L> -> !pto.vmi.vreg<L×T>
   ```
-- **datatypes:** `i8`–`i32`
+- **datatypes:** `T` is an integer type from 8 to 32 bits. The uniform shift
+  amount is a signless `i16` value independent of `T` and should be in the
+  range `[0, bitwidth(T))`. For `vshrs`, the signedness of `T` determines
+  whether the right shift is arithmetic or logical.
 - **lowering to `pto.mi`:**
   ```
   K × pto.vshls / pto.vshrs
@@ -1245,47 +1352,55 @@ scalar type must match the vector element type.
 
 #### `pto.vmi.vselr`
 
+- **layout contract:** Category C (contiguous-required). Source, index, and
+  result use contiguous layout; an arbitrary input layout is not passed through
+  this operation. Compilation may materialize a contiguous representation at
+  this boundary. IR that reaches this operation with an assigned
+  non-contiguous layout is unsupported.
+
 - **semantics:** Dynamic lane permutation: `result[i] = source[index[i]]`.
 
   ```c
-  for (int i = 0; i < L; i++)
+  for (int i = 0; i < N; i++)
       dst[i] = src[index[i]];
   ```
 
 - **syntax:**
   ```mlir
-  %r = pto.vmi.vselr %source, %index : !pto.vmi.vreg<L×T>, !pto.vmi.vreg<L×index_T> -> !pto.vmi.vreg<L×T>
+  %r = pto.vmi.vselr %source, %index : !pto.vmi.vreg<N×T>, !pto.vmi.vreg<N×index_T> -> !pto.vmi.vreg<N×T>
   ```
 - **operands:**
 
   | Operand | Type | Description |
   |---|---|---|
-  | `source` | `!pto.vmi.vreg<L×T>` | Source vector to permute from |
-  | `index` | `!pto.vmi.vreg<L×index_T>` | Per-lane source lane index |
+  | `source` | `!pto.vmi.vreg<N×T>` | Source vector to select from |
+  | `index` | `!pto.vmi.vreg<N×index_T>` | Per-lane source lane index |
 
 - **results:**
 
   | Result | Type | Description |
   |---|---|---|
-  | `result` | `!pto.vmi.vreg<L×T>` | Permuted result |
+  | `result` | `!pto.vmi.vreg<N×T>` | Permuted result |
 
-- **datatypes:** `i8`–`i32`, `f16`, `bf16`, `f32`
-- **lowering to `pto.mi:**
-  ```
-  K × pto.vselr (+ index reg setup)
-  ```
-  `#mi = K`, `dep = 1` (+1 for index setup). +1 index vreg.
+- **datatypes:** 8-, 16-, and 32-bit integer or floating-point source/result
+  elements; `index_T` must be an integer type with the same storage width as
+  `T`.
+- **constraints:** Source, index, and result have the same lane count. The
+  supported lane counts are `N ∈ {64, 128, 256}` for 8-bit elements,
+  `N ∈ {64, 128}` for 16-bit elements, and `N = 64` for 32-bit elements.
+  Every `index[i]` must identify a valid logical source lane; behavior is
+  unspecified for an out-of-range index.
 
 - **notes:**
   - This is the permute/gather class — it is the register-resident realization
     of a grouped broadcast.
   - `vselr` takes no mask; the index vector encodes the permutation directly.
-  - Not A5-native `vselrv2` (that form is not available on A5).
+  - `vselrv2` is not available on A5 and does not add other supported shapes.
 
 - **example:**
   ```mlir
   %r = pto.vmi.vselr %src, %idx
-      : !pto.vmi.vreg<64×f16>, !pto.vmi.vreg<4×i16> -> !pto.vmi.vreg<4×f16>
+      : !pto.vmi.vreg<128×f16>, !pto.vmi.vreg<128×i16> -> !pto.vmi.vreg<128×f16>
   ```
 
 ### 3.7 Carry / Borrow Ops (Not Provided)
@@ -1530,20 +1645,32 @@ or fusing at the `pto.mi` layer is the workaround.
 ### `pto.vmi.vcvt`
 
 - **semantics:** Unified elementwise type conversion. The conversion direction
-  is derived from source and destination element types:
+  is derived from the source and destination element types; the verifier
+  dispatches to one of seven kinds:
 
-  | Direction | Condition | Replaces |
-  |---|---|---|
-  | fp → fp, `\|dst\| > \|src\|` | Floating-point widening | `extf` |
-  | fp → fp, `\|dst\| < \|src\|` | Floating-point narrowing | `truncf` |
-  | fp → int | Float to signed integer | `fptosi` |
-  | int → fp | Signed integer to float | `sitofp` |
-  | int -> int, `\|dst\| > \|src\|` | Integer extension (sign from source element type) | `extsi` / `extui` |
-  | int → int, `\|dst\| < \|src\|` | Saturating integer truncation | `trunci` |
+  1. **FpWiden** — `fp → fp`, `|dst| > |src|` (e.g. `f16 → f32`,
+     `bf16 → f32`, `fp8_e4m3 → f16`).
+
+  2. **FpNarrow** — `fp → fp`, `|dst| < |src|` (e.g. `f32 → f16`,
+     `f32 → bf16`, `f32 → fp8_e4m3`). Same-width `fp → fp`
+     (`|dst| == |src|`, e.g. `bf16 → f16`).
+
+  3. **FpToSi** — `fp → signed int`. Supported pairs follow the contract
+     table `lookupVMIFpToSiContract`: `f32→s32`, `f16→s16`, `f32→s16`,
+     `f16→s8`, `f16→s32` (nosat), `bf16→s32`.
+
+  4. **FpToUi** — `fp → unsigned int`. Supported pairs follow the contract
+     table `lookupVMIFpToUIContract`: currently `f16→u8`.
+
+  5. **SiToFp** — `int → fp` (e.g. `i32 → f32`, `i8 → f16`).
+
+  6. **IntWiden** — `int → int`, `|dst| > |src|`.
+
+  7. **IntNarrow** — `int → int`, `|dst| < |src|`.
 
 - **syntax:**
   ```mlir
-  %r = pto.vmi.vcvt %src {rounding = "H"} : !pto.vmi.vreg<L×T_src> -> !pto.vmi.vreg<L×T_dst>
+  %r = pto.vmi.vcvt %src {rounding = "H", saturate = "SAT"} : !pto.vmi.vreg<L×T_src> -> !pto.vmi.vreg<L×T_dst>
   ```
 - **operands:**
 
@@ -1561,9 +1688,8 @@ or fusing at the `pto.mi` layer is the workaround.
 
   | Attribute | Values | Valid for | Description |
   |---|---|---|---|
-  | `rounding` | `"A"` (away-from-zero), `"H"` (half-up) | fp narrowing | Rounding mode (TODO: more rounding modes will be added) |
-  | `saturate` | `"SAT"` | any narrowing | Saturating on overflow (TODO: NOSAT mode will be added)|
-  | `pmode` | `"zero"`, `"merge"` | all | Inactive-lane behavior |
+  | `rounding` | `"R"` (nearest-even), `"A"` (away-from-zero), `"H"` (half-up), `"Z"` (toward-zero) | fp narrowing | Rounding mode |
+  | `saturate` | `"SAT"`, `"NOSAT"` | required for fp-narrow / int-narrow; for fp→si / fp→ui the requirement follows the vcvt contract's `requiresSat` (e.g. `f16→s8` required, `f16→s32` **forbidden** — no overflow possible; same-width `bf16→f16` required) | `SAT` clamps to ±max of the destination type; `NOSAT` performs a direct bit truncation of the result representation. |
 
 - **datatypes:** Source and destination from `{f32, f16, bf16, fp8_e4m3, fp8_e5m2, i32, i16, i8, ui32, ui16, ui8}`
 - **lowering to `pto.mi`:**
@@ -1574,6 +1700,8 @@ or fusing at the `pto.mi` layer is the workaround.
   | 8↔32 (radix-4) | widen: `UNPK_B8` + `vintlv` + `vcvt P0` + `punpack`; narrow: `PK4_B32` store (or `vselr` gather) + `ppack` | `2–3` | `2–3` |
   | f32→fp8 quant | `1 cast` + `PK4_B32` | `K` | `1` |
   | f32→int8 quant | 3-stage cast + `PK4_B32` | `~3K` | `3` |
+  | fp↔fp same-width (`bf16→f16`) | `K × vcvt` (1:1, no part) | `K` | `1` |
+  | fp→si / fp→ui | per contract pair: same-width 1:1, widen EVEN/ODD, narrow EVEN/ODD+Vor | `K`–`~3K` | `2`–`3` |
   | int↔int (same width) | `K × vtrc` or `K × vcvt` | `K` | `1` |
 
 - **example:**
@@ -1585,16 +1713,33 @@ or fusing at the `pto.mi` layer is the workaround.
   // → pto.as: 2 × pto.vcvt EVEN/ODD + ppack (parity companion)
 
   // fp32 → fp16 narrow with half-up rounding
-  %n = pto.vmi.vcvt %y {rounding = "H"}
+  %n = pto.vmi.vcvt %y {rounding = "H", saturate = "SAT"}
       : !pto.vmi.vreg<64×f32> -> !pto.vmi.vreg<64×f16>
 
   // ui8 -> i16 unsigned extension
   %z = pto.vmi.vcvt %a
       : !pto.vmi.vreg<256×ui8> -> !pto.vmi.vreg<256×i16>
 
-  // f32 → fp8 quantized narrow
-  %q = pto.vmi.vcvt %s
+  // f32 → fp8 quantized narrow (saturate required)
+  %q = pto.vmi.vcvt %s {saturate = "SAT"}
       : !pto.vmi.vreg<64×f32> -> !pto.vmi.vreg<64×fp8_e4m3>
+
+  // i32 → i8 int-narrow without saturation (wrap on overflow)
+  %t = pto.vmi.vcvt %v {saturate = "NOSAT"}
+      : !pto.vmi.vreg<64×i32> -> !pto.vmi.vreg<64×i8>
+
+  // f32 → i32 fp-to-si (saturate required)
+  %r = pto.vmi.vcvt %x {saturate = "SAT"}
+      : !pto.vmi.vreg<64×f32> -> !pto.vmi.vreg<64×i32>
+
+  // bf16 → f16 same-width fp-to-fp (VPTO contract pair, routed via FpNarrow;
+  // saturate required)
+  %h = pto.vmi.vcvt %g {saturate = "SAT"}
+      : !pto.vmi.vreg<128×bf16> -> !pto.vmi.vreg<128×f16>
+
+  // f16 → u8 fp-to-ui (unsigned; contract pair, saturate required)
+  %u = pto.vmi.vcvt %x {saturate = "SAT"}
+      : !pto.vmi.vreg<128×f16> -> !pto.vmi.vreg<128×ui8>
   ```
 
 - **notes:**
@@ -1610,7 +1755,8 @@ or fusing at the `pto.mi` layer is the workaround.
 ### `pto.vmi.vinterpret_cast`
 
 - **semantics:** Bitwise reinterpretation of a vector register — same bits,
-  different element type. No data movement, no layout change.
+  different element type. No data movement. The lane count may change so long
+  as the total number of bits is conserved.
 
   ```c
   // Same bits, reinterpreted element-by-element
@@ -1908,9 +2054,10 @@ or fusing at the `pto.mi` layer is the workaround.
 
 #### `pto.vmi.vchist`
 
-- **semantics:** **Cumulative histogram** over unsigned 8-bit source lanes.
-  Counts per-bin occurrences over `%src` on top of a carry-in accumulator
-  `%acc`, producing a `half`-axis (`Bin_N0`/`Bin_N1`) pair accessible through
+- **semantics:** **Cumulative histogram** over 8-bit source lanes
+  (interpreted as unsigned). Counts per-bin occurrences over `%src` on top
+  of a carry-in accumulator `%acc`, producing a `half`-axis
+  (`Bin_N0`/`Bin_N1`) pair accessible through
   the result's width axis. Full-form output is 256-bin (Bin_N0 + Bin_N1); if
   the source range is known to be `< 128`, the result may be a 128-bin
   Bin_N0-only vector.
@@ -1946,18 +2093,19 @@ or fusing at the `pto.mi` layer is the workaround.
 
   | Operand | Type | Description |
   |---|---|---|
-  | `acc`  | `!pto.vmi.vreg<L×ui16>` | Carry-in accumulator; same shape as `result` (256-bin Bin_N0+Bin_N1, or 128-bin Bin_N0-only). Element type must be `ui16`. |
-  | `src`  | `!pto.vmi.vreg<L×ui8>` | Source lanes to be binned (unsigned 8-bit). |
+  | `acc`  | `!pto.vmi.vreg<L×{ui16|i16}>` | Carry-in accumulator; same shape as `result` (256-bin Bin_N0+Bin_N1, or 128-bin Bin_N0-only). Element type is `ui16` or signless `i16` (interpreted as unsigned). |
+  | `src`  | `!pto.vmi.vreg<L×{ui8|i8}>` | Source lanes to be binned; 8-bit element type is `ui8` or signless `i8` (interpreted as unsigned). |
   | `mask` | `!pto.vmi.mask<L>` | Governing predicate over source lanes. Does not gate `acc`. |
 
 - **results:**
 
   | Result | Type | Description |
   |---|---|---|
-  | `result` | `!pto.vmi.vreg<L×T_count>` | Bin counts on top of `acc` (half axis: Bin_N0/N1 pair, or Bin_N0-only) |
+  | `result` | `!pto.vmi.vreg<L×{ui16|i16}>` | Bin counts on top of `acc` (half axis: Bin_N0/N1 pair, or Bin_N0-only). Element type is `ui16` or signless `i16` (interpreted as unsigned). |
 
-- **datatypes:** Source bin index: `ui8`. Accumulator / result: `ui16`. The
-  verifier rejects any other element type.
+- **datatypes:** Source bin index: `ui8` or signless `i8`. Accumulator / result:
+  `ui16` or signless `i16`. All are interpreted as
+  unsigned; signed types (`si8` / `si16`) are rejected by the verifier.
 - **lowering to `pto.mi`:**
   ```
   chistv2 Bin_N0 + Bin_N1 (two-half fanout) + widen/accumulate
@@ -1976,14 +2124,19 @@ or fusing at the `pto.mi` layer is the workaround.
   %h0 = pto.vmi.vchist %acc0, %src, %mask
       : !pto.vmi.vreg<128×ui16>, !pto.vmi.vreg<256×ui8>, !pto.vmi.mask<256>
      -> !pto.vmi.vreg<128×ui16>
+
+  // signless i16/i8 also accepted (interpreted as unsigned; acc and result must match)
+  %hs = pto.vmi.vchist %acc, %src, %mask
+      : !pto.vmi.vreg<256×i16>, !pto.vmi.vreg<256×i8>, !pto.vmi.mask<256>
+     -> !pto.vmi.vreg<256×i16>
   ```
 
 #### `pto.vmi.vdhist`
 
-- **semantics:** **Distribution histogram** over unsigned 8-bit source
-  lanes. Counts per-bin occurrences over `%src` on top of a carry-in
-  accumulator `%acc`, yielding a plain per-bin count vector (no `half`
-  axis).
+- **semantics:** **Distribution histogram** over 8-bit source lanes
+  (interpreted as unsigned). Counts per-bin occurrences over `%src` on top
+  of a carry-in accumulator `%acc`, yielding a plain per-bin count vector
+  (no `half` axis).
 
   ```c
   // Plain per-bin distribution count
@@ -1996,26 +2149,33 @@ or fusing at the `pto.mi` layer is the workaround.
 
 - **syntax:**
   ```mlir
+  // 256-bin full output
   %d = pto.vmi.vdhist %acc, %src, %mask
-      : !pto.vmi.vreg<L×ui16>, !pto.vmi.vreg<L×ui8>, !pto.vmi.mask<L>
-     -> !pto.vmi.vreg<L×ui16>
+      : !pto.vmi.vreg<256×ui16>, !pto.vmi.vreg<256×ui8>, !pto.vmi.mask<256>
+     -> !pto.vmi.vreg<256×ui16>
+
+  // 128-bin output when the source lanes are known to be < 128
+  %d = pto.vmi.vdhist %acc, %src, %mask
+      : !pto.vmi.vreg<128×ui16>, !pto.vmi.vreg<256×ui8>, !pto.vmi.mask<256>
+     -> !pto.vmi.vreg<128×ui16>
   ```
 - **operands:**
 
   | Operand | Type | Description |
   |---|---|---|
-  | `acc`  | `!pto.vmi.vreg<L×ui16>` | Carry-in accumulator; same shape as `result`. Element type must be `ui16`. |
-  | `src`  | `!pto.vmi.vreg<L×ui8>` | Source lanes to be binned (unsigned 8-bit). |
+  | `acc`  | `!pto.vmi.vreg<L×{ui16|i16}>` | Carry-in accumulator; same shape as `result` (256-bin full, or 128-bin when the source range is known to be < 128). Element type is `ui16` or signless `i16` (interpreted as unsigned). |
+  | `src`  | `!pto.vmi.vreg<L×{ui8|i8}>` | Source lanes to be binned; 8-bit element type is `ui8` or signless `i8` (interpreted as unsigned). |
   | `mask` | `!pto.vmi.mask<L>` | Governing predicate over source lanes. Does not gate `acc`. |
 
 - **results:**
 
   | Result | Type | Description |
   |---|---|---|
-  | `result` | `!pto.vmi.vreg<L×T_count>` | Plain per-bin count vector on top of `acc` |
+  | `result` | `!pto.vmi.vreg<L×{ui16|i16}>` | Plain per-bin count vector on top of `acc` (256-bin full, or 128-bin when the source range is known to be < 128). Element type is `ui16` or signless `i16` (interpreted as unsigned). |
 
-- **datatypes:** Source bin index: `ui8`. Accumulator / result: `ui16`. The
-  verifier rejects any other element type.
+- **datatypes:** Source bin index: `ui8` or signless `i8`. Accumulator / result:
+  `ui16` or signless `i16`. All are interpreted as
+  unsigned; signed types (`si8` / `si16`) are rejected by the verifier.
 - **lowering to `pto.mi`:**
   ```
   distribution histogram accumulate (no half-axis fanout)
@@ -2024,10 +2184,20 @@ or fusing at the `pto.mi` layer is the workaround.
 
 - **example:**
   ```mlir
-  // Distribution histogram, plain per-bin count
+  // Distribution histogram, plain per-bin count (256-bin full)
   %d = pto.vmi.vdhist %acc, %src, %mask
       : !pto.vmi.vreg<256×ui16>, !pto.vmi.vreg<256×ui8>, !pto.vmi.mask<256>
      -> !pto.vmi.vreg<256×ui16>
+
+  // 128-bin output (source lanes known to be < 128)
+  %d0 = pto.vmi.vdhist %acc0, %src, %mask
+      : !pto.vmi.vreg<128×ui16>, !pto.vmi.vreg<256×ui8>, !pto.vmi.mask<256>
+     -> !pto.vmi.vreg<128×ui16>
+
+  // signless i16/i8 also accepted (interpreted as unsigned; acc and result must match)
+  %ds = pto.vmi.vdhist %acc, %src, %mask
+      : !pto.vmi.vreg<256×i16>, !pto.vmi.vreg<256×i8>, !pto.vmi.mask<256>
+     -> !pto.vmi.vreg<256×i16>
   ```
 
 ### 7.3 Gather / Scatter
@@ -2235,16 +2405,29 @@ or fusing at the `pto.mi` layer is the workaround.
       : index -> !pto.vmi.mask<256×b32>
   ```
 
+`num_groups` is logically legal for any positive divisor of the result mask
+lane count. A backend may impose a narrower materialization limit separately.
 
-> **Mask Boolean Ops (`vand` / `vor` / `vxor` / `vnot` on masks):**
->
-> There is **no dedicated predicate-logic op** (e.g. `pand`/`por`/`pxor`/`pnot`).
-> Mask (predicate) boolean operations are **not yet supported**, but are planned.
-> The planned approach is to **reuse the elementwise bitwise ops** `pto.vmi.vand` /
-> `vor` / `vxor` / `vnot` directly on mask operands — their implementations will be
-> extended to accept mask types (treated as a per-lane bit-wise boolean op on the
-> predicate). This also covers the `pnot`-style predicate complement needed by MERGE
-> emulation (see Appendix C).
+### Mask Boolean Ops (`vand` / `vor` / `vxor` / `vnot` on masks)
+
+The elementwise bitwise ops are reused directly on mask operands, treated as a
+per-lane bit-wise boolean op on the predicate.
+
+- **example:**
+  ```mlir
+  // Predicate boolean ops on masks
+  %and = pto.vmi.vand %lt, %gt
+      : !pto.vmi.mask<128xpred>, !pto.vmi.mask<128xpred>
+      -> !pto.vmi.mask<128xpred>
+  %or = pto.vmi.vor %lt, %gt
+      : !pto.vmi.mask<128xpred>, !pto.vmi.mask<128xpred>
+      -> !pto.vmi.mask<128xpred>
+  %xor = pto.vmi.vxor %lt, %gt
+      : !pto.vmi.mask<128xpred>, !pto.vmi.mask<128xpred>
+      -> !pto.vmi.mask<128xpred>
+  %not = pto.vmi.vnot %lt
+      : !pto.vmi.mask<128xpred> -> !pto.vmi.mask<128xpred>
+  ```
 
 ---
 
@@ -2362,56 +2545,57 @@ or fusing at the `pto.mi` layer is the workaround.
 |---|---|---|---|---|
 | 1 | `pto.vmi.vload` | 1: Load/Store | A | Logical vector load from UB |
 | 2 | `pto.vmi.vstore` | 1: Load/Store | A | Logical vector store to UB |
-| 3 | `pto.vmi.vci` | 2: Index-gen | A | Lane-index vector generation |
-| 4 | `pto.vmi.vadd` | 3: Eltwise | A | Elementwise add (fp+int unified) |
-| 5 | `pto.vmi.vsub` | 3: Eltwise | A | Elementwise subtract |
-| 6 | `pto.vmi.vmul` | 3: Eltwise | A | Elementwise multiply |
-| 7 | `pto.vmi.vdiv` | 3: Eltwise | A | Elementwise divide (fp only) |
-| 8 | `pto.vmi.vmax` | 3: Eltwise | A | Elementwise maximum |
-| 9 | `pto.vmi.vmin` | 3: Eltwise | A | Elementwise minimum |
-| 10 | `pto.vmi.vabs` | 3: Eltwise | A | Elementwise absolute value |
-| 11 | `pto.vmi.vneg` | 3: Eltwise | A | Elementwise negate |
-| 12 | `pto.vmi.vrelu` | 3: Eltwise | A | Elementwise ReLU |
-| 13 | `pto.vmi.vexp` | 3: Eltwise | A | Elementwise exponential |
-| 14 | `pto.vmi.vln` | 3: Eltwise | A | Elementwise natural log |
-| 15 | `pto.vmi.vsqrt` | 3: Eltwise | A | Elementwise square root |
-| 16 | `pto.vmi.vand` | 3: Eltwise | A | Elementwise bitwise AND |
-| 17 | `pto.vmi.vor` | 3: Eltwise | A | Elementwise bitwise OR |
-| 18 | `pto.vmi.vxor` | 3: Eltwise | A | Elementwise bitwise XOR |
-| 19 | `pto.vmi.vnot` | 3: Eltwise | A | Elementwise bitwise NOT |
-| 20 | `pto.vmi.vshl` | 3: Eltwise | A | Elementwise left shift |
-| 21 | `pto.vmi.vshr` | 3: Eltwise | A | Elementwise unsigned right shift |
-| 22 | `pto.vmi.vadds` | 3: Eltwise | A | Vector-scalar add |
-| 23 | `pto.vmi.vmuls` | 3: Eltwise | A | Vector-scalar multiply |
-| 24 | `pto.vmi.vmaxs` | 3: Eltwise | A | Vector-scalar maximum |
-| 25 | `pto.vmi.vmins` | 3: Eltwise | A | Vector-scalar minimum |
-| 26 | `pto.vmi.vshls` | 3: Eltwise | A | Vector-scalar shift left |
-| 27 | `pto.vmi.vshrs` | 3: Eltwise | A | Vector-scalar shift right |
-| 28 | `pto.vmi.vcmp` | 3: Eltwise | A | Elementwise compare → mask |
-| 29 | `pto.vmi.vcmps` | 3: Eltwise | A | Vector-scalar compare → mask |
-| 30 | `pto.vmi.vsel` | 3: Eltwise | A | Predicate select |
-| 31 | `pto.vmi.vselr` | 3: Eltwise | A | Dynamic lane permute |
-| 32 | `pto.vmi.vbrc` | 4: Broadcast | A/B | Broadcast scalar/group-slot |
-| 33 | `pto.vmi.vcadd` | 5: Reduce | B | Add-reduction |
-| 34 | `pto.vmi.vcmax` | 5: Reduce | B | Max-reduction |
-| 35 | `pto.vmi.vcmin` | 5: Reduce | B | Min-reduction |
-| 36 | `pto.vmi.vcvt` | 6: Convert | B | Unified type conversion |
-| 37 | `pto.vmi.vinterpret_cast` | 6: Convert | A | Bitwise reinterpret |
-| 38 | `pto.vmi.vexpdif` | 7: SFU | A | Fused exp(x−max) |
-| 39 | `pto.vmi.vaxpy` | 7: SFU | A | Fused α·x+y |
-| 40 | `pto.vmi.vlrelu` | 7: SFU | A | Leaky ReLU |
-| 41 | `pto.vmi.vprelu` | 7: SFU | A | Parametric ReLU |
-| 42 | `pto.vmi.vmull` | 7: SFU | A | Widening 32×32 multiply, split into (`low`, `high`) `i32` pair |
-| 43 | `pto.vmi.vmula` | 7: SFU | A | Fused multiply-add |
-| 44 | `pto.vmi.vchist` | 7: SFU | B | Cumulative histogram (half-axis) |
-| 45 | `pto.vmi.vdhist` | 7: SFU | B | Distribution histogram (plain per-bin) |
-| 46 | `pto.vmi.vgather` | 7: SFU | C | Indexed gather (B32) |
-| 47 | `pto.vmi.vgatherb` | 7: SFU | C | Byte-granularity indexed gather |
-| 48 | `pto.vmi.vscatter` | 7: SFU | C | Indexed scatter |
-| 49 | `pto.vmi.create_mask` | 8: Predicate | gen | Prefix / first-N tail mask |
-| 50 | `pto.vmi.create_group_mask` | 8: Predicate | gen | Grouped predicate mask |
-| 51 | `pto.vmi.vintlv` | 9: Rearrange | A | Interleave two vectors |
-| 52 | `pto.vmi.vdintlv` | 9: Rearrange | A | Deinterleave two vectors |
+| 3 | `pto.vmi.vsstb` | 1: Load/Store | A | Block-strided store (zero-repeat-stride `vsstb` specialization) |
+| 4 | `pto.vmi.vci` | 2: Index-gen | A | Lane-index vector generation |
+| 5 | `pto.vmi.vadd` | 3: Eltwise | A | Elementwise add (fp+int unified) |
+| 6 | `pto.vmi.vsub` | 3: Eltwise | A | Elementwise subtract |
+| 7 | `pto.vmi.vmul` | 3: Eltwise | A | Elementwise multiply |
+| 8 | `pto.vmi.vdiv` | 3: Eltwise | A | Elementwise divide (fp only) |
+| 9 | `pto.vmi.vmax` | 3: Eltwise | A | Elementwise maximum |
+| 10 | `pto.vmi.vmin` | 3: Eltwise | A | Elementwise minimum |
+| 11 | `pto.vmi.vabs` | 3: Eltwise | A | Elementwise absolute value |
+| 12 | `pto.vmi.vneg` | 3: Eltwise | A | Elementwise negate |
+| 13 | `pto.vmi.vrelu` | 3: Eltwise | A | Elementwise ReLU |
+| 14 | `pto.vmi.vexp` | 3: Eltwise | A | Elementwise exponential |
+| 15 | `pto.vmi.vln` | 3: Eltwise | A | Elementwise natural log |
+| 16 | `pto.vmi.vsqrt` | 3: Eltwise | A | Elementwise square root |
+| 17 | `pto.vmi.vand` | 3: Eltwise | A | Elementwise bitwise AND |
+| 18 | `pto.vmi.vor` | 3: Eltwise | A | Elementwise bitwise OR |
+| 19 | `pto.vmi.vxor` | 3: Eltwise | A | Elementwise bitwise XOR |
+| 20 | `pto.vmi.vnot` | 3: Eltwise | A | Elementwise bitwise NOT |
+| 21 | `pto.vmi.vshl` | 3: Eltwise | A | Elementwise left shift |
+| 22 | `pto.vmi.vshr` | 3: Eltwise | A | Elementwise unsigned right shift |
+| 23 | `pto.vmi.vadds` | 3: Eltwise | A | Vector-scalar add |
+| 24 | `pto.vmi.vmuls` | 3: Eltwise | A | Vector-scalar multiply |
+| 25 | `pto.vmi.vmaxs` | 3: Eltwise | A | Vector-scalar maximum |
+| 26 | `pto.vmi.vmins` | 3: Eltwise | A | Vector-scalar minimum |
+| 27 | `pto.vmi.vshls` | 3: Eltwise | A | Vector-scalar shift left |
+| 28 | `pto.vmi.vshrs` | 3: Eltwise | A | Vector-scalar shift right |
+| 29 | `pto.vmi.vcmp` | 3: Eltwise | A | Elementwise compare → mask |
+| 30 | `pto.vmi.vcmps` | 3: Eltwise | A | Vector-scalar compare → mask |
+| 31 | `pto.vmi.vsel` | 3: Eltwise | A | Predicate select |
+| 32 | `pto.vmi.vselr` | 3: Eltwise | C | Dynamic lane select; contiguous, supported logical shape |
+| 33 | `pto.vmi.vbrc` | 4: Broadcast | A/B | Broadcast scalar/group-slot |
+| 34 | `pto.vmi.vcadd` | 5: Reduce | B | Add-reduction |
+| 35 | `pto.vmi.vcmax` | 5: Reduce | B | Max-reduction |
+| 36 | `pto.vmi.vcmin` | 5: Reduce | B | Min-reduction |
+| 37 | `pto.vmi.vcvt` | 6: Convert | B | Unified type conversion |
+| 38 | `pto.vmi.vinterpret_cast` | 6: Convert | A | Bitwise reinterpret |
+| 39 | `pto.vmi.vexpdif` | 7: SFU | A | Fused exp(x−max) |
+| 40 | `pto.vmi.vaxpy` | 7: SFU | A | Fused α·x+y |
+| 41 | `pto.vmi.vlrelu` | 7: SFU | A | Leaky ReLU |
+| 42 | `pto.vmi.vprelu` | 7: SFU | A | Parametric ReLU |
+| 43 | `pto.vmi.vmull` | 7: SFU | A | Widening 32×32 multiply, split into (`low`, `high`) `i32` pair |
+| 44 | `pto.vmi.vmula` | 7: SFU | A | Fused multiply-add |
+| 45 | `pto.vmi.vchist` | 7: SFU | B | Cumulative histogram (half-axis) |
+| 46 | `pto.vmi.vdhist` | 7: SFU | B | Distribution histogram (plain per-bin) |
+| 47 | `pto.vmi.vgather` | 7: SFU | C | Indexed gather (B32) |
+| 48 | `pto.vmi.vgatherb` | 7: SFU | C | Byte-granularity indexed gather |
+| 49 | `pto.vmi.vscatter` | 7: SFU | C | Indexed scatter |
+| 50 | `pto.vmi.create_mask` | 8: Predicate | gen | Prefix / first-N tail mask |
+| 51 | `pto.vmi.create_group_mask` | 8: Predicate | gen | Grouped predicate mask |
+| 52 | `pto.vmi.vintlv` | 9: Rearrange | A | Interleave two vectors |
+| 53 | `pto.vmi.vdintlv` | 9: Rearrange | A | Deinterleave two vectors |
 
 ---
 
