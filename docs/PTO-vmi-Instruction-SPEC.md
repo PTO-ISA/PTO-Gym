@@ -433,7 +433,7 @@ type's `C`).
 
 | # | Group | Ops | Category | Mask |
 |---|---|---|---|---|
-| 1 | **Load / Store** | `vload`, `vstore` | A (+B on unpack) | load: none; store: `Pg` |
+| 1 | **Load / Store** | `vload`, `vstore` | A (+B on dintlv/intlv) | load: none; store: `Pg` |
 | 2 | **Index-gen** | `vci` | A | none |
 | 3 | **Eltwise Compute** | `vadd`, `vsub`, `vmul`, `vdiv`, `vmax`, `vmin`, `vabs`, `vneg`, `vrelu`, `vexp`, `vln`, `vsqrt`, `vand`, `vor`, `vxor`, `vnot`, `vshl`, `vshr`, `vadds`, `vmuls`, `vmaxs`, `vmins`, `vshls`, `vshrs`, `vcmp`, `vcmps`, `vsel`, `vselr` | A | `Pg` (except `vselr`: none) |
 | 4 | **Broadcast** | `vbrc` | A (ungrouped) / B (grouped) | none |
@@ -447,11 +447,11 @@ type's `C`).
 
 ## Group 1: Load / Store
 
-> **Category:** A (+B on `unpack`). **Mask:** load none (A5 loads are unpredicated), store `Pg`.
+> **Category:** A (+B on `dintlv`/`intlv`). **Mask:** load none (A5 loads are unpredicated), store `Pg`.
 >
 > `vload`/`vstore` are logical memory ops. **`[dist_mode]` explicitly declares
 > the access pattern**, defaulting to `continuous` (contiguous); the optional
-> modes are `unpack` (widening unpack) and `brc` (broadcast).
+> modes are `dintlv` (deinterleave), `intlv` (interleave), and `brc` (broadcast).
 
 ### `pto.vmi.vload`
 
@@ -507,7 +507,7 @@ type's `C`).
 
   | Attribute | Values | Default | Description |
   |---|---|---|---|
-  | `dist_mode` | `"continuous"`, `"unpack"`, `"brc"` | `"continuous"` | Memory access pattern |
+  | `dist_mode` | `"continuous"`, `"dintlv"`, `"brc"` | `"continuous"` | Memory access pattern |
   | `group` | positive integer | *(none)* | Strided group load arity; mutually exclusive with `dist_mode`; requires `stride` |
   | `pmode` | `"zero"`, `"merge"` | `"zero"` | Inactive-lane behavior (applied at consumer, not on load) |
 
@@ -518,7 +518,7 @@ declaring the memory access pattern. Default is `"continuous"`.
   | `dist_mode` | Physical lowering |
   |---|---|
   | `"continuous"` | `K × pto.vlds {dist="NORM"}` (element-width-independent `NORM` load) |
-  | `"unpack"` | `K × pto.vlds {dist="UNPK_B*"}` (widening unpack; suffix from `Ptr<T>`) |
+  | `"dintlv"` | `K × pto.vldsx2 {dist="DINTLV_B*"}` (deinterleaved dual load; suffix from `Ptr<T>`) |
   | `"brc"` | `1 × pto.vlds {dist="BRC_B*"}` or `BRC_BLK`; broadcast-axis (1-reg backing, replicate-read) |
 
   **Group mode** (`{group = C}` + `stride`) has two sub-cases, decided by the
@@ -564,9 +564,9 @@ declaring the memory access pattern. Default is `"continuous"`.
   %vb = pto.vmi.vload %ub[%offset] {dist_mode = "brc"} : !pto.ptr<f32, ub> -> !pto.vmi.vreg<64×f32>
   // → pto.as: Ptr<f32> → B32, dist_mode=brc → pto.mi.vlds {dist="BRC_B32"}
 
-  // Widening unpack load: narrow source expanded to wide lanes
-  %u = pto.vmi.vload %ub[%offset] {dist_mode = "unpack"} : !pto.ptr<bf16, ub> -> !pto.vmi.vreg<64×f32>
-  // → pto.as: Ptr<bf16> → B16, dist_mode=unpack → pto.mi.vlds {dist="UNPK_B16"}
+  // Deinterleaved dual load: interleaved source split into (even, odd)
+  %lo, %hi = pto.vmi.vload %ub[%offset] {dist_mode = "dintlv"} : !pto.ptr<f32, ub> -> !pto.vmi.vreg<64×f32>, !pto.vmi.vreg<64×f32>
+  // → pto.as: Ptr<f32> → B32, dist_mode=dintlv → pto.mi.vldsx2 {dist="DINTLV_B32"}
   ```
 
 - **notes:**
@@ -640,7 +640,7 @@ declaring the memory access pattern. Default is `"continuous"`.
 
   | Attribute | Values | Default | Description |
   |---|---|---|---|
-  | `dist_mode` | `"continuous"` | `"continuous"` | Memory access pattern |
+  | `dist_mode` | `"continuous"`, `"intlv"` | `"continuous"` | Memory access pattern |
   | `group` | positive integer | *(none)* | Strided group store arity; mutually exclusive with `dist_mode`; requires `stride`; forbids `mask` |
   | `pmode` | `"zero"`, `"merge"` | `"zero"` | Inactive-lane behavior: `"zero"` (default) stores 0; `"merge"` skips write on inactive lanes |
 
@@ -651,6 +651,7 @@ declaring the memory access pattern. Default is `"continuous"`.
   | `dist_mode` | Physical lowering |
   |---|---|
   | `"continuous"` | `K × pto.vsts {dist="NORM_B*"}` |
+  | `"intlv"` | `K × pto.vstsx2 {dist="INTLV_B*"}` (interleaved dual store; suffix from `Ptr<T>`) |
 
   **Group mode** (`{group = C}` + `stride`): row-strided tile store. Not combinable with
   `dist_mode` or `mask` (group stores are unpredicated).
