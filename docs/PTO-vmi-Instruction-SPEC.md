@@ -3,10 +3,6 @@
 - v0.1: Doc init. Per-op reference for all `pto.vmi` ops, with syntax,
   semantics, operand tables, lowering notes, and lit-test examples.
 
-- v0.2: Sync with PTOAS `origin/master` (2026-09-16): conversion contract
-  matrix, unified/vreg bitwise interface split, carry ops, grouped
-  reductions, and MERGE status corrections.
-
 **Status:** draft. This document is the **instruction reference** for the unified
 `pto.vmi` surface. It documents every user-facing op with concrete MLIR syntax,
 per-operand tables, C-style semantics, and lowering-to-`pto.mi` guidance. 
@@ -395,13 +391,7 @@ is a `!pto.vmi.mask<L>` with the same `L` as the data operand.
 
 | `pmode` | Inactive lane behavior | Default? |
 |---|---|---|
-| `"zero"` | Inactive lanes produce 0 (hardware-native ZEROING) | ✓ (default) |
-| `"merge"` | Inactive lanes preserve the destination's prior value — **not implemented yet** | |
-
-On A5, MERGE is **not implemented yet**: the hardware predicates only in ZEROING mode, so the
-compiler has to synthesize merge as a predicate complement plus a `vor`/`vsel` blend
-of the zeroed result with the old destination (see Appendix C). On A6,
-some ops support native MERGE.
+| `"zero"` | Inactive lanes produce 0 | ✓ (default, and the only supported value) |
 
 **A5 load restriction**: `vload` has **no** mask operand — A5 loads are
 unpredicated. A logical tail mask associated with a load is never lowered as a
@@ -512,7 +502,7 @@ type's `C`).
   |---|---|---|---|
   | `dist_mode` | `"continuous"`, `"dintlv"`, `"brc"` | `"continuous"` | Memory access pattern |
   | `group` | positive integer | *(none)* | Strided group load arity; mutually exclusive with `dist_mode`; requires `stride` |
-  | `pmode` | `"zero"`, `"merge"` | `"zero"` | Inactive-lane behavior (applied at consumer, not on load) |
+  | `pmode` | `"zero"` | `"zero"` | Inactive-lane behavior (applied at consumer, not on load) |
 
 - **lowering to `pto.mi`:**
   - **dist-mode** `vload` and `vstore` accept an optional `{dist_mode = "..."}` attribute
@@ -673,7 +663,6 @@ declaring the memory access pattern. Default is `"continuous"`.
   |---|---|---|---|
   | `dist_mode` | `"continuous"`, `"intlv"` | `"continuous"` | Memory access pattern |
   | `group` | positive integer | *(none)* | Strided group store arity; mutually exclusive with `dist_mode`; requires `stride`; forbids `mask` |
-  | `pmode` | `"zero"`, `"merge"` | `"zero"` | Inactive-lane behavior: `"zero"` (default) stores 0; `"merge"` skips write on inactive lanes |
 
 - **lowering to `pto.mi`:**
   - **dist-mode** `vload` and `vstore` accept an optional `{dist_mode = "..."}` attribute
@@ -818,7 +807,7 @@ declaring the memory access pattern. Default is `"continuous"`.
 
   ```c
   for (int i = 0; i < N; i++)
-      dst[i] = mask[i] ? lhs[i] + rhs[i] : (pmode_merge ? dst_old[i] : 0);
+      dst[i] = mask[i] ? lhs[i] + rhs[i] : 0;
   ```
 
 - **syntax:**
@@ -843,7 +832,7 @@ declaring the memory access pattern. Default is `"continuous"`.
 
   | Attribute | Values | Default | Description |
   |---|---|---|---|
-  | `pmode` | `"zero"`, `"merge"` | `"zero"` | Inactive-lane behavior |
+  | `pmode` | `"zero"` | `"zero"` | Inactive-lane behavior |
 
 - **datatypes:** `i8`–`i32`, `f16`, `bf16`, `f32`
 - **lowering to `pto.mi`:**
@@ -870,8 +859,8 @@ declaring the memory access pattern. Default is `"continuous"`.
       -> !pto.vmi.vreg<128×f32>
   // → pto.as: 2 × pto.vadd (EVEN/ODD), each with create_mask all-active mask
 
-  // Masked add with merge mode
-  %s = pto.vmi.vadd %a, %b, %mask {pmode = "merge"}
+  // Masked add
+  %s = pto.vmi.vadd %a, %b, %mask {pmode = "zero"}
       : !pto.vmi.vreg<64×f32>, !pto.vmi.vreg<64×f32>, !pto.vmi.mask<64> -> !pto.vmi.vreg<64×f32>
   ```
 
@@ -899,7 +888,7 @@ operation into an add/compare/select sequence.
 These operations require matching 32-bit integer data values. The execution
 mask, carry-in (for `vaddcs`/`vsubcs`), and carry-out use the same logical lane
 count and layout as the data ports, and all physical mask parts must use `b32`
-granularity. They lower one-to-N to the corresponding VPTO carry operation.
+granularity. They lower one-to-N to the corresponding `pto.mi` carry operation.
 For subtraction, the carry predicate is **not-borrow**: the comparison is
 unsigned, `carry[i] = 1` means no borrow occurred, and `carry[i] = 0` means a
 borrow occurred. In `vsubcs`, a carry-in of 0 propagates a borrow.
@@ -910,7 +899,7 @@ borrow occurred. In `vsubcs`, a carry-in of 0 propagates a borrow.
 
   ```c
   for (int i = 0; i < L; i++)
-      dst[i] = mask[i] ? lhs[i] / rhs[i] : (pmode_merge ? dst_old[i] : 0);
+      dst[i] = mask[i] ? lhs[i] / rhs[i] : 0;
   ```
 
 - **syntax:**
@@ -930,7 +919,7 @@ borrow occurred. In `vsubcs`, a carry-in of 0 propagates a borrow.
 
   ```c
   for (int i = 0; i < L; i++)
-      dst[i] = mask[i] ? max(lhs[i], rhs[i]) : (pmode_merge ? dst_old[i] : 0);
+      dst[i] = mask[i] ? max(lhs[i], rhs[i]) : 0;
   ```
 
 - **syntax:**
@@ -952,7 +941,7 @@ borrow occurred. In `vsubcs`, a carry-in of 0 propagates a borrow.
 
   ```c
   for (int i = 0; i < L; i++)
-      dst[i] = mask[i] ? abs(src[i]) : (pmode_merge ? dst_old[i] : 0);
+      dst[i] = mask[i] ? abs(src[i]) : 0;
   ```
 
 - **syntax:**
@@ -974,7 +963,7 @@ borrow occurred. In `vsubcs`, a carry-in of 0 propagates a borrow.
 
   ```c
   for (int i = 0; i < L; i++)
-      dst[i] = mask[i] ? -src[i] : (pmode_merge ? dst_old[i] : 0);
+      dst[i] = mask[i] ? -src[i] : 0;
   ```
 
 - **syntax:**
@@ -994,7 +983,7 @@ borrow occurred. In `vsubcs`, a carry-in of 0 propagates a borrow.
 
   ```c
   for (int i = 0; i < L; i++)
-      dst[i] = mask[i] ? max(0, src[i]) : (pmode_merge ? dst_old[i] : 0);
+      dst[i] = mask[i] ? max(0, src[i]) : 0;
   ```
 
 - **syntax:**
@@ -1014,11 +1003,11 @@ borrow occurred. In `vsubcs`, a carry-in of 0 propagates a borrow.
 
   ```c
   for (int i = 0; i < L; i++)
-      dst[i] = mask[i] ? exp(src[i]) : (pmode_merge ? dst_old[i] : 0);   // vexp
+      dst[i] = mask[i] ? exp(src[i]) : 0;   // vexp
   for (int i = 0; i < L; i++)
-      dst[i] = mask[i] ? ln(src[i])  : (pmode_merge ? dst_old[i] : 0);   // vln
+      dst[i] = mask[i] ? ln(src[i])  : 0;   // vln
   for (int i = 0; i < L; i++)
-      dst[i] = mask[i] ? sqrt(src[i]) : (pmode_merge ? dst_old[i] : 0);  // vsqrt
+      dst[i] = mask[i] ? sqrt(src[i]) : 0;  // vsqrt
   ```
 
 - **syntax:**
@@ -1044,7 +1033,7 @@ borrow occurred. In `vsubcs`, a carry-in of 0 propagates a borrow.
 
   ```c
   for (int i = 0; i < L; i++)
-      dst[i] = mask[i] ? (lhs[i] & rhs[i]) : (pmode_merge ? dst_old[i] : 0);
+      dst[i] = mask[i] ? (lhs[i] & rhs[i]) : 0;
   ```
 
 - **syntax:**
@@ -1080,7 +1069,7 @@ borrow occurred. In `vsubcs`, a carry-in of 0 propagates a borrow.
 
   ```c
   for (int i = 0; i < L; i++)
-      dst[i] = mask[i] ? ~src[i] : (pmode_merge ? dst_old[i] : 0);
+      dst[i] = mask[i] ? ~src[i] : 0;
   ```
 
 - **syntax:**
@@ -1110,9 +1099,9 @@ borrow occurred. In `vsubcs`, a carry-in of 0 propagates a borrow.
 
   ```c
   for (int i = 0; i < L; i++)
-      dst[i] = mask[i] ? (lhs[i] << rhs[i]) : (pmode_merge ? dst_old[i] : 0);  // vshl
+      dst[i] = mask[i] ? (lhs[i] << rhs[i]) : 0;  // vshl
   for (int i = 0; i < L; i++)
-      dst[i] = mask[i] ? (lhs[i] >> rhs[i]) : (pmode_merge ? dst_old[i] : 0);  // vshr (signed: arithmetic; unsigned: logical)
+      dst[i] = mask[i] ? (lhs[i] >> rhs[i]) : 0;  // vshr (signed: arithmetic; unsigned: logical)
   ```
 
 - **syntax:**
@@ -1137,12 +1126,12 @@ scalar type must match the vector element type.
 
   ```c
   for (int i = 0; i < L; i++)
-      dst[i] = mask[i] ? src[i] + scalar : (pmode_merge ? dst_old[i] : 0);
+      dst[i] = mask[i] ? src[i] + scalar : 0;
   ```
 
 - **syntax:**
   ```mlir
-  %r = pto.vmi.vadds %src, %scalar, %mask {pmode = "merge"} : !pto.vmi.vreg<L×T>, T, !pto.vmi.mask<L> -> !pto.vmi.vreg<L×T>
+  %r = pto.vmi.vadds %src, %scalar, %mask {pmode = "zero"} : !pto.vmi.vreg<L×T>, T, !pto.vmi.mask<L> -> !pto.vmi.vreg<L×T>
   ```
 - **operands:**
 
@@ -1189,9 +1178,9 @@ scalar type must match the vector element type.
 
   ```c
   for (int i = 0; i < L; i++)
-      dst[i] = mask[i] ? (src[i] << scalar) : (pmode_merge ? dst_old[i] : 0);  // vshls
+      dst[i] = mask[i] ? (src[i] << scalar) : 0;  // vshls
   for (int i = 0; i < L; i++)
-      dst[i] = mask[i] ? (src[i] >> scalar) : (pmode_merge ? dst_old[i] : 0);  // vshrs
+      dst[i] = mask[i] ? (src[i] >> scalar) : 0;  // vshrs
   ```
 
 - **syntax:**
@@ -1245,7 +1234,7 @@ scalar type must match the vector element type.
   |---|---|---|---|
   | `cmp` | `eq`, `ne`, `lt`, `le`, `gt`, `ge` | *(required)* | Comparison mode (fp unordered / integer; integer signedness comes from the element type: `siN` vs `iN`/`uiN`) |
   | | `oeq`, `one`, `olt`, `ole`, `ogt`, `oge` | | FP ordered forms |
-  | `pmode` | `"zero"`, `"merge"` | `"zero"` | Inactive-lane behavior |
+  | `pmode` | `"zero"` | `"zero"` | Inactive-lane behavior |
 
 - **datatypes:** `i8`/`si8`/`ui8` – `i32`/`si32`/`ui32`, `f16`, `bf16`, `f32`.
   Integer signedness is taken from the element type; signless `iN` is treated
@@ -1359,7 +1348,7 @@ scalar type must match the vector element type.
 
   | Attribute | Values | Default | Description |
   |---|---|---|---|
-  | `pmode` | `"zero"`, `"merge"` | `"zero"` | Result handling when selector inactive: `"merge"` retains `false_value` lanes |
+  | `pmode` | `"zero"` | `"zero"` | Inactive-lane behavior on the result |
 
 - **datatypes:** `i8`–`i32`, `f16`, `bf16`, `f32`
 - **lowering to `pto.mi`:**
@@ -1499,7 +1488,7 @@ or fusing at the `pto.mi` layer is the workaround.
 - **Bounded grouped vectors:** For the one-carrier lengths documented in
   [Reduce](05-reduce.md), a group count of at most eight that divides `L`
   broadcasts compact source slot `g` into logical lanes
-  `[g * L/C, (g + 1) * L/C)`. The A5 VPTO backend retains established native
+  `[g * L/C, (g + 1) * L/C)`. The A5 target retains established native
   layouts when available and uses a dense register-selection fallback otherwise.
   The source can come from a short load or a grouped reduction. Padding lanes
   in the physical register are not logical results.
@@ -1558,8 +1547,8 @@ or fusing at the `pto.mi` layer is the workaround.
 > `vcadd` treats inactive as 0; `vcmax`/`vcmin` treat inactive as `-∞`/`+∞`
 > (fp) or type min/max (int).
 
-The A5 VPTO backend supports `group = 1, 2, 4, 8` when the group count
-divides `L`, for the following one-carrier shapes:
+For a one-carrier source, A5 supports `group = 1, 2, 4, 8` whenever the
+group count divides the source lane count `L`. The supported `L` values are:
 
 | Element type | Supported logical `L` |
 |---|---|
@@ -1692,7 +1681,7 @@ store, and broadcast device cases before claiming a benefit.
   |---|---|---|---|
   | `group` | `1`, `2`, `4`, `8` | `1` (full reduce) | Number of sub-groups |
   | `reassoc` | *(unit attr)* | *(absent)* | Permit reassociation (**required** for fp sources) |
-  | `pmode` | `"zero"`, `"merge"` | `"zero"` | Inactive-result behavior |
+  | `pmode` | `"zero"` | `"zero"` | Inactive-result behavior |
 
 - **datatypes:** full reduce — `i32`, `f16`/`f32`; grouped reduce — `i8`/`i16`/`i32`, `f16`/`f32`
 - **lowering to `pto.mi`:**
@@ -1898,7 +1887,7 @@ store, and broadcast device cases before claiming a benefit.
   %r = pto.vmi.vcvt %x {saturate = "SAT"}
       : !pto.vmi.vreg<64×f32> -> !pto.vmi.vreg<64×si32>
 
-  // bf16 → f16 same-width fp-to-fp (VPTO contract pair, routed via FpNarrow;
+  // bf16 → f16 same-width fp-to-fp (contract pair, routed via FpNarrow;
   // saturate required)
   %h = pto.vmi.vcvt %g {saturate = "SAT"}
       : !pto.vmi.vreg<128×bf16> -> !pto.vmi.vreg<128×f16>
@@ -2013,7 +2002,7 @@ store, and broadcast device cases before claiming a benefit.
 
   ```c
   for (int i = 0; i < L; i++)
-      dst[i] = mask[i] ? exp(x[i] - max[i]) : (pmode_merge ? dst_old[i] : 0);
+      dst[i] = mask[i] ? exp(x[i] - max[i]) : 0;
   ```
 
 - **syntax:**
@@ -2034,7 +2023,7 @@ store, and broadcast device cases before claiming a benefit.
   |---|---|---|
   | `result` | `!pto.vmi.vreg<L×f32>` | `exp(x − max)` (always `f32`) |
 
-- **attributes:** `pmode` (`"zero"` / `"merge"`), default `"zero"`
+- **attributes:** `pmode` = `"zero"` (default)
 - **datatypes:** `x` and `max`: matching `f16` or `f32`; result: `f32`
 - **lowering to `pto.mi`:**
   ```
@@ -2056,7 +2045,7 @@ store, and broadcast device cases before claiming a benefit.
 
   ```c
   for (int i = 0; i < L; i++)
-      dst[i] = mask[i] ? (alpha * x[i] + acc[i]) : (pmode_merge ? dst_old[i] : 0);
+      dst[i] = mask[i] ? (alpha * x[i] + acc[i]) : 0;
   ```
 
 - **syntax:**
@@ -2092,7 +2081,7 @@ store, and broadcast device cases before claiming a benefit.
 
   ```c
   for (int i = 0; i < L; i++)
-      dst[i] = mask[i] ? (src[i] > 0 ? src[i] : slope * src[i]) : (pmode_merge ? dst_old[i] : 0);
+      dst[i] = mask[i] ? (src[i] > 0 ? src[i] : slope * src[i]) : 0;
   ```
 
 - **syntax:**
@@ -2121,7 +2110,7 @@ store, and broadcast device cases before claiming a benefit.
 
   ```c
   for (int i = 0; i < L; i++)
-      dst[i] = mask[i] ? (max(src[i], 0) + alpha[i] * min(src[i], 0)) : (pmode_merge ? dst_old[i] : 0);
+      dst[i] = mask[i] ? (max(src[i], 0) + alpha[i] * min(src[i], 0)) : 0;
   ```
 
 - **syntax:**
@@ -2157,10 +2146,8 @@ store, and broadcast device cases before claiming a benefit.
   for (int i = 0; i < L; i++) {
       // signed variant; use uint64_t for the ui32 form
       int64_t r = (int64_t)lhs[i] * (int64_t)rhs[i];
-      low [i] = mask[i] ? (int32_t)(r & 0xFFFFFFFF)
-                        : (pmode_merge ? low_old [i] : 0);
-      high[i] = mask[i] ? (int32_t)(r >> 32)
-                        : (pmode_merge ? high_old[i] : 0);
+      low [i] = mask[i] ? (int32_t)(r & 0xFFFFFFFF) : 0;
+      high[i] = mask[i] ? (int32_t)(r >> 32) : 0;
   }
   ```
 
@@ -2189,7 +2176,7 @@ store, and broadcast device cases before claiming a benefit.
 
   | Attribute | Type | Default | Description |
   |---|---|---|---|
-  | `pmode` | `StrAttr` (`"zero"` \| `"merge"`) | `"zero"` | Predication mode. `"merge"` preserves the previous `low`/`high` lane values on inactive lanes; on A5 this is **not implemented**  (see [Appendix C](10-appendices.md)). |
+  | `pmode` | `StrAttr` (`"zero"`) | `"zero"` | Predication mode. Inactive lanes write 0. |
 
 - **datatypes:** `i32 → (i32, i32)`, `ui32 → (ui32, ui32)` (both result vregs share the input signedness).
 - **lowering to `pto.mi`:**
@@ -2213,7 +2200,7 @@ store, and broadcast device cases before claiming a benefit.
 
   ```c
   for (int i = 0; i < L; i++)
-      dst[i] = mask[i] ? (acc[i] + lhs[i] * rhs[i]) : (pmode_merge ? dst_old[i] : 0);
+      dst[i] = mask[i] ? (acc[i] + lhs[i] * rhs[i]) : 0;
   ```
 
 - **syntax:**
@@ -2433,7 +2420,7 @@ loads at 64/128 lanes use bounded 2/4-block reads at aligned addresses.
 
   ```c
   for (int i = 0; i < L; i++)
-      dst[i] = mask[i] ? ub[base + offsets[i]] : (pmode_merge ? dst_old[i] : 0);
+      dst[i] = mask[i] ? ub[base + offsets[i]] : 0;
   ```
 
 - **syntax:**
@@ -2820,21 +2807,3 @@ per-lane bit-wise boolean op on the predicate.
 | 54 | `pto.vmi.vaddcs` | 3: Eltwise | A | 32-bit integer add with carry input and output |
 | 55 | `pto.vmi.vsubcs` | 3: Eltwise | A | 32-bit integer subtract with carry input and output |
 
-## Appendix C: MERGE Mode on A5
-
-On A5, the hardware predicates only in **ZEROING** mode (inactive lanes → 0).
-MERGE mode is **not implemented yet**:
-
-Until emulated or native MERGE support lands, write the merge explicitly with
-`vsel` against the old destination value:
-
-```mlir
-// Explicit merge:  dst = Pg ? op(a, b) : dst_old
-%new = pto.vmi.<op> %a, %b, %pg           // ZEROING: inactive lanes → 0
-%dst = pto.vmi.vsel %pg, %new, %dst_old   // keep old value on inactive lanes
-```
-
-Once emulation is implemented, the compiler is expected to expand MERGE as
-`vnot` + zeroing op + `vand`/`vor` (cost: `+1 vnot` per distinct `Pg`, plus
-`+K vsel`/`vor`); on A6, merge-capable ops are expected to take the mode
-natively and collapse to the single predicated op.
